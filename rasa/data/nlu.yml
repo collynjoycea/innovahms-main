@@ -1,0 +1,105 @@
+version: "3.1"
+
+nlu:
+  - intent: greet
+    examples: |
+      - hi
+      - hello
+      - good morning
+      - hey there
+      - magandang araw
+
+  - intent: goodbye
+    examples: |
+      - bye
+      - goodbye
+      - see you
+      - thank you, bye
+
+  - intent: affirm
+    examples: |
+      - yes
+      - oo
+      - sure
+      - tama
+
+  - intent: deny
+    examples: |
+      - no
+      - hindi
+      - not now
+      - ayoko muna
+
+  - intent: ask_room_availability
+    examples: |
+      - May available ba kayong room?
+      - how many rooms are available?
+      - available ba ang [suite](room_type) for [2](guest_count) guests?
+      - check room availability for [2026-03-25](check_in_date)
+      - do you have a [deluxe](room_type) room tomorrow?
+      - open rooms for [3](guest_count) people
+
+  - intent: ask_amenities
+    examples: |
+      - May pool ba kayo?
+      - what amenities do you offer?
+      - anong oras ang [breakfast](amenity)?
+      - do you have [wifi](amenity)?
+      - meron bang [parking](amenity)?
+      - is there a [spa](amenity)?
+
+  - intent: ask_checkin_checkout
+    examples: |
+      - what time is check in?
+      - anong oras ang check-out?
+      - what are your check in and check out procedures?
+      - can I check in early?
+
+  - intent: request_booking_help
+    examples: |
+      - help me choose a room
+      - I want to book a [deluxe](room_type) room for [3](guest_count) guests
+      - guide me before I reserve
+      - which room is best for [2](guest_count) adults?
+      - help me find the right room for my stay
+
+  - intent: ask_digital_key
+    examples: |
+      - how can I access my digital key?
+      - where is my QR key?
+      - paano gamitin ang digital key?
+      - room access QR please
+
+  - intent: ask_loyalty_points
+    examples: |
+      - how many loyalty points do I have?
+      - ilan na ang points ko?
+      - what is my membership tier?
+      - do I have rewards?
+
+  - intent: modify_booking
+    examples: |
+      - I want to modify my booking
+      - can I change my reservation dates?
+      - reschedule my booking to [2026-03-28](check_in_date)
+      - change check in to [2026-03-28](check_in_date) and check out to [2026-03-30](check_out_date)
+
+  - intent: cancel_booking
+    examples: |
+      - I want to cancel my booking
+      - can I cancel my reservation?
+      - cancellation policy please
+      - cancel my stay
+
+  - intent: inform_booking_details
+    examples: |
+      - [2](guest_count) guests
+      - [suite](room_type)
+      - [2026-03-25](check_in_date) until [2026-03-27](check_out_date)
+      - [double](room_type) room for [4](guest_count)
+
+  - intent: out_of_scope
+    examples: |
+      - tell me a joke
+      - what is the capital of france?
+      - sing a song

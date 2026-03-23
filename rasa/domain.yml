@@ -1,0 +1,76 @@
+version: "3.1"
+
+intents:
+  - greet
+  - goodbye
+  - affirm
+  - deny
+  - ask_room_availability
+  - ask_amenities
+  - ask_checkin_checkout
+  - request_booking_help
+  - ask_digital_key
+  - ask_loyalty_points
+  - modify_booking
+  - cancel_booking
+  - inform_booking_details
+  - out_of_scope
+
+entities:
+  - room_type
+  - amenity
+  - guest_count
+  - check_in_date
+  - check_out_date
+
+slots:
+  room_type:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: room_type
+  amenity:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: amenity
+  guest_count:
+    type: float
+    mappings:
+      - type: from_entity
+        entity: guest_count
+  check_in_date:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: check_in_date
+  check_out_date:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: check_out_date
+
+responses:
+  utter_greet:
+    - text: "Welcome to Innova-HMS. I am your 24/7 Rasa virtual assistant for FAQs, booking help, and smart guest experience support."
+  utter_goodbye:
+    - text: "Thank you. If you need help with your stay, room selection, or booking concerns, just send a message."
+  utter_ask_booking_details:
+    - text: "Please share your preferred room type, check-in/check-out dates, or number of guests so I can guide your reservation."
+  utter_out_of_scope:
+    - text: "I can help with room availability, amenities, check-in/check-out, digital key, loyalty points, and booking guidance."
+
+actions:
+  - action_check_room_availability
+  - action_get_amenities
+  - action_get_checkin_checkout_info
+  - action_reservation_assistance
+  - action_get_digital_key_status
+  - action_get_loyalty_summary
+  - action_get_booking_policy
+  - action_capture_guest_preferences
+  - action_default_fallback
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true

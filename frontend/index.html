@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>INNOVA-HMS</title>
+    <script>
+      (function () {
+        try {
+          var savedTheme = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var activeTheme = savedTheme || (prefersDark ? "dark" : "light");
+          var isDark = activeTheme === "dark";
+          document.documentElement.classList.toggle("dark", isDark);
+          document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+        } catch (error) {
+          // ignore theme bootstrap issues
+        }
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              innova: {
+                white: "#ffffff",
+                gold: "#bf9b30",
+              }
+            },
+            fontFamily: {
+              sans: ['Poppins', 'sans-serif'],
+              serif: ['Poppins', 'serif'], 
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

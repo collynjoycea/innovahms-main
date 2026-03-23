@@ -1,0 +1,16 @@
+version: "3.1"
+
+stories:
+  - story: booking assistance with details
+    steps:
+      - intent: request_booking_help
+      - action: action_reservation_assistance
+      - intent: inform_booking_details
+      - action: action_check_room_availability
+
+  - story: availability then loyalty
+    steps:
+      - intent: ask_room_availability
+      - action: action_check_room_availability
+      - intent: ask_loyalty_points
+      - action: action_get_loyalty_summary
