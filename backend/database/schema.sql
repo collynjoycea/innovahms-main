@@ -7,6 +7,8 @@ select * from staff;
 select * from reservations;
 select * from attendance;
 
+
+
 CREATE TABLE IF NOT EXISTS admins (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -65,6 +67,7 @@ ALTER COLUMN hotel_code SET NOT NULL;
 ALTER TABLE hotels 
 ADD CONSTRAINT unique_hotel_code UNIQUE (hotel_code);
 SELECT * FROM hotels;
+ALTER TABLE hotels ADD COLUMN latitude DOUBLE PRECISION DEFAULT 0, ADD COLUMN longitude DOUBLE PRECISION DEFAULT 0;
 
 ALTER TABLE hotels 
 ADD COLUMN IF NOT EXISTS hotel_email VARCHAR(100),

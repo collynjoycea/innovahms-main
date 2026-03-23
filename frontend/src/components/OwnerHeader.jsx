@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown, LogOut, MapPin, Building2 } from 'lucide-react';
 
 const OwnerHeader = () => {
   const location = useLocation();
@@ -43,6 +44,17 @@ const OwnerHeader = () => {
   const currentItem = navItems.find(item => item.path === location.pathname);
   const pageTitle = currentItem ? currentItem.name : "Property Management";
 
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('ownerSession');
     navigate('/owner/login');
@@ -74,18 +86,16 @@ const OwnerHeader = () => {
           </div>
         </div>
 
-      {/* Right Side: Profile Group */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-5 pl-8 border-l border-black/10">
+      {/* Right Side: Profile Dropdown */}
+      <div className="relative" ref={menuRef}>
+        <button
+          onClick={() => setShowMenu(prev => !prev)}
+          className="flex items-center gap-3 pl-6 border-l border-black/10 hover:opacity-80 transition-opacity"
+        >
           <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-slate-800 tracking-tight capitalize">
-              {ownerInfo.fullName}
-            </p>
-            <p className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest opacity-80">
-              Verified Owner
-            </p>
+            <p className="text-xs font-bold text-slate-800 tracking-tight capitalize">{ownerInfo.fullName}</p>
+            <p className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest opacity-80">Verified Owner</p>
           </div>
-          
           <div className="w-10 h-10 rounded-full border border-[#bf9b30]/20 p-0.5 bg-gradient-to-tr from-[#bf9b30]/10 to-transparent">
             <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[#bf9b30] shadow-sm">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -93,21 +103,37 @@ const OwnerHeader = () => {
               </svg>
             </div>
           </div>
+          <ChevronDown size={14} className={`text-black/40 transition-transform duration-200 ${showMenu ? 'rotate-180' : ''}`} />
+        </button>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="ml-2 group flex items-center gap-2.5 px-6 py-2.5 rounded-full bg-[#1a1208] text-white hover:bg-[#bf9b30] transition-all duration-300 shadow-md active:scale-95"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-[0.15em]">Logout</span>
-            <svg 
-              className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-300 opacity-70" 
-              fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"
+        {showMenu && (
+          <div className="absolute right-0 mt-3 w-64 bg-white border border-black/5 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in duration-200">
+            <div className="px-3 py-2.5 border-b border-black/5 mb-1">
+              <p className="text-xs font-bold text-slate-800 capitalize">{ownerInfo.fullName}</p>
+              <p className="text-[10px] text-[#bf9b30] font-bold uppercase tracking-widest">{ownerInfo.hotelName}</p>
+            </div>
+            <button
+              onClick={() => { setShowMenu(false); navigate('/owner/rooms'); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H8.25" />
-            </svg>
-          </button>
-        </div>
+              <Building2 size={15} /> Manage Rooms
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); navigate('/owner/staff'); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
+            >
+              <MapPin size={15} /> Hotel Location
+            </button>
+            <div className="border-t border-black/5 mt-1 pt-1">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 text-red-500 text-xs font-bold transition-all"
+              >
+                <LogOut size={15} /> Sign Out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

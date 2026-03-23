@@ -2,11 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, MessageCircle, X, Send } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 import Marzipano from "marzipano";
 import resolveImg from "../../utils/resolveImg";
+import NeighborhoodMap from "../../components/NeighborhoodMap";
 
 const php = (value) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(
@@ -22,23 +20,6 @@ const haversineKm = (a, b) => {
   const s2 = Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s1 + s2));
 };
-
-const markerIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
-
-function MapFocus({ center }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!center) return;
-    map.flyTo([center.lat, center.lng], Math.max(map.getZoom(), 14), { duration: 0.8 });
-  }, [center, map]);
-  return null;
-}
 
 function TourModal({ open, onClose, roomName, tour, loading }) {
   const containerRef = useRef(null);
@@ -145,7 +126,6 @@ export default function VisionSuites() {
   const [hotelSearch, setHotelSearch] = useState("");
   const [activeHotelFilter, setActiveHotelFilter] = useState("all");
   const [landmarks, setLandmarks] = useState([]);
-  const [selectedLandmarkId, setSelectedLandmarkId] = useState(null);
 
   const [tourOpen, setTourOpen] = useState(false);
   const [tourRoom, setTourRoom] = useState(null);
@@ -162,11 +142,6 @@ export default function VisionSuites() {
   ]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-
-  const selectedLandmark = useMemo(
-    () => landmarks.find((l) => l.id === selectedLandmarkId) || null,
-    [landmarks, selectedLandmarkId]
-  );
 
   const hotelCenter = useMemo(() => {
     if (!hotel?.location) return { lat: 14.5995, lng: 120.9842 };
@@ -198,7 +173,6 @@ export default function VisionSuites() {
       setLocationLabel(hotelPayload.hotel?.locationLabel || "Hotel Location");
       setRooms(roomsPayload.rooms || []);
       setLandmarks(lmPayload.landmarks || []);
-      setSelectedLandmarkId((lmPayload.landmarks || [])[0]?.id ?? null);
     } catch (e) {
       setError(e?.message || "Failed to load Vision Suites.");
     } finally {
@@ -282,6 +256,17 @@ export default function VisionSuites() {
       setChatLoading(false);
     }
   };
+
+  const hotelMarkers = useMemo(() => {
+    if (!hotel?.location) return [];
+    return [{
+      id: hotel.id || 1,
+      name: hotel.name || "Vision Suites",
+      lat: hotel.location.lat,
+      lng: hotel.location.lng,
+      address: locationLabel,
+    }];
+  }, [hotel, locationLabel]);
 
   const computedLandmarks = useMemo(() => {
     const walkingKmh = 4.8;
@@ -523,66 +508,61 @@ export default function VisionSuites() {
         })()}
       </section>
 
-      {/* SECTION 3 */}
-      <section id="map" className="py-20 px-6 bg-[#F8F9FA]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-12 items-center">
-          <div className="md:w-1/3">
-            <h2 className="text-4xl font-serif mb-6">Neighborhood Discovery</h2>
-            <p className="text-slate-500 leading-relaxed mb-8">
-              Explore the neighborhood with OpenStreetMap pins. Tap a landmark to see distance and estimated walk/drive time.
-            </p>
+      {/* SECTION 3 — Neighborhood Discovery */}
+      <section id="map" className="py-20 px-6 bg-[#F8F9FA] dark:bg-[#0d0c0a]">
+        <div className="max-w-7xl mx-auto">
 
-            <div className="space-y-4">
-              {computedLandmarks.slice(0, 6).map((loc) => (
-                <button
-                  type="button"
-                  key={loc.id}
-                  onClick={() => setSelectedLandmarkId(loc.id)}
-                  className={`w-full text-left bg-white p-6 rounded-2xl shadow-sm flex justify-between items-center transition-all cursor-pointer border ${
-                    selectedLandmarkId === loc.id ? "border-[#bf9b30]/40 ring-4 ring-[#bf9b30]/10" : "border-slate-100 hover:shadow-md"
-                  }`}
-                >
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-900">{loc.name}</h4>
-                    <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">{loc.category}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-[#bf9b30] italic">{loc.walkMin} mins walk</p>
-                    <p className="text-[9px] font-bold text-slate-300">{loc.km.toFixed(1)} KM AWAY</p>
-                  </div>
-                </button>
-              ))}
-              {!loading && computedLandmarks.length === 0 ? <div className="text-sm text-slate-500 font-semibold">No landmarks configured yet.</div> : null}
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Explore the Area</p>
+              <h2 className="text-4xl font-serif text-slate-900 dark:text-white">Neighborhood Discovery</h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-md leading-relaxed">
+                Search any place, or turn on your location to instantly find the nearest hotel to you.
+              </p>
             </div>
           </div>
 
-          <div className="md:w-2/3 w-full aspect-video rounded-[40px] overflow-hidden shadow-2xl border-8 border-white relative bg-slate-200">
-            <MapContainer center={[hotelCenter.lat, hotelCenter.lng]} zoom={13} className="h-full w-full">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapFocus center={selectedLandmark ? { lat: selectedLandmark.lat, lng: selectedLandmark.lng } : hotelCenter} />
+          {/* Two-column layout: landmark list + map */}
+          <div className="flex flex-col lg:flex-row gap-8 items-start">
 
-              <Marker position={[hotelCenter.lat, hotelCenter.lng]} icon={markerIcon}>
-                <Popup>
-                  <b>{hotel?.name || "Vision Suites"}</b>
-                  <div>Your Luxury Base.</div>
-                </Popup>
-              </Marker>
-
-              {computedLandmarks.map((p) => (
-                <Marker key={p.id} position={[p.lat, p.lng]} icon={markerIcon}>
-                  <Popup>
-                    <b>{p.name}</b>
-                    <div className="text-xs text-slate-600">{p.category}</div>
-                    <div className="text-xs mt-2">
-                      {p.km.toFixed(2)} km - {p.walkMin} min walk - {p.driveMin} min drive
+            {/* Left: nearby hotels list */}
+            <div className="w-full lg:w-[300px] shrink-0 space-y-3">
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500 px-1">Nearby Hotels</p>
+              {computedLandmarks.slice(0, 8).map((loc) => (
+                <div
+                  key={loc.id}
+                  className="bg-white dark:bg-[#14130f] border border-slate-100 dark:border-white/5 p-4 rounded-2xl shadow-sm"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{loc.name}</h4>
+                      {loc.address && (
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5 leading-snug line-clamp-2">{loc.address}</p>
+                      )}
+                      <p className="text-[9px] text-[#bf9b30] font-black uppercase tracking-widest mt-1">{loc.category}</p>
                     </div>
-                  </Popup>
-                </Marker>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black text-[#bf9b30]">{loc.km.toFixed(1)} km</p>
+                      <p className="text-[9px] font-bold text-slate-300 dark:text-slate-600">{loc.walkMin} min walk</p>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </MapContainer>
+              {!loading && computedLandmarks.length === 0 && (
+                <p className="text-sm text-slate-400 font-semibold px-1">No hotels registered yet.</p>
+              )}
+            </div>
+
+            {/* Right: interactive map with search + geolocation */}
+            <div className="flex-1 min-w-0">
+              <NeighborhoodMap
+                hotels={hotelMarkers}
+                landmarks={landmarks}
+                hotelCenter={hotelCenter}
+                isDarkMode={false}
+              />
+            </div>
           </div>
         </div>
       </section>

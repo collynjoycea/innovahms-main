@@ -1,35 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Phone, Lock, Building2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { User, Mail, Phone, Lock, Building2, ArrowRight, MapPin, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function OwnerSignUp() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    firstName: '', lastName: '', email: '', contactNumber: '', password: '', hotelName: ''
+    firstName: '', lastName: '', email: '', contactNumber: '', password: '', hotelName: '',
+    address: '', latitude: '', longitude: ''
   });
+  const [geocoding, setGeocoding] = useState(false);
+  const geocodeTimer = useRef(null);
+
+  const geocodeAddress = async (address) => {
+    if (!address.trim()) return;
+    setGeocoding(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
+      const data = await res.json();
+      if (data[0]) {
+        setFormData(prev => ({ ...prev, latitude: data[0].lat, longitude: data[0].lon }));
+      }
+    } catch {}
+    finally { setGeocoding(false); }
+  };
+
+  const handleAddressChange = (value) => {
+    setFormData(prev => ({ ...prev, address: value, latitude: '', longitude: '' }));
+    clearTimeout(geocodeTimer.current);
+    geocodeTimer.current = setTimeout(() => geocodeAddress(value), 800);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const response = await fetch('/api/owner/signup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-
       const data = await response.json();
-
       if (response.ok) {
         alert('Registration successful! Please log in to continue.');
-        navigate('/owner/login'); 
+        navigate('/owner/login');
       } else {
         alert(data.error || 'Registration failed');
       }
     } catch (error) {
-      console.error('Signup error:', error);
       alert('An error occurred. Please check if the server is running.');
     }
   };
@@ -100,6 +117,18 @@ export default function OwnerSignUp() {
               <input type="text" placeholder="Hotel / Property Name" required 
                 className="w-full bg-[#0d0c0a] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:border-[#bf9b30]/50 outline-none transition-all"
                 onChange={e => setFormData({...formData, hotelName: e.target.value})} />
+            </div>
+
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50" size={16} />
+              <input type="text" placeholder="Hotel Address (for map pin)" 
+                className="w-full bg-[#0d0c0a] border border-white/5 rounded-xl py-3 pl-10 pr-10 text-sm text-white focus:border-[#bf9b30]/50 outline-none transition-all"
+                value={formData.address}
+                onChange={e => handleAddressChange(e.target.value)} />
+              {geocoding && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50 animate-spin" size={16} />}
+              {!geocoding && formData.latitude && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-[#bf9b30] font-bold">✓</span>
+              )}
             </div>
 
             <div className="relative">

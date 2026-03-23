@@ -1201,7 +1201,12 @@ def owner_signup():
     contact = data.get('contactNumber')
     password = data.get('password')
     hotel_name = data.get('hotelName')
+    address = data.get('address', '')
+    latitude = data.get('latitude') or None
+    longitude = data.get('longitude') or None
     hashed_pw = generate_password_hash(password)
+    conn = None
+    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -1210,13 +1215,27 @@ def owner_signup():
             (f_name, l_name, email, contact, hashed_pw)
         )
         owner_id = cur.fetchone()[0]
-        cur.execute("INSERT INTO hotels (owner_id, hotel_name) VALUES (%s, %s)", (owner_id, hotel_name))
+        has_addr = _table_has_column(cur, 'hotels', 'hotel_address')
+        has_lat  = _table_has_column(cur, 'hotels', 'latitude')
+        if has_addr and has_lat:
+            cur.execute(
+                "INSERT INTO hotels (owner_id, hotel_name, hotel_address, latitude, longitude) VALUES (%s, %s, %s, %s, %s)",
+                (owner_id, hotel_name, address, latitude, longitude)
+            )
+        elif has_addr:
+            cur.execute(
+                "INSERT INTO hotels (owner_id, hotel_name, hotel_address) VALUES (%s, %s, %s)",
+                (owner_id, hotel_name, address)
+            )
+        else:
+            cur.execute("INSERT INTO hotels (owner_id, hotel_name) VALUES (%s, %s)", (owner_id, hotel_name))
         conn.commit()
-        cur.close()
-        conn.close()
         return jsonify({"message": "Owner and Hotel registered successfully!"}), 201
     except Exception as e:
+        if conn: conn.rollback()
         return jsonify({"error": str(e)}), 400
+    finally:
+        _safe_close(conn, cur)
 
 @app.route('/api/owner/login', methods=['POST'])
 def owner_login():
@@ -1227,7 +1246,7 @@ def owner_login():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
-            SELECT o.*, h.hotel_name, h.id as hotel_id
+            SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
             FROM owners o
             LEFT JOIN hotels h ON o.id = h.owner_id
             WHERE o.email = %s
@@ -1240,7 +1259,9 @@ def owner_login():
                 "message": "Owner login successful!",
                 "owner": {
                     "id": owner['id'], "firstName": owner['first_name'], "lastName": owner['last_name'],
-                    "email": owner['email'], "hotelName": owner['hotel_name'], "hotelId": owner['hotel_id']
+                    "email": owner['email'], "hotelName": owner['hotel_name'], "hotelId": owner['hotel_id'],
+                    "address": owner.get('hotel_address', ''),
+                    "latitude": owner.get('latitude'), "longitude": owner.get('longitude')
                 }
             }), 200
         return jsonify({"error": "Invalid email or password"}), 401
@@ -3730,43 +3751,63 @@ def vision_rooms():
 
 @app.route('/api/vision/landmarks', methods=['GET'])
 def vision_landmarks():
+    """Return registered hotels as map landmarks so customers can see nearby hotel locations."""
     conn = None
     cur = None
-    default_landmarks = [
-        {"id": 1, "name": "Rizal Park", "category": "Landmark", "lat": 14.5826, "lng": 120.9790},
-        {"id": 2, "name": "National Museum", "category": "Museum", "lat": 14.5868, "lng": 120.9819},
-        {"id": 3, "name": "Intramuros", "category": "Historic", "lat": 14.5896, "lng": 120.9747},
-        {"id": 4, "name": "Mall of Asia", "category": "Shopping", "lat": 14.5350, "lng": 120.9822},
-    ]
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        if _table_exists(cur, "landmarks"):
-            select_cols = ["id", "name"]
-            if _table_has_column(cur, "landmarks", "category"):
-                select_cols.append("category")
-            if _table_has_column(cur, "landmarks", "latitude"):
-                select_cols.append("latitude")
-            if _table_has_column(cur, "landmarks", "longitude"):
-                select_cols.append("longitude")
-            cur.execute(f"SELECT {', '.join(select_cols)} FROM landmarks ORDER BY id ASC LIMIT 20")
+        # 1. Try vision_landmarks table first (seeded Cebu landmarks)
+        if _table_exists(cur, "vision_landmarks"):
+            hotel_id_param = request.args.get("hotel_id", type=int)
+            q = "SELECT id, name, category, lat, lng FROM vision_landmarks"
+            p = []
+            if hotel_id_param:
+                q += " WHERE hotel_id = %s"
+                p.append(hotel_id_param)
+            q += " ORDER BY sort_order ASC, id ASC LIMIT 30"
+            cur.execute(q, p)
             rows = cur.fetchall() or []
             if rows:
-                mapped = []
-                for row in rows:
-                    mapped.append({
-                        "id": row.get("id"),
-                        "name": row.get("name") or "Nearby Landmark",
-                        "category": row.get("category") or "Landmark",
-                        "lat": _to_float(row.get("latitude"), 14.5995),
-                        "lng": _to_float(row.get("longitude"), 120.9842),
-                    })
-                return jsonify({"landmarks": mapped}), 200
+                return jsonify({"landmarks": [
+                    {"id": r["id"], "name": r["name"], "category": r["category"],
+                     "lat": _to_float(r["lat"], 10.3247), "lng": _to_float(r["lng"], 123.9091)}
+                    for r in rows
+                ]}), 200
 
-        return jsonify({"landmarks": default_landmarks}), 200
+        # 2. Fall back: use hotels table — show each hotel as a landmark pin
+        if _table_exists(cur, "hotels"):
+            select_cols = ["id", "hotel_name", "hotel_address"]
+            if _table_has_column(cur, "hotels", "latitude"):
+                select_cols.append("latitude")
+            if _table_has_column(cur, "hotels", "longitude"):
+                select_cols.append("longitude")
+            cur.execute(f"SELECT {', '.join(select_cols)} FROM hotels ORDER BY id ASC LIMIT 20")
+            rows = cur.fetchall() or []
+            if rows:
+                landmarks = []
+                for i, row in enumerate(rows):
+                    lat = _to_float(row.get("latitude"), 0)
+                    lng = _to_float(row.get("longitude"), 0)
+                    # Skip hotels with no coordinates
+                    if lat == 0 and lng == 0:
+                        continue
+                    landmarks.append({
+                        "id": row.get("id"),
+                        "name": row.get("hotel_name") or "Hotel",
+                        "category": "Hotel",
+                        "address": row.get("hotel_address") or "",
+                        "lat": lat,
+                        "lng": lng,
+                    })
+                if landmarks:
+                    return jsonify({"landmarks": landmarks}), 200
+
+        # 3. Last resort: empty list — frontend handles gracefully
+        return jsonify({"landmarks": []}), 200
     except Exception as e:
-        return jsonify({"error": str(e), "landmarks": default_landmarks}), 200
+        return jsonify({"error": str(e), "landmarks": []}), 200
     finally:
         _safe_close(conn, cur)
 
