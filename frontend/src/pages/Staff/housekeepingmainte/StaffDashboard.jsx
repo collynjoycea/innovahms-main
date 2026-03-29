@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   Home, Wrench, Clock, CheckCircle2, 
   TrendingUp, Activity, RefreshCcw,
@@ -11,6 +11,7 @@ import useStaffSession from '../../../hooks/useStaffSession';
 const HousekeepingMainteDashboard = () => {
   const { isDarkMode } = useOutletContext() || { isDarkMode: true }; 
   const { qs, firstName } = useStaffSession();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -103,10 +104,10 @@ const HousekeepingMainteDashboard = () => {
           </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-          <button className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-wider transition-all ${theme.btnSecondary}`}>
+          <button onClick={() => navigate('/housekeeping/maintenance')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-wider transition-all ${theme.btnSecondary}`}>
             <AlertTriangle size={14} className="text-[#b3903c]" /> Report Issue
           </button>
-          <button className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-[#b3903c] text-black text-[10px] font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-lg shadow-[#b3903c]/20">
+          <button onClick={() => navigate('/housekeeping/tasks')} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-[#b3903c] text-black text-[10px] font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-lg shadow-[#b3903c]/20">
             <ClipboardList size={14} /> My Tasks
           </button>
         </div>
@@ -115,12 +116,12 @@ const HousekeepingMainteDashboard = () => {
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Pending Tasks", val: data.pendingTasks, icon: <ClipboardList />, color: "text-amber-500" },
-          { label: "In Progress", val: data.inProgress, icon: <RefreshCcw />, color: "text-cyan-500" },
-          { label: "Completed Today", val: data.completedToday, icon: <CheckCircle2 />, color: "text-emerald-500" },
-          { label: "Needs Cleaning", val: data.roomsNeedingClean, icon: <Home />, color: "text-red-500" },
+          { label: "Pending Tasks",    val: data.pendingTasks,       icon: <ClipboardList />, path: '/housekeeping/tasks' },
+          { label: "In Progress",      val: data.inProgress,         icon: <RefreshCcw />,    path: '/housekeeping/tasks' },
+          { label: "Completed Today",  val: data.completedToday,     icon: <CheckCircle2 />,  path: '/housekeeping/history' },
+          { label: "Needs Cleaning",   val: data.roomsNeedingClean,  icon: <Home />,          path: '/housekeeping/rooms' },
         ].map((s, i) => (
-          <div key={i} className={`p-6 rounded-[2rem] border transition-all duration-300 ${theme.card}`}>
+          <div key={i} onClick={() => navigate(s.path)} className={`p-6 rounded-[2rem] border transition-all duration-300 cursor-pointer hover:scale-[1.02] ${theme.card}`}>
             <div className="flex justify-between items-center mb-4">
               <span className={`p-2.5 rounded-xl bg-[#b3903c]/10 text-[#b3903c] border border-[#b3903c]/10`}>{s.icon}</span>
               <TrendingUp size={16} className={theme.textSub} />
@@ -140,13 +141,13 @@ const HousekeepingMainteDashboard = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-[#b3903c] animate-pulse"></span>
               Live Priority Queue
             </h2>
-            <button className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all ${theme.btnOutline}`}>
+            <button onClick={() => navigate('/housekeeping/schedule')} className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all ${theme.btnOutline}`}>
               View Schedule
             </button>
           </div>
           
           {data.priorityTasks.map((task, i) => (
-            <div key={i} className={`p-5 rounded-[1.8rem] border-l-[6px] group hover:translate-x-1 transition-all border ${theme.card} ${
+            <div key={i} onClick={() => navigate('/housekeeping/tasks')} className={`p-5 rounded-[1.8rem] border-l-[6px] group hover:translate-x-1 cursor-pointer transition-all border ${theme.card} ${
               task.status === 'URGENT' ? 'border-l-red-500' : 'border-l-[#b3903c]'
             }`}>
               <div className="flex justify-between items-center">
@@ -178,13 +179,13 @@ const HousekeepingMainteDashboard = () => {
             <h2 className={`text-[11px] font-black uppercase tracking-[0.2em] mb-6 ${theme.textMain}`}>Floor Monitor</h2>
             <div className="grid grid-cols-3 gap-3">
               {data.roomGrid.map((room, i) => (
-                <div key={i} className={`p-3 rounded-2xl border text-center transition-all cursor-pointer hover:scale-105 ${theme.roomColors[room.status]}`}>
+                <div key={i} onClick={() => navigate('/housekeeping/rooms')} className={`p-3 rounded-2xl border text-center transition-all cursor-pointer hover:scale-105 ${theme.roomColors[room.status] || theme.roomColors['Avail']}`}>
                   <p className="text-xs font-black">{room.id}</p>
                   <p className="text-[7px] font-bold uppercase mt-1 opacity-80">{room.status}</p>
                 </div>
               ))}
             </div>
-            <button className={`w-full mt-6 py-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${theme.btnSecondary}`}>
+            <button onClick={() => navigate('/housekeeping/rooms')} className={`w-full mt-6 py-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${theme.btnSecondary}`}>
               Open Visual Map
             </button>
           </div>
@@ -194,7 +195,7 @@ const HousekeepingMainteDashboard = () => {
             <h2 className={`text-[11px] font-black uppercase tracking-[0.2em] mb-6 ${theme.textMain}`}>Inventory Alerts</h2>
             <div className="space-y-6">
               {data.supplies.map((item, i) => (
-                <div key={i}>
+                <div key={i} onClick={() => navigate('/housekeeping/inventory')} className="cursor-pointer">
                   <div className="flex justify-between items-center mb-2">
                     <p className={`text-[10px] font-black uppercase tracking-wide ${theme.textMain}`}>{item.name}</p>
                     <p className={`text-[10px] font-black ${item.alert ? 'text-red-500' : 'text-[#b3903c]'}`}>

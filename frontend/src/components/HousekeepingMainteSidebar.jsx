@@ -69,7 +69,7 @@ const HousekeepingSidebar = ({ isDarkMode }) => {
       items: [
         { 
           name: "Report Issue", 
-          path: "/maintenance/report", 
+          path: "/housekeeping/maintenance", 
           icon: <AlertTriangle />, 
           badge: urgentRepairsCount > 0 ? urgentRepairsCount.toString() : null,
         },

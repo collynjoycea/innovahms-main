@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import axios from 'axios';
+import useStaffSession from '../../../hooks/useStaffSession';
 import { 
   Clock, User, RefreshCcw, AlertTriangle, 
   CheckCircle2, Flag, ClipboardList, 
@@ -8,9 +10,56 @@ import {
 
 const HKTasks = () => {
   const { isDarkMode } = useOutletContext() || { isDarkMode: true };
-  
+  const { qs, hotelId } = useStaffSession();
   const [activeModal, setActiveModal] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [tasks, setTasks] = useState({ pending: [], inProgress: [], completed: [] });
+  const [newTask, setNewTask] = useState({ room_label: '', task_type: 'Full Clean', priority: 'NORMAL', notes: '', scheduled_time: '' });
+  const [completeData, setCompleteData] = useState({ time_spent_mins: '', room_status: 'Ready for Guest' });
+  const [issueData, setIssueData] = useState({ severity: 'Medium Priority', description: '' });
+
+  const fetchTasks = async () => {
+    try {
+      const res = await axios.get(`/api/housekeeping/tasks${qs}`);
+      const all = res.data.tasks || [];
+      setTasks({
+        pending:    all.filter(t => t.status === 'Pending'),
+        inProgress: all.filter(t => t.status === 'In Progress'),
+        completed:  all.filter(t => t.status === 'Completed').slice(0, 5),
+      });
+    } catch {}
+  };
+
+  useEffect(() => { fetchTasks(); }, [qs]);
+
+  const handleComplete = async () => {
+    if (!selectedTask) return;
+    try {
+      await axios.patch(`/api/housekeeping/tasks/${selectedTask.id}/status`, { status: 'Completed', time_spent_mins: completeData.time_spent_mins });
+      if (completeData.room_status) {
+        await axios.patch(`/api/housekeeping/room-status/${selectedTask.room_label}`, { hotel_id: hotelId, status: completeData.room_status === 'Ready for Guest' ? 'Clean' : 'Dirty' });
+      }
+      setActiveModal(null);
+      fetchTasks();
+    } catch {}
+  };
+
+  const handleIssue = async () => {
+    if (!selectedTask) return;
+    try {
+      await axios.post('/api/housekeeping/maintenance', { hotel_id: hotelId, room_label: selectedTask.room_label, issue: issueData.description, severity: issueData.severity });
+      setActiveModal(null);
+    } catch {}
+  };
+
+  const handleCreateTask = async () => {
+    try {
+      await axios.post('/api/housekeeping/tasks', { ...newTask, hotel_id: hotelId });
+      setActiveModal(null);
+      setNewTask({ room_label: '', task_type: 'Full Clean', priority: 'NORMAL', notes: '', scheduled_time: '' });
+      fetchTasks();
+    } catch {}
+  };
 
   const theme = {
     bg: isDarkMode ? "bg-[#0c0c0e]" : "bg-[#f0f0f3]",
@@ -49,16 +98,9 @@ const HKTasks = () => {
   );
 
   const taskGroups = {
-    pending: [
-      { id: '103', title: 'Room 103', type: 'Full Clean', time: '2:00 PM', staff: 'Maria V.', note: 'Check-in at 2PM — VIP Guest', status: 'URGENT' },
-      { id: '203', title: 'Room 203', type: 'Linen Change', time: '1:30 PM', staff: 'Rosa R.', note: 'Requested by guest via concierge', status: 'HIGH' },
-    ],
-    inProgress: [
-      { id: '201', title: 'Room 201', type: 'Turn-Down', time: '1:00 PM', staff: 'Rosa R.', note: 'Started 12:30PM — 60% done', status: 'NORMAL' }
-    ],
-    completed: [
-      { id: '104', title: 'Room 104', type: 'Full Clean', time: '11:30AM', staff: 'Maria V.', note: 'Completed', status: 'NORMAL' }
-    ]
+    pending:    tasks.pending.map(t => ({ id: t.id, title: t.room_label, type: t.task_type, time: t.scheduled_time || '', staff: t.staff_name || '', note: t.notes || '', status: t.priority })),
+    inProgress: tasks.inProgress.map(t => ({ id: t.id, title: t.room_label, type: t.task_type, time: t.scheduled_time || '', staff: t.staff_name || '', note: t.notes || '', status: t.priority })),
+    completed:  tasks.completed.map(t => ({ id: t.id, title: t.room_label, type: t.task_type, time: t.scheduled_time || '', staff: t.staff_name || '', note: t.notes || '', status: t.priority })),
   };
 
   const TaskCard = ({ task, isDone }) => (
@@ -110,22 +152,26 @@ const HKTasks = () => {
       {activeModal === 'complete' && (
         <ModalWrapper title="Complete Assignment" onClose={() => setActiveModal(null)}>
           <div className="space-y-4 text-left">
-            <div className="group">
+            <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Room Target</label>
               <input disabled value={`${selectedTask?.title} — ${selectedTask?.type}`} className={`w-full p-3 rounded-xl border ${theme.input} font-bold opacity-50`} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Time Spent</label>
-                <input type="number" placeholder="45 mins" className={`w-full p-3 rounded-xl border ${theme.input}`} />
+                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Time Spent (mins)</label>
+                <input type="number" placeholder="45" value={completeData.time_spent_mins} onChange={e => setCompleteData(p => ({...p, time_spent_mins: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input}`} />
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Status</label>
-                <select className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
+                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Room Status</label>
+                <select value={completeData.room_status} onChange={e => setCompleteData(p => ({...p, room_status: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
                   <option>Ready for Guest</option>
                   <option>Needs Inspection</option>
                 </select>
               </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setActiveModal(null)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border ${theme.border} ${theme.textMain}`}>Cancel</button>
+              <button onClick={handleComplete} className="flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest bg-[#c9a84c] text-black">Confirm</button>
             </div>
           </div>
         </ModalWrapper>
@@ -133,24 +179,67 @@ const HKTasks = () => {
 
       {activeModal === 'issue' && (
         <ModalWrapper title="Report Issue" onClose={() => setActiveModal(null)}>
-           <div className="space-y-4 text-left">
+          <div className="space-y-4 text-left">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Location</label>
-                <input value={selectedTask?.title} className={`w-full p-3 rounded-xl border ${theme.input} font-bold`} />
+                <input disabled value={selectedTask?.title} className={`w-full p-3 rounded-xl border ${theme.input} font-bold opacity-50`} />
               </div>
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Severity</label>
-                <select className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>Critical</option>
+                <select value={issueData.severity} onChange={e => setIssueData(p => ({...p, severity: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
+                  <option>High Priority</option>
+                  <option>Medium Priority</option>
+                  <option>Routine Check</option>
                 </select>
               </div>
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Issue Details</label>
-              <textarea placeholder="Describe the findings..." className={`w-full p-3 rounded-xl border ${theme.input} h-24`} />
+              <textarea placeholder="Describe the findings..." value={issueData.description} onChange={e => setIssueData(p => ({...p, description: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} h-24`} />
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setActiveModal(null)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border ${theme.border} ${theme.textMain}`}>Cancel</button>
+              <button onClick={handleIssue} className="flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest bg-[#c9a84c] text-black">Submit</button>
+            </div>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {activeModal === 'new' && (
+        <ModalWrapper title="New Assignment" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4 text-left">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Room</label>
+                <input placeholder="e.g. Room 103" value={newTask.room_label} onChange={e => setNewTask(p => ({...p, room_label: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input}`} />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Priority</label>
+                <select value={newTask.priority} onChange={e => setNewTask(p => ({...p, priority: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
+                  <option value="NORMAL">Normal</option>
+                  <option value="HIGH">High</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Task Type</label>
+              <select value={newTask.task_type} onChange={e => setNewTask(p => ({...p, task_type: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} text-[10px] font-bold`}>
+                <option>Full Clean</option>
+                <option>Linen Change</option>
+                <option>Turn-Down</option>
+                <option>Inspection</option>
+                <option>Common Area</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-[#c9a84c] mb-2 block">Notes</label>
+              <textarea placeholder="Task notes..." value={newTask.notes} onChange={e => setNewTask(p => ({...p, notes: e.target.value}))} className={`w-full p-3 rounded-xl border ${theme.input} h-20`} />
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setActiveModal(null)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border ${theme.border} ${theme.textMain}`}>Cancel</button>
+              <button onClick={handleCreateTask} className="flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest bg-[#c9a84c] text-black">Create</button>
             </div>
           </div>
         </ModalWrapper>
@@ -168,7 +257,7 @@ const HKTasks = () => {
           <button className={`p-3 rounded-xl border ${theme.border} ${theme.textMain} hover:border-[#c9a84c]/50 transition-all`}>
             <Download size={18} />
           </button>
-          <button className="px-8 py-3 rounded-xl bg-[#c9a84c] text-black font-black text-[11px] uppercase tracking-widest shadow-xl shadow-[#c9a84c]/20 flex items-center gap-2">
+          <button onClick={() => setActiveModal('new')} className="px-8 py-3 rounded-xl bg-[#c9a84c] text-black font-black text-[11px] uppercase tracking-widest shadow-xl shadow-[#c9a84c]/20 flex items-center gap-2">
             <Plus size={18} strokeWidth={3} /> New Assignment
           </button>
         </div>
@@ -181,10 +270,10 @@ const HKTasks = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between border-l-2 border-orange-500 pl-4">
             <h3 className={`text-[11px] font-black uppercase tracking-[0.2em] ${theme.textMain}`}>Pending</h3>
-            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">02</span>
+            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">{String(taskGroups.pending.length).padStart(2,'0')}</span>
           </div>
           <div className="space-y-5">
-            {taskGroups.pending.map((t, i) => <TaskCard key={i} task={t} isDone={false} />)}
+            {taskGroups.pending.length === 0 ? <p className={`text-[11px] ${theme.textSub} text-center py-8`}>No pending tasks</p> : taskGroups.pending.map((t, i) => <TaskCard key={i} task={t} isDone={false} />)}
           </div>
         </div>
 
@@ -192,10 +281,10 @@ const HKTasks = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between border-l-2 border-[#c9a84c] pl-4">
             <h3 className={`text-[11px] font-black uppercase tracking-[0.2em] ${theme.textMain}`}>In Progress</h3>
-            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">01</span>
+            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">{String(taskGroups.inProgress.length).padStart(2,'0')}</span>
           </div>
           <div className="space-y-5">
-            {taskGroups.inProgress.map((t, i) => <TaskCard key={i} task={t} isDone={false} />)}
+            {taskGroups.inProgress.length === 0 ? <p className={`text-[11px] ${theme.textSub} text-center py-8`}>No tasks in progress</p> : taskGroups.inProgress.map((t, i) => <TaskCard key={i} task={t} isDone={false} />)}
           </div>
         </div>
 
@@ -203,7 +292,7 @@ const HKTasks = () => {
         <div className="space-y-6 opacity-40 hover:opacity-100 transition-opacity">
           <div className="flex items-center justify-between border-l-2 border-emerald-500 pl-4">
             <h3 className={`text-[11px] font-black uppercase tracking-[0.2em] ${theme.textMain}`}>Completed</h3>
-            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">01</span>
+            <span className="text-[10px] font-black text-[#c9a84c] bg-[#c9a84c]/10 px-2 py-0.5 rounded">{String(taskGroups.completed.length).padStart(2,'0')}</span>
           </div>
           <div className="space-y-5">
             {taskGroups.completed.map((t, i) => <TaskCard key={i} task={t} isDone={true} />)}

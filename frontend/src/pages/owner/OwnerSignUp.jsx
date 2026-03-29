@@ -1,35 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Phone, Lock, Building2, ArrowRight, MapPin, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, Lock, Hash, ArrowRight, Building2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function OwnerSignUp() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    firstName: '', lastName: '', email: '', contactNumber: '', password: '', hotelName: '',
-    address: '', latitude: '', longitude: ''
+    firstName: '', lastName: '', email: '', contactNumber: '', password: '', hotelCode: ''
   });
-  const [geocoding, setGeocoding] = useState(false);
-  const geocodeTimer = useRef(null);
-
-  const geocodeAddress = async (address) => {
-    if (!address.trim()) return;
-    setGeocoding(true);
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
-      const data = await res.json();
-      if (data[0]) {
-        setFormData(prev => ({ ...prev, latitude: data[0].lat, longitude: data[0].lon }));
-      }
-    } catch {}
-    finally { setGeocoding(false); }
-  };
-
-  const handleAddressChange = (value) => {
-    setFormData(prev => ({ ...prev, address: value, latitude: '', longitude: '' }));
-    clearTimeout(geocodeTimer.current);
-    geocodeTimer.current = setTimeout(() => geocodeAddress(value), 800);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,7 +57,7 @@ export default function OwnerSignUp() {
               <Building2 size={32} className="text-[#bf9b30] mb-4" />
               <h2 className="text-2xl font-serif italic text-white mb-2">Partner with Excellence</h2>
               <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-widest font-bold">
-                Join our network of smart sanctuaries and transform your guest experience.
+                Use your assigned hotel code (e.g. INNOVAHMS-1) to claim your property.
               </p>
             </div>
           </div>
@@ -113,22 +91,18 @@ export default function OwnerSignUp() {
             </div>
 
             <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50" size={16} />
-              <input type="text" placeholder="Hotel / Property Name" required 
-                className="w-full bg-[#0d0c0a] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:border-[#bf9b30]/50 outline-none transition-all"
-                onChange={e => setFormData({...formData, hotelName: e.target.value})} />
-            </div>
-
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50" size={16} />
-              <input type="text" placeholder="Hotel Address (for map pin)" 
-                className="w-full bg-[#0d0c0a] border border-white/5 rounded-xl py-3 pl-10 pr-10 text-sm text-white focus:border-[#bf9b30]/50 outline-none transition-all"
-                value={formData.address}
-                onChange={e => handleAddressChange(e.target.value)} />
-              {geocoding && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50 animate-spin" size={16} />}
-              {!geocoding && formData.latitude && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-[#bf9b30] font-bold">✓</span>
-              )}
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-[#bf9b30]/50" size={16} />
+              <input
+                type="text"
+                placeholder="Hotel Code (e.g. INNOVAHMS-1)"
+                required
+                className="w-full bg-[#0d0c0a] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:border-[#bf9b30]/50 outline-none transition-all uppercase placeholder:normal-case"
+                value={formData.hotelCode}
+                onChange={e => setFormData({ ...formData, hotelCode: e.target.value.toUpperCase() })}
+              />
+              <p className="text-[9px] text-gray-600 mt-1 pl-1 font-bold uppercase tracking-widest">
+                Provided by Innova HMS admin — e.g. INNOVAHMS-1
+              </p>
             </div>
 
             <div className="relative">

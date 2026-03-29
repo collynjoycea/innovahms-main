@@ -1,40 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import axios from 'axios';
+import useStaffSession from '../../../hooks/useStaffSession';
 import { 
   Package, AlertTriangle, CheckCircle2, 
-  ShoppingCart, History, Search, Filter,
-  ArrowUpRight, Plus
+  ShoppingCart, History, Search,
+  Plus
 } from 'lucide-react';
 
 const LinenInventory = () => {
   const { isDarkMode } = useOutletContext() || { isDarkMode: true };
+  const { qs } = useStaffSession();
+  const [inventory, setInventory] = useState([]);
+  const [search, setSearch] = useState('');
+  const [lastSync, setLastSync] = useState(null);
+
+  const fetchInventory = async () => {
+    try {
+      const res = await axios.get(`/api/housekeeping/inventory${qs}`);
+      setInventory(res.data.inventory || []);
+      setLastSync(new Date());
+    } catch {}
+  };
+
+  useEffect(() => { fetchInventory(); }, [qs]);
+
+  const handleRestock = async (id) => {
+    try {
+      await axios.patch(`/api/housekeeping/inventory/${id}/restock`, { qty: 20 });
+      fetchInventory();
+    } catch {}
+  };
+
+  const linens     = inventory.filter(i => i.category === 'Linens'     && i.item_name.toLowerCase().includes(search.toLowerCase()));
+  const toiletries = inventory.filter(i => i.category === 'Toiletries' && i.item_name.toLowerCase().includes(search.toLowerCase()));
+  const lowStockCount = inventory.filter(i => i.current_qty < i.max_qty * 0.4).length;
 
   const theme = {
-    bg: isDarkMode ? "bg-[#0c0c0e]" : "bg-[#f0f0f3]",
-    card: isDarkMode ? "bg-[#111111]/90 backdrop-blur-xl" : "bg-white",
-    border: isDarkMode ? "border-white/10" : "border-gray-300",
-    textMain: isDarkMode ? "text-white" : "text-gray-900",
-    textSub: isDarkMode ? "text-gray-500" : "text-gray-400",
-    gold: "#c9a84c",
-    goldBg: "bg-[#c9a84c]",
-    shadow: "shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+    bg:       isDarkMode ? 'bg-[#0c0c0e]'          : 'bg-[#f0f0f3]',
+    card:     isDarkMode ? 'bg-[#111111]/90 backdrop-blur-xl' : 'bg-white',
+    border:   isDarkMode ? 'border-white/10'        : 'border-gray-300',
+    textMain: isDarkMode ? 'text-white'             : 'text-gray-900',
+    textSub:  isDarkMode ? 'text-gray-500'          : 'text-gray-400',
+    shadow:   'shadow-[0_20px_50px_rgba(0,0,0,0.5)]',
   };
 
-  const inventoryData = {
-    linens: [
-      { item: "Bath Towels", stock: 35, qty: "42/120 pcs", status: "Low Stock" },
-      { item: "Hand Towels", stock: 79, qty: "95/120 pcs", status: "In Stock" },
-      { item: "Bed Sheets (King)", stock: 48, qty: "38/80 sets", status: "Low Stock" },
-      { item: "Bed Sheets (Twin)", stock: 75, qty: "60/80 sets", status: "In Stock" },
-      { item: "Pillowcases", stock: 69, qty: "110/160 pcs", status: "In Stock" },
-    ],
-    toiletries: [
-      { item: "Shampoo (100ml)", stock: 45, qty: "180/400 pcs", status: "In Stock" },
-      { item: "Bath Soap", stock: 32, qty: "95/300 pcs", status: "In Stock" },
-      { item: "Conditioner", stock: 21, qty: "42/200 pcs", status: "Low Stock" },
-      { item: "Toothbrush Set", stock: 19, qty: "28/150 sets", status: "Low Stock" },
-    ]
-  };
+  const toRows = (items) => items.map(i => ({
+    id:     i.id,
+    item:   i.item_name,
+    stock:  Math.round((i.current_qty / i.max_qty) * 100),
+    qty:    `${i.current_qty}/${i.max_qty} ${i.unit}`,
+    status: i.current_qty < i.max_qty * 0.4 ? 'Low Stock' : 'In Stock',
+  }));
 
   const InventoryTable = ({ title, items }) => (
     <div className={`${theme.card} border ${theme.border} rounded-[2rem] overflow-hidden ${theme.shadow} mb-10`}>
@@ -47,7 +64,6 @@ const LinenInventory = () => {
           <Plus size={14} strokeWidth={3} /> Request Restock
         </button>
       </div>
-      
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -60,16 +76,15 @@ const LinenInventory = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {items.map((row, i) => (
+            {items.length === 0 ? (
+              <tr><td colSpan={5} className={`px-8 py-10 text-center text-[11px] ${theme.textSub}`}>No items found.</td></tr>
+            ) : items.map((row, i) => (
               <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
                 <td className={`px-8 py-5 text-[11px] font-bold ${theme.textMain}`}>{row.item}</td>
                 <td className="px-8 py-5 w-48">
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${row.stock < 40 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${row.stock}%` }}
-                      />
+                      <div className={`h-full rounded-full ${row.stock < 40 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${row.stock}%` }} />
                     </div>
                     <span className={`text-[10px] font-black ${theme.textSub}`}>{row.stock}%</span>
                   </div>
@@ -77,16 +92,14 @@ const LinenInventory = () => {
                 <td className={`px-8 py-5 text-[10px] font-bold ${theme.textSub}`}>{row.qty}</td>
                 <td className="px-8 py-5">
                   <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
-                    row.status === 'Low Stock' 
-                      ? 'border-red-500/30 text-red-500 bg-red-500/5' 
-                      : 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5'
+                    row.status === 'Low Stock' ? 'border-red-500/30 text-red-500 bg-red-500/5' : 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5'
                   }`}>
                     {row.status === 'Low Stock' && <AlertTriangle size={10} className="inline mr-1 mb-0.5" />}
                     {row.status}
                   </span>
                 </td>
                 <td className="px-8 py-5 text-right">
-                  <button className={`p-2 rounded-lg border ${theme.border} text-[#c9a84c] hover:bg-[#c9a84c] hover:text-black transition-all`}>
+                  <button onClick={() => handleRestock(row.id)} className={`p-2 rounded-lg border ${theme.border} text-[#c9a84c] hover:bg-[#c9a84c] hover:text-black transition-all`}>
                     <ShoppingCart size={14} />
                   </button>
                 </td>
@@ -100,7 +113,7 @@ const LinenInventory = () => {
 
   return (
     <div className={`p-8 min-h-screen transition-all duration-500 ${theme.bg}`}>
-      
+
       {/* HEADER */}
       <div className={`flex flex-col md:flex-row justify-between items-end border-b pb-6 ${theme.border} mb-10`}>
         <div className="text-left">
@@ -111,11 +124,16 @@ const LinenInventory = () => {
             Stock Levels and Inventory Management
           </p>
         </div>
-        
         <div className="flex gap-4">
           <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border ${theme.border} ${theme.card}`}>
             <Search size={16} className="text-[#c9a84c]" />
-            <input type="text" placeholder="Search Item..." className="bg-transparent border-none outline-none text-[11px] font-bold uppercase tracking-widest w-32" />
+            <input
+              type="text"
+              placeholder="Search Item..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="bg-transparent border-none outline-none text-[11px] font-bold uppercase tracking-widest w-32"
+            />
           </div>
           <button className={`p-2 rounded-xl border ${theme.border} ${theme.textMain} hover:border-[#c9a84c]/50 transition-all`}>
             <History size={18} />
@@ -123,12 +141,12 @@ const LinenInventory = () => {
         </div>
       </div>
 
-      {/* QUICK SUMMARY CARDS */}
+      {/* SUMMARY CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {[
-          { label: "Total Items", value: "842", sub: "Across all categories", icon: <Package size={20}/> },
-          { label: "Low Stock Alert", value: "12", sub: "Items need attention", icon: <AlertTriangle size={20} className="text-red-500"/> },
-          { label: "Last Inventory", value: "03:56 AM", sub: "Auto-synced today", icon: <CheckCircle2 size={20} className="text-emerald-500"/> },
+          { label: 'Total Items',    value: String(inventory.length), sub: 'Across all categories', icon: <Package size={20} /> },
+          { label: 'Low Stock Alert', value: String(lowStockCount),   sub: 'Items need attention',  icon: <AlertTriangle size={20} className="text-red-500" /> },
+          { label: 'Last Inventory', value: lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--', sub: 'Auto-synced today', icon: <CheckCircle2 size={20} className="text-emerald-500" /> },
         ].map((stat, i) => (
           <div key={i} className={`${theme.card} border ${theme.border} p-6 rounded-3xl flex items-center justify-between`}>
             <div>
@@ -144,8 +162,8 @@ const LinenInventory = () => {
       </div>
 
       {/* TABLES */}
-      <InventoryTable title="Linens Inventory" items={inventoryData.linens} />
-      <InventoryTable title="Toiletries Inventory" items={inventoryData.toiletries} />
+      <InventoryTable title="Linens Inventory"     items={toRows(linens)} />
+      <InventoryTable title="Toiletries Inventory" items={toRows(toiletries)} />
 
     </div>
   );

@@ -41,10 +41,7 @@ const HousekeepingMainteLayout = () => {
         <HousekeepingMainteHeader isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
         
         <main className="flex-1 overflow-y-auto scrollbar-thin custom-housekeeping-scroll">
-          {/* 7. Outlet: Content ng Dashboard, Room Status, Maintenance Tasks, etc. */}
-          <div className="p-6 md:p-8 animate-in fade-in duration-500">
-             <Outlet context={{ isDarkMode }} />
-          </div>
+          <Outlet context={{ isDarkMode }} />
         </main>
       </div>
 

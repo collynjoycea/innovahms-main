@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import axios from 'axios';
+import useStaffSession from '../../../hooks/useStaffSession';
 import { 
   Calendar as CalendarIcon, Clock, ChevronLeft, 
   ChevronRight, MoreHorizontal, Sun, Moon, 
@@ -8,7 +10,38 @@ import {
 
 const HKSchedule = () => {
   const { isDarkMode } = useOutletContext() || { isDarkMode: true };
-  const [selectedDate, setSelectedDate] = useState('2026-03-19');
+  const { qs } = useStaffSession();
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [shifts, setShifts] = useState([]);
+
+  useEffect(() => {
+    axios.get(`/api/housekeeping/schedule${qs}&date=${selectedDate}`)
+      .then(res => setShifts(res.data.schedules || []))
+      .catch(() => {});
+  }, [qs, selectedDate]);
+
+  // Build week dates around selectedDate
+  const weeklyDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(selectedDate);
+    const day = new Date(d);
+    day.setDate(d.getDate() - d.getDay() + 1 + i);
+    const iso = day.toISOString().split('T')[0];
+    return {
+      day: day.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+      date: String(day.getDate()),
+      iso,
+      status: iso < selectedDate ? 'completed' : iso === selectedDate ? 'active' : 'upcoming'
+    };
+  });
+
+  const shiftIcons = { Morning: <Sun size={14}/>, Break: <Coffee size={14}/>, Afternoon: <Moon size={14}/> };
+  const displayShifts = shifts.length > 0
+    ? shifts.map(s => ({ time: `${s.shift_start} - ${s.shift_end}`, task: s.task_label || 'Shift', zone: s.zone || '', type: 'Morning', icon: <Sun size={14}/> }))
+    : [
+        { time: '08:00 AM - 12:00 PM', task: 'Morning Deep Clean',              zone: 'Level 1 & 2',      type: 'Morning',   icon: <Sun size={14}/> },
+        { time: '12:00 PM - 01:00 PM', task: 'Staff Break / Handover',           zone: 'Staff Lounge',     type: 'Break',     icon: <Coffee size={14}/> },
+        { time: '01:00 PM - 05:00 PM', task: 'General Maintenance & Turn-down',  zone: 'Level 3 & Suite',  type: 'Afternoon', icon: <Moon size={14}/> },
+      ];
 
   const theme = {
     bg: isDarkMode ? "bg-[#0c0c0e]" : "bg-[#f0f0f3]",
@@ -20,22 +53,6 @@ const HKSchedule = () => {
     accent: "text-[#c9a84c]",
     shadow: "shadow-[0_20px_50px_rgba(0,0,0,0.4)]"
   };
-
-  const weeklyDates = [
-    { day: 'Mon', date: '16', status: 'completed' },
-    { day: 'Tue', date: '17', status: 'completed' },
-    { day: 'Wed', date: '18', status: 'completed' },
-    { day: 'Thu', date: '19', status: 'active' },
-    { day: 'Fri', date: '20', status: 'upcoming' },
-    { day: 'Sat', date: '21', status: 'upcoming' },
-    { day: 'Sun', date: '22', status: 'upcoming' },
-  ];
-
-  const shifts = [
-    { time: '08:00 AM - 12:00 PM', task: 'Morning Deep Clean', zone: 'Level 1 & 2', type: 'Morning', icon: <Sun size={14}/> },
-    { time: '12:00 PM - 01:00 PM', task: 'Staff Break / Handover', zone: 'Staff Lounge', type: 'Break', icon: <Coffee size={14}/> },
-    { time: '01:00 PM - 05:00 PM', task: 'General Maintenance & Turn-down', zone: 'Level 3 & Suite', type: 'Afternoon', icon: <Moon size={14}/> },
-  ];
 
   return (
     <div className={`p-8 min-h-screen transition-all duration-500 ${theme.bg}`}>
@@ -76,6 +93,7 @@ const HKSchedule = () => {
               {weeklyDates.map((item, i) => (
                 <button 
                   key={i}
+                  onClick={() => setSelectedDate(item.iso)}
                   className={`flex-1 flex flex-col items-center p-4 rounded-2xl transition-all border ${
                     item.status === 'active' 
                     ? 'bg-[#c9a84c] border-[#c9a84c] scale-110 shadow-lg shadow-[#c9a84c]/20' 
@@ -97,7 +115,7 @@ const HKSchedule = () => {
           {/* 3. DAILY TIMELINE */}
           <div className="space-y-4">
             <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] pl-2 ${theme.textSub}`}>Shift Timeline</h3>
-            {shifts.map((shift, i) => (
+            {displayShifts.map((shift, i) => (
               <div key={i} className={`${theme.card} border ${theme.border} p-6 rounded-2xl flex items-center justify-between group hover:border-[#c9a84c]/50 transition-all`}>
                 <div className="flex items-center gap-6">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${theme.border} bg-white/5 ${theme.accent}`}>

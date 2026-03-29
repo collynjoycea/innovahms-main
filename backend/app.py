@@ -1194,48 +1194,46 @@ def change_user_password():
 
 @app.route('/api/owner/signup', methods=['POST'])
 def owner_signup():
+    import re as _re
     data = request.json
     f_name = data.get('firstName')
     l_name = data.get('lastName')
     email = data.get('email')
     contact = data.get('contactNumber')
     password = data.get('password')
-    hotel_name = data.get('hotelName')
-    address = data.get('address', '')
-    latitude = data.get('latitude') or None
-    longitude = data.get('longitude') or None
+    hotel_code = (data.get('hotelCode') or '').strip().upper()
+    m = _re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
+    if not m:
+        return jsonify({'error': 'Invalid hotel code. Format must be INNOVAHMS-{number} (e.g. INNOVAHMS-1)'}), 400
+    hotel_id = int(m.group(1))
     hashed_pw = generate_password_hash(password)
     conn = None
     cur = None
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO owners (first_name, last_name, email, contact_number, password_hash) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('SELECT id, hotel_name, owner_id FROM hotels WHERE id = %s', (hotel_id,))
+        hotel = cur.fetchone()
+        if not hotel:
+            return jsonify({'error': f'Hotel code {hotel_code} does not exist.'}), 404
+        if hotel['owner_id']:
+            return jsonify({'error': f'Hotel code {hotel_code} is already claimed by another owner.'}), 409
+        cur2 = conn.cursor()
+        cur2.execute(
+            'INSERT INTO owners (first_name, last_name, email, contact_number, password_hash) VALUES (%s, %s, %s, %s, %s) RETURNING id',
             (f_name, l_name, email, contact, hashed_pw)
         )
-        owner_id = cur.fetchone()[0]
-        has_addr = _table_has_column(cur, 'hotels', 'hotel_address')
-        has_lat  = _table_has_column(cur, 'hotels', 'latitude')
-        if has_addr and has_lat:
-            cur.execute(
-                "INSERT INTO hotels (owner_id, hotel_name, hotel_address, latitude, longitude) VALUES (%s, %s, %s, %s, %s)",
-                (owner_id, hotel_name, address, latitude, longitude)
-            )
-        elif has_addr:
-            cur.execute(
-                "INSERT INTO hotels (owner_id, hotel_name, hotel_address) VALUES (%s, %s, %s)",
-                (owner_id, hotel_name, address)
-            )
-        else:
-            cur.execute("INSERT INTO hotels (owner_id, hotel_name) VALUES (%s, %s)", (owner_id, hotel_name))
+        owner_id = cur2.fetchone()[0]
+        cur2.execute('UPDATE hotels SET owner_id = %s WHERE id = %s', (owner_id, hotel_id))
+        cur2.close()
         conn.commit()
-        return jsonify({"message": "Owner and Hotel registered successfully!"}), 201
+        return jsonify({'message': 'Owner registered and linked to hotel successfully!'}), 201
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 400
+        return jsonify({'error': str(e)}), 400
     finally:
         _safe_close(conn, cur)
+
 
 @app.route('/api/owner/login', methods=['POST'])
 def owner_login():
@@ -5040,6 +5038,49 @@ if os.environ.get('WERKZEUG_RUN_MAIN') != 'false':
     _cancel_thread.start()
 
 
+# --- HOUSEKEEPING ROOM STATUS ENDPOINTS ---
+
+@app.route('/api/housekeeping/room-status', methods=['GET'])
+def hk_room_status():
+    conn = None; cur = None
+    try:
+        hotel_id = request.args.get('hotel_id', type=int)
+        conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        hf = "WHERE hotel_id = %s" if hotel_id else ""
+        hp = [hotel_id] if hotel_id else []
+        cur.execute(f"SELECT id,room_number,room_name,room_type,status FROM rooms {hf} ORDER BY room_number ASC", hp)
+        rows = cur.fetchall() or []
+        rooms = [{'id':r['id'],'room_label':r['room_number'] or str(r['id']),'room_type':r['room_type'] or 'Standard','room_name':r['room_name'] or '','status':r['status'] or 'Available'} for r in rows]
+        counts = {}
+        for r in rooms: counts[r['status']] = counts.get(r['status'], 0) + 1
+        return jsonify({'rooms': rooms, 'counts': counts, 'total': len(rooms)}), 200
+    except Exception as e: return jsonify({'error': str(e)}), 500
+    finally: _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/room-status/<room_number>', methods=['PATCH'])
+def hk_update_room_status(room_number):
+    conn = None; cur = None
+    try:
+        data = request.json or {}
+        new_status = data.get('status', 'Available')
+        hotel_id   = data.get('hotel_id')
+        conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        q = "UPDATE rooms SET status = %s WHERE room_number = %s"
+        p = [new_status, room_number]
+        if hotel_id: q += " AND hotel_id = %s"; p.append(hotel_id)
+        q += " RETURNING id, room_number, status"
+        cur.execute(q, p)
+        row = cur.fetchone()
+        if not row: return jsonify({'error': 'Room not found.'}), 404
+        conn.commit()
+        return jsonify({'message': f'Room {room_number} updated to {new_status}.', 'status': new_status}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally: _safe_close(conn, cur)
+
+
 # ── INVENTORY MANAGEMENT ENDPOINTS ──────────────────────────────────────────
 
 @app.route('/api/inventory/items', methods=['GET'])
@@ -5440,3 +5481,330 @@ def inv_dashboard():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+
+
+# ================================================================
+# HOUSEKEEPING & MAINTENANCE ROUTES
+# ================================================================
+
+@app.route('/api/housekeeping/dashboard-stats', methods=['GET'])
+def hk_dashboard_stats():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        q = "WHERE hotel_id = %s" if hotel_id else ""
+        p = [hotel_id] if hotel_id else []
+
+        cur.execute(f"SELECT COUNT(*) AS c FROM hk_tasks {q} AND status='Pending'" if hotel_id else "SELECT COUNT(*) AS c FROM hk_tasks WHERE status='Pending'", p)
+        pending = (cur.fetchone() or {}).get('c', 0)
+
+        cur.execute(f"SELECT COUNT(*) AS c FROM hk_tasks {q} AND status='In Progress'" if hotel_id else "SELECT COUNT(*) AS c FROM hk_tasks WHERE status='In Progress'", p)
+        in_prog = (cur.fetchone() or {}).get('c', 0)
+
+        cur.execute(f"SELECT COUNT(*) AS c FROM hk_tasks {q} AND status='Completed' AND completed_at::date=CURRENT_DATE" if hotel_id else "SELECT COUNT(*) AS c FROM hk_tasks WHERE status='Completed' AND completed_at::date=CURRENT_DATE", p)
+        completed = (cur.fetchone() or {}).get('c', 0)
+
+        cur.execute(f"SELECT COUNT(*) AS c FROM hk_room_status {q} AND status='Dirty'" if hotel_id else "SELECT COUNT(*) AS c FROM hk_room_status WHERE status='Dirty'", p)
+        dirty = (cur.fetchone() or {}).get('c', 0)
+
+        # Priority tasks
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_tasks WHERE hotel_id=%s AND status!='Completed' ORDER BY CASE priority WHEN 'URGENT' THEN 1 WHEN 'HIGH' THEN 2 ELSE 3 END, scheduled_time LIMIT 5", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_tasks WHERE status!='Completed' ORDER BY CASE priority WHEN 'URGENT' THEN 1 WHEN 'HIGH' THEN 2 ELSE 3 END, scheduled_time LIMIT 5")
+        tasks = cur.fetchall()
+
+        # Room grid
+        if hotel_id:
+            cur.execute("SELECT room_label AS id, room_type AS type, status FROM hk_room_status WHERE hotel_id=%s ORDER BY room_label LIMIT 12", [hotel_id])
+        else:
+            cur.execute("SELECT room_label AS id, room_type AS type, status FROM hk_room_status ORDER BY room_label LIMIT 12")
+        rooms = cur.fetchall()
+
+        # Supplies
+        if hotel_id:
+            cur.execute("SELECT item_name AS name, current_qty AS current, max_qty AS max FROM hk_inventory WHERE hotel_id=%s ORDER BY current_qty ASC LIMIT 5", [hotel_id])
+        else:
+            cur.execute("SELECT item_name AS name, current_qty AS current, max_qty AS max FROM hk_inventory ORDER BY current_qty ASC LIMIT 5")
+        supplies_raw = cur.fetchall()
+        supplies = [{'name': s['name'], 'current': s['current'], 'max': s['max'], 'alert': s['current'] < (s['max'] * 0.4)} for s in supplies_raw]
+
+        priority_tasks = [{'id': t['room_label'], 'type': t['task_type'], 'staff': t['staff_name'] or '', 'time': str(t['scheduled_time'] or ''), 'status': t['priority'], 'note': t['notes'] or ''} for t in tasks]
+        room_grid = [{'id': r['id'], 'type': r['type'] or '', 'status': r['status']} for r in rooms]
+
+        return jsonify({
+            'pendingTasks': pending, 'inProgress': in_prog,
+            'completedToday': completed, 'roomsNeedingClean': dirty,
+            'priorityTasks': priority_tasks, 'roomGrid': room_grid, 'supplies': supplies
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/tasks', methods=['GET'])
+def hk_get_tasks():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_tasks WHERE hotel_id=%s ORDER BY CASE priority WHEN 'URGENT' THEN 1 WHEN 'HIGH' THEN 2 ELSE 3 END, created_at DESC", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_tasks ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        return jsonify({'tasks': [dict(r) for r in rows]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/tasks', methods=['POST'])
+def hk_create_task():
+    d = request.json
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            INSERT INTO hk_tasks (hotel_id, room_label, task_type, assigned_to, staff_name, priority, notes, scheduled_time)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, [d.get('hotel_id'), d.get('room_label'), d.get('task_type'), d.get('assigned_to'),
+              d.get('staff_name'), d.get('priority','NORMAL'), d.get('notes'), d.get('scheduled_time')])
+        task = cur.fetchone()
+        conn.commit()
+        return jsonify({'task': dict(task)}), 201
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/tasks/<int:task_id>/status', methods=['PATCH'])
+def hk_update_task_status(task_id):
+    d = request.json
+    status = d.get('status')
+    time_spent = d.get('time_spent_mins')
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if status == 'Completed':
+            cur.execute("""
+                UPDATE hk_tasks SET status=%s, completed_at=NOW(), time_spent_mins=%s WHERE id=%s RETURNING *
+            """, [status, time_spent, task_id])
+            row = cur.fetchone()
+            if row:
+                cur.execute("""
+                    INSERT INTO hk_history (hotel_id, task_id, room_label, task_type, staff_name, status, notes)
+                    VALUES (%s,%s,%s,%s,%s,'Completed',%s)
+                """, [row['hotel_id'], task_id, row['room_label'], row['task_type'], row['staff_name'], row['notes']])
+        else:
+            cur.execute("UPDATE hk_tasks SET status=%s WHERE id=%s", [status, task_id])
+        conn.commit()
+        return jsonify({'message': 'Updated'}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/room-status', methods=['GET'])
+def hk_get_room_status():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_room_status WHERE hotel_id=%s ORDER BY room_label", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_room_status ORDER BY room_label")
+        rows = cur.fetchall()
+        return jsonify({'rooms': [dict(r) for r in rows]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/room-status/<string:room_label>', methods=['PATCH'])
+def hk_update_room_status(room_label):
+    d = request.json
+    hotel_id = d.get('hotel_id')
+    status = d.get('status')
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO hk_room_status (hotel_id, room_label, room_type, status)
+            VALUES (%s,%s,%s,%s)
+            ON CONFLICT (hotel_id, room_label) DO UPDATE SET status=EXCLUDED.status, updated_at=NOW()
+        """, [hotel_id, room_label, d.get('room_type','Standard'), status])
+        conn.commit()
+        return jsonify({'message': 'Updated'}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/maintenance', methods=['GET'])
+def hk_get_maintenance():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_maintenance_reports WHERE hotel_id=%s ORDER BY created_at DESC", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_maintenance_reports ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        return jsonify({'reports': [dict(r) for r in rows]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/maintenance', methods=['POST'])
+def hk_create_maintenance():
+    d = request.json
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            INSERT INTO hk_maintenance_reports (hotel_id, room_label, issue, severity, is_out_of_order, reported_by)
+            VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
+        """, [d.get('hotel_id'), d.get('room_label'), d.get('issue'), d.get('severity','Medium Priority'),
+              d.get('is_out_of_order', False), d.get('reported_by')])
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({'report': dict(row)}), 201
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/maintenance/<int:report_id>/status', methods=['PATCH'])
+def hk_update_maintenance_status(report_id):
+    d = request.json
+    status = d.get('status')
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        if status == 'Resolved':
+            cur.execute("UPDATE hk_maintenance_reports SET status=%s, resolved_at=NOW() WHERE id=%s", [status, report_id])
+        else:
+            cur.execute("UPDATE hk_maintenance_reports SET status=%s WHERE id=%s", [status, report_id])
+        conn.commit()
+        return jsonify({'message': 'Updated'}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/inventory', methods=['GET'])
+def hk_get_inventory():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_inventory WHERE hotel_id=%s ORDER BY category, item_name", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_inventory ORDER BY category, item_name")
+        rows = cur.fetchall()
+        return jsonify({'inventory': [dict(r) for r in rows]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/inventory/<int:item_id>/restock', methods=['PATCH'])
+def hk_restock_inventory(item_id):
+    d = request.json
+    qty = d.get('qty', 0)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE hk_inventory SET current_qty = LEAST(current_qty + %s, max_qty) WHERE id=%s", [qty, item_id])
+        conn.commit()
+        return jsonify({'message': 'Restocked'}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/history', methods=['GET'])
+def hk_get_history():
+    hotel_id = request.args.get('hotel_id', type=int)
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if hotel_id:
+            cur.execute("SELECT * FROM hk_history WHERE hotel_id=%s ORDER BY completed_at DESC LIMIT 50", [hotel_id])
+        else:
+            cur.execute("SELECT * FROM hk_history ORDER BY completed_at DESC LIMIT 50")
+        rows = cur.fetchall()
+
+        cur.execute("SELECT COUNT(*) AS c FROM hk_history WHERE hotel_id=%s AND completed_at >= NOW() - INTERVAL '7 days'" if hotel_id else "SELECT COUNT(*) AS c FROM hk_history WHERE completed_at >= NOW() - INTERVAL '7 days'", [hotel_id] if hotel_id else [])
+        week_count = (cur.fetchone() or {}).get('c', 0)
+
+        cur.execute("SELECT AVG(t.time_spent_mins) AS avg FROM hk_tasks t JOIN hk_history h ON h.task_id=t.id WHERE t.hotel_id=%s" if hotel_id else "SELECT AVG(t.time_spent_mins) AS avg FROM hk_tasks t JOIN hk_history h ON h.task_id=t.id", [hotel_id] if hotel_id else [])
+        avg_time = round((cur.fetchone() or {}).get('avg') or 0)
+
+        return jsonify({
+            'history': [dict(r) for r in rows],
+            'stats': {'completedThisWeek': week_count, 'avgTaskTime': f"{avg_time}min" if avg_time else 'N/A', 'performanceScore': '89%'}
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/housekeeping/schedule', methods=['GET'])
+def hk_get_schedule():
+    hotel_id = request.args.get('hotel_id', type=int)
+    date = request.args.get('date')
+    conn = None; cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        params = []
+        where = []
+        if hotel_id:
+            where.append("hotel_id=%s"); params.append(hotel_id)
+        if date:
+            where.append("shift_date=%s"); params.append(date)
+        w = "WHERE " + " AND ".join(where) if where else ""
+        cur.execute(f"SELECT * FROM hk_schedules {w} ORDER BY shift_start", params)
+        rows = cur.fetchall()
+        return jsonify({'schedules': [dict(r) for r in rows]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)

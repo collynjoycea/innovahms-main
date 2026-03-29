@@ -1,37 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import axios from 'axios';
+import useStaffSession from '../../../hooks/useStaffSession';
 import { 
   CheckCircle2, Clock, Star, 
   ChevronRight, Calendar, Filter, Download 
 } from 'lucide-react';
 
-const HKHistory = ({ isDarkMode }) => {
-  // Ultra-Adaptive Theme System (Optimized for both modes)
-  const theme = {
-    bg: isDarkMode ? "bg-[#0c0c0e]" : "bg-[#f4f4f7]",
-    card: isDarkMode 
-      ? "bg-[#111111]/90 backdrop-blur-xl border-white/5" 
-      : "bg-white border-zinc-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
-    innerCard: isDarkMode ? "bg-white/[0.03]" : "bg-zinc-50",
-    textMain: isDarkMode ? "text-white" : "text-zinc-900",
-    textSub: isDarkMode ? "text-zinc-500" : "text-zinc-500",
-    border: isDarkMode ? "border-white/5" : "border-zinc-200",
-    gold: "#c9a84c", // Signature INNOVA-HMS Gold
-    goldGradient: "from-[#c9a84c] to-[#a68a39]",
-    shadow: isDarkMode ? "shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "shadow-[0_15px_40px_rgba(0,0,0,0.08)]"
-  };
+const HKHistory = () => {
+  const { isDarkMode } = useOutletContext() || { isDarkMode: true };
+  const { qs } = useStaffSession();
+  const [historyData, setHistoryData] = useState([]);
+  const [stats, setStats] = useState({ completedThisWeek: 0, avgTaskTime: 'N/A', performanceScore: '—' });
+
+  useEffect(() => {
+    axios.get(`/api/housekeeping/history${qs}`).then(res => {
+      setHistoryData(res.data.history || []);
+      setStats(res.data.stats || {});
+    }).catch(() => {});
+  }, [qs]);
 
   const performanceStats = [
-    { label: "COMPLETED THIS WEEK", value: "28", icon: <CheckCircle2 className="text-emerald-500" size={24} /> },
-    { label: "AVG TASK TIME", value: "42min", icon: <Clock className="text-purple-500" size={24} /> },
-    { label: "PERFORMANCE SCORE", value: "89%", icon: <Star className="text-yellow-500" size={24} /> }
+    { label: 'COMPLETED THIS WEEK', value: String(stats.completedThisWeek ?? 0), icon: <CheckCircle2 className="text-emerald-500" size={24} /> },
+    { label: 'AVG TASK TIME',        value: stats.avgTaskTime || 'N/A',           icon: <Clock className="text-purple-500" size={24} /> },
+    { label: 'PERFORMANCE SCORE',   value: stats.performanceScore || '—',         icon: <Star className="text-yellow-500" size={24} /> },
   ];
 
-  const historyData = [
-    { id: "104", task: "Full Clean", staff: "Maria V.", status: "Completed", time: "Finished 11:30 AM" },
-    { id: "204", task: "Linen Change", staff: "Rosa R.", status: "Completed", time: "Finished 10:45 AM" },
-    { id: "Restaurant", task: "Common Area", staff: "Amy C.", status: "Completed", time: "Finished 8:30 AM" },
-    { id: "103", task: "Full Clean", staff: "Maria V.", status: "Completed", time: "Yesterday" }
-  ];
+  const theme = {
+    bg:        isDarkMode ? 'bg-[#0c0c0e]'   : 'bg-[#f4f4f7]',
+    card:      isDarkMode ? 'bg-[#111111]/90 backdrop-blur-xl border-white/5' : 'bg-white border-zinc-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)]',
+    innerCard: isDarkMode ? 'bg-white/[0.03]' : 'bg-zinc-50',
+    textMain:  isDarkMode ? 'text-white'      : 'text-zinc-900',
+    textSub:   isDarkMode ? 'text-zinc-500'   : 'text-zinc-500',
+    border:    isDarkMode ? 'border-white/5'  : 'border-zinc-200',
+    gold:      '#c9a84c',
+    shadow:    isDarkMode ? 'shadow-[0_20px_50px_rgba(0,0,0,0.5)]' : 'shadow-[0_15px_40px_rgba(0,0,0,0.08)]',
+  };
 
   return (
     <div className={`p-8 min-h-screen transition-all duration-500 ${theme.bg}`}>
@@ -84,7 +88,9 @@ const HKHistory = ({ isDarkMode }) => {
         </div>
 
         <div className="space-y-6">
-          {historyData.map((item, i) => (
+          {historyData.length === 0 ? (
+            <p className={`text-center py-12 text-[11px] ${theme.textSub}`}>No completed tasks yet.</p>
+          ) : historyData.map((item, i) => (
             <div 
               key={i} 
               className={`group flex items-center justify-between p-6 rounded-3xl border ${theme.border} ${theme.innerCard} hover:border-[#c9a84c]/40 transition-all duration-300 cursor-pointer text-left relative overflow-hidden`}
@@ -95,22 +101,19 @@ const HKHistory = ({ isDarkMode }) => {
                 </div>
                 <div>
                   <h4 className={`text-[15px] font-black uppercase tracking-tight ${theme.textMain}`}>
-                    {item.task} — <span style={{ color: theme.gold }}>Room {item.id}</span>
+                    {item.task_type} — <span style={{ color: theme.gold }}>{item.room_label}</span>
                   </h4>
                   <p className={`text-[12px] font-medium ${theme.textSub} mt-1 leading-relaxed`}>
-                    Assigned to {item.staff} • {item.time}
+                    {item.staff_name ? `Assigned to ${item.staff_name} • ` : ''}{item.completed_at ? new Date(item.completed_at).toLocaleString() : ''}
                   </p>
                 </div>
               </div>
-              
               <div className="flex items-center gap-5 relative z-10">
                 <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border ${theme.border} text-emerald-500 bg-emerald-500/5`}>
                   {item.status}
                 </span>
                 <ChevronRight size={20} className={`${theme.textSub} group-hover:translate-x-1 group-hover:text-[#c9a84c] transition-all`} />
               </div>
-
-              {/* Decorative corner accent (Glassmorphism effect) */}
               <div className={`absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 rounded-tr-3xl opacity-0 group-hover:opacity-100 transition-opacity border-[#c9a84c]`} />
             </div>
           ))}

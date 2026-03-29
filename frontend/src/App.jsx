@@ -247,26 +247,17 @@ function App() {
           {/* GROUP 5: SPECIALIZED STAFF */}
           <Route 
             path="/housekeeping" 
-            element={<ProtectedRole><HousekeepingLayout isDarkMode={isDarkMode} /></ProtectedRole>}
+            element={<ProtectedRole><HousekeepingLayout /></ProtectedRole>}
           >
-            {/* Kapag /housekeeping lang ang tinype, dideretso sa dashboard */}
             <Route index element={<Navigate to="dashboard" replace />} />
-            
-            <Route path="dashboard" element={<HKDashboard isDarkMode={isDarkMode} />} />
-            <Route path="tasks" element={<HKTasks isDarkMode={isDarkMode} />} />
-            <Route path="schedule" element={<HKSchedule isDarkMode={isDarkMode} />} />
-            <Route path="rooms" element={<RoomStatusMap isDarkMode={isDarkMode} />} />
-            <Route path="inventory" element={<LinenInventory isDarkMode={isDarkMode} />} />
-            <Route path="history" element={<HKHistory isDarkMode={isDarkMode} />} />
-            <Route path="settings" element={<HKSettings isDarkMode={isDarkMode} />} />
-          </Route>
-
-          {/* Maintenance Section */}
-          <Route 
-            path="/maintenance" 
-            element={<ProtectedRole><HousekeepingLayout isDarkMode={isDarkMode} /></ProtectedRole>}
-          >
-            <Route path="report" element={<MaintenanceReport isDarkMode={isDarkMode} />} />
+            <Route path="dashboard" element={<HKDashboard />} />
+            <Route path="tasks" element={<HKTasks />} />
+            <Route path="schedule" element={<HKSchedule />} />
+            <Route path="rooms" element={<RoomStatusMap />} />
+            <Route path="inventory" element={<LinenInventory />} />
+            <Route path="maintenance" element={<MaintenanceReport />} />
+            <Route path="history" element={<HKHistory />} />
+            <Route path="settings" element={<HKSettings />} />
           </Route>
 
         <Route path="/manager" element={<ProtectedRole><ManagerLayout /></ProtectedRole>}>
