@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 
 const NAV_LINKS = [
-  { name: "Suites",       id: "suites" },
-  { name: "Rooms",        id: "rooms" },
   { name: "Hotels",       id: "hotels" },
+  { name: "Rooms",        id: "rooms" },
+  { name: "Suites",       id: "suites" },
   { name: "Promotions",   id: "promotions" },
   { name: "Reviews",      id: "guest-reviews" },
   { name: "AI Concierge", id: "ai-concierge" },

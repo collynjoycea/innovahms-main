@@ -126,6 +126,8 @@ export default function VisionSuites() {
   const [hotelSearch, setHotelSearch] = useState("");
   const [activeHotelFilter, setActiveHotelFilter] = useState("all");
   const [landmarks, setLandmarks] = useState([]);
+  const [nearbyHotels, setNearbyHotels] = useState([]);
+  const [focusedNearbyHotelId, setFocusedNearbyHotelId] = useState(null);
 
   const [tourOpen, setTourOpen] = useState(false);
   const [tourRoom, setTourRoom] = useState(null);
@@ -155,24 +157,29 @@ export default function VisionSuites() {
       const qs = new URLSearchParams(query).toString();
       const suffix = qs ? `?${qs}` : "";
 
-      const [hotelRes, roomsRes, lmRes] = await Promise.all([
+      const [hotelRes, roomsRes, lmRes, nearbyHotelsRes] = await Promise.all([
         fetch(`/api/vision/hotel${suffix}`),
         fetch(`/api/vision/rooms${suffix}`),
         fetch(`/api/vision/landmarks${suffix}`),
+        fetch(`/api/vision/nearby-hotels${suffix}`),
       ]);
 
       const hotelPayload = await hotelRes.json().catch(() => ({}));
       const roomsPayload = await roomsRes.json().catch(() => ({}));
       const lmPayload = await lmRes.json().catch(() => ({}));
+      const nearbyHotelsPayload = await nearbyHotelsRes.json().catch(() => ({}));
 
       if (!hotelRes.ok) throw new Error(hotelPayload?.error || `Hotel load failed (HTTP ${hotelRes.status})`);
       if (!roomsRes.ok) throw new Error(roomsPayload?.error || `Rooms load failed (HTTP ${roomsRes.status})`);
       if (!lmRes.ok) throw new Error(lmPayload?.error || `Landmarks load failed (HTTP ${lmRes.status})`);
+      if (!nearbyHotelsRes.ok) throw new Error(nearbyHotelsPayload?.error || `Nearby hotels load failed (HTTP ${nearbyHotelsRes.status})`);
 
       setHotel(hotelPayload.hotel);
       setLocationLabel(hotelPayload.hotel?.locationLabel || "Hotel Location");
       setRooms(roomsPayload.rooms || []);
       setLandmarks(lmPayload.landmarks || []);
+      setNearbyHotels(nearbyHotelsPayload.hotels || []);
+      setFocusedNearbyHotelId(null);
     } catch (e) {
       setError(e?.message || "Failed to load Vision Suites.");
     } finally {
@@ -214,13 +221,19 @@ export default function VisionSuites() {
     setTourData(null);
     setTourOpen(true);
     setTourLoading(true);
+    const fallbackTour = {
+      panoramaUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || "/images/deluxe-room.jpg",
+      initialYaw: 0,
+      initialPitch: 0,
+      initialFov: Math.PI / 2,
+    };
     try {
       const res = await fetch(`/api/vision/rooms/${room.id}/tour`);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `Tour load failed (HTTP ${res.status}).`);
-      setTourData(payload.tour || null);
+      setTourData(payload.tour || fallbackTour);
     } catch {
-      setTourData(null);
+      setTourData(fallbackTour);
     } finally {
       setTourLoading(false);
     }
@@ -258,15 +271,51 @@ export default function VisionSuites() {
   };
 
   const hotelMarkers = useMemo(() => {
-    if (!hotel?.location) return [];
-    return [{
-      id: hotel.id || 1,
-      name: hotel.name || "Vision Suites",
-      lat: hotel.location.lat,
-      lng: hotel.location.lng,
-      address: locationLabel,
-    }];
-  }, [hotel, locationLabel]);
+    const markers = [];
+
+    if (hotel?.location) {
+      markers.push({
+        id: hotel.id || 1,
+        name: hotel.name || "Vision Suites",
+        lat: hotel.location.lat,
+        lng: hotel.location.lng,
+        address: locationLabel,
+      });
+    }
+
+    (nearbyHotels || []).forEach((hotelItem) => {
+      const lat = Number(hotelItem?.lat || 0);
+      const lng = Number(hotelItem?.lng || 0);
+      if (!lat && !lng) return;
+      markers.push({
+        id: hotelItem.id,
+        name: hotelItem.name || "Hotel",
+        lat,
+        lng,
+        address: hotelItem.address || "",
+      });
+    });
+
+    return markers.filter((marker, index, list) => list.findIndex((item) => String(item.id) === String(marker.id)) === index);
+  }, [hotel, locationLabel, nearbyHotels]);
+
+  const computedNearbyHotels = useMemo(() => {
+    const walkingKmh = 4.8;
+    return (nearbyHotels || []).map((item) => {
+      const hasCoords = Number(item?.lat || 0) !== 0 || Number(item?.lng || 0) !== 0;
+      if (!hasCoords) {
+        return { ...item, km: null, walkMin: null };
+      }
+      const km = haversineKm(hotelCenter, { lat: Number(item.lat), lng: Number(item.lng) });
+      const walkMin = Math.max(1, Math.round((km / walkingKmh) * 60));
+      return { ...item, km, walkMin };
+    }).sort((a, b) => {
+      if (a.km == null && b.km == null) return String(a.name || "").localeCompare(String(b.name || ""));
+      if (a.km == null) return 1;
+      if (b.km == null) return -1;
+      return a.km - b.km;
+    });
+  }, [hotelCenter, nearbyHotels]);
 
   const computedLandmarks = useMemo(() => {
     const walkingKmh = 4.8;
@@ -278,6 +327,13 @@ export default function VisionSuites() {
       return { ...l, km, walkMin, driveMin };
     });
   }, [hotelCenter, landmarks]);
+
+  const handleNearbyHotelFocus = (hotelItem) => {
+    const lat = Number(hotelItem?.lat || 0);
+    const lng = Number(hotelItem?.lng || 0);
+    if (!lat && !lng) return;
+    setFocusedNearbyHotelId(String(hotelItem.id));
+  };
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-[#0d0c0a] text-[#1a160d] dark:text-[#e8e2d5] transition-colors duration-300">
@@ -529,10 +585,17 @@ export default function VisionSuites() {
             {/* Left: nearby hotels list */}
             <div className="w-full lg:w-[300px] shrink-0 space-y-3">
               <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500 px-1">Nearby Hotels</p>
-              {computedLandmarks.slice(0, 8).map((loc) => (
-                <div
+              {computedNearbyHotels.slice(0, 8).map((loc) => (
+                <button
                   key={loc.id}
-                  className="bg-white dark:bg-[#14130f] border border-slate-100 dark:border-white/5 p-4 rounded-2xl shadow-sm"
+                  type="button"
+                  disabled={loc.km == null}
+                  onClick={() => handleNearbyHotelFocus(loc)}
+                  className={`w-full text-left bg-white dark:bg-[#14130f] border p-4 rounded-2xl shadow-sm transition-all ${
+                    String(focusedNearbyHotelId) === String(loc.id)
+                      ? "border-[#bf9b30] ring-2 ring-[#bf9b30]/20 shadow-md"
+                      : "border-slate-100 dark:border-white/5 hover:border-[#bf9b30]/40"
+                  } ${loc.km == null ? "opacity-70 cursor-not-allowed" : "cursor-pointer hover:-translate-y-0.5"}`}
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -540,17 +603,24 @@ export default function VisionSuites() {
                       {loc.address && (
                         <p className="text-[10px] text-slate-400 font-medium mt-0.5 leading-snug line-clamp-2">{loc.address}</p>
                       )}
-                      <p className="text-[9px] text-[#bf9b30] font-black uppercase tracking-widest mt-1">{loc.category}</p>
+                      <p className="text-[9px] text-[#bf9b30] font-black uppercase tracking-widest mt-1">Hotel Owner Address</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-black text-[#bf9b30]">{loc.km.toFixed(1)} km</p>
-                      <p className="text-[9px] font-bold text-slate-300 dark:text-slate-600">{loc.walkMin} min walk</p>
+                      <p className="text-sm font-black text-[#bf9b30]">{loc.km != null ? `${loc.km.toFixed(1)} km` : "No map pin"}</p>
+                      <p className="text-[9px] font-bold text-slate-300 dark:text-slate-600">
+                        {loc.walkMin != null ? `${loc.walkMin} min walk` : "Address only"}
+                      </p>
+                      {loc.km != null && (
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                          Show on map
+                        </p>
+                      )}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
-              {!loading && computedLandmarks.length === 0 && (
-                <p className="text-sm text-slate-400 font-semibold px-1">No hotels registered yet.</p>
+              {!loading && computedNearbyHotels.length === 0 && (
+                <p className="text-sm text-slate-400 font-semibold px-1">No nearby hotels registered yet.</p>
               )}
             </div>
 
@@ -560,6 +630,7 @@ export default function VisionSuites() {
                 hotels={hotelMarkers}
                 landmarks={landmarks}
                 hotelCenter={hotelCenter}
+                focusedHotelId={focusedNearbyHotelId}
                 isDarkMode={false}
               />
             </div>

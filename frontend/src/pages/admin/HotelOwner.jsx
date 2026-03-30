@@ -22,13 +22,19 @@ export default function HotelOwners() {
 
   useEffect(() => {
     fetch('/api/admin/owners')
-      .then(r => r.json())
-      .then(d => { setOwners(d.owners || []); setTotal(d.total || 0); setLoading(false); })
+      .then((r) => r.json())
+      .then((d) => {
+        setOwners(d.owners || []);
+        setTotal(d.total || 0);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
-  const filtered = owners.filter(o =>
-    `${o.firstName} ${o.lastName} ${o.email} ${o.hotelName}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = owners.filter((o) =>
+    `${o.firstName} ${o.lastName} ${o.email} ${o.hotelName} ${o.hotelCode || ''}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
   );
   const { paged, page, totalPages, setPage } = usePagination(filtered);
 
@@ -51,9 +57,9 @@ export default function HotelOwners() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Total Partners', value: total, icon: <Building2 size={20} /> },
-          { label: 'Active Hotels', value: owners.filter(o => o.hotelId).length, icon: <CheckSquare size={20} />, color: 'text-green-500' },
+          { label: 'Active Hotels', value: owners.filter((o) => o.hotelId).length, icon: <CheckSquare size={20} />, color: 'text-green-500' },
           { label: 'Total Rooms', value: owners.reduce((s, o) => s + (o.totalRooms || 0), 0), icon: <Building2 size={20} />, color: 'text-[#c9a84c]' },
-          { label: 'No Hotel Yet', value: owners.filter(o => !o.hotelId).length, icon: <Building2 size={20} />, color: 'text-orange-500' },
+          { label: 'No Hotel Yet', value: owners.filter((o) => !o.hotelId).length, icon: <Building2 size={20} />, color: 'text-orange-500' },
         ].map((kpi, i) => (
           <div key={i} className={`p-6 rounded-2xl border ${theme.border} ${theme.card} ${theme.shadow}`}>
             <div className={`p-2.5 rounded-xl ${isDarkMode ? 'bg-white/5' : 'bg-gray-50'} border ${theme.border} text-[#c9a84c] inline-block mb-4`}>{kpi.icon}</div>
@@ -71,8 +77,13 @@ export default function HotelOwners() {
           </div>
           <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border ${theme.border} ${theme.inputBg} w-full md:w-64`}>
             <Search size={14} className="text-gray-500" />
-            <input type="text" placeholder="Search owner or hotel..." value={search} onChange={e => setSearch(e.target.value)}
-              className={`bg-transparent border-none outline-none text-[10px] font-bold uppercase w-full ${theme.textMain} placeholder:text-gray-500`} />
+            <input
+              type="text"
+              placeholder="Search owner or hotel..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`bg-transparent border-none outline-none text-[10px] font-bold uppercase w-full ${theme.textMain} placeholder:text-gray-500`}
+            />
           </div>
         </div>
 
@@ -85,7 +96,7 @@ export default function HotelOwners() {
             <table className="w-full text-left">
               <thead className={`${isDarkMode ? 'bg-white/[0.02]' : 'bg-gray-50'} border-b ${theme.border}`}>
                 <tr>
-                  {['Owner', 'Contact', 'Hotel', 'Address', 'Rooms', 'Joined'].map(h => (
+                  {['Owner', 'Contact', 'Hotel', 'Hotel Code', 'Address', 'Rooms', 'Joined'].map((h) => (
                     <th key={h} className={`px-6 py-4 text-[9px] font-black uppercase tracking-widest ${theme.textSub}`}>{h}</th>
                   ))}
                 </tr>
@@ -107,20 +118,23 @@ export default function HotelOwners() {
                           <Mail size={10} className="text-[#c9a84c]" /> {o.email}
                         </div>
                         <div className={`flex items-center gap-1 text-[10px] ${theme.textSub}`}>
-                          <Phone size={10} /> {o.contactNumber || '—'}
+                          <Phone size={10} /> {o.contactNumber || '-'}
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 text-[11px] font-black text-[#c9a84c]`}>{o.hotelName}</td>
-                    <td className={`px-6 py-4 text-[10px] ${theme.textSub}`}>{o.hotelAddress || '—'}</td>
+                    <td className="px-6 py-4 text-[11px] font-black text-[#c9a84c]">{o.hotelName}</td>
+                    <td className={`px-6 py-4 text-[10px] font-black ${theme.textMain}`}>{o.hotelCode || 'No Code Yet'}</td>
+                    <td className={`px-6 py-4 text-[10px] ${theme.textSub}`}>{o.hotelAddress || '-'}</td>
                     <td className={`px-6 py-4 text-[11px] font-black ${theme.textMain}`}>{o.totalRooms}</td>
                     <td className={`px-6 py-4 text-[10px] font-bold ${theme.textSub} uppercase`}>
-                      {o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '—'}
+                      {o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '-'}
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className={`px-6 py-10 text-center text-[11px] ${theme.textSub}`}>No owners found.</td></tr>
+                  <tr>
+                    <td colSpan={7} className={`px-6 py-10 text-center text-[11px] ${theme.textSub}`}>No owners found.</td>
+                  </tr>
                 )}
               </tbody>
             </table>

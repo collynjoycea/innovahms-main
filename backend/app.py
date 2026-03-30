@@ -101,6 +101,55 @@ def _parse_text_array(value):
     return []
 
 
+GENERIC_TOUR_IMAGE_PATHS = {
+    "/images/my-room-360.jpg",
+    "/images/standard-room.jpg",
+    "/images/deluxe-room.jpg",
+    "/images/executive-penthouse.jpg",
+    "/images/ocean-suite.jpg",
+    "/images/room1.jpg",
+}
+
+
+def _default_tour_image_for_room(room_name=None, room_type=None):
+    label = f"{room_name or ''} {room_type or ''}".strip().lower()
+    if "single" in label or "standard" in label:
+        return "/images/standard-room.jpg"
+    if "double" in label:
+        return "/images/my-room-360.jpg"
+    if "deluxe" in label:
+        return "/images/deluxe-room.jpg"
+    if "executive" in label or "penthouse" in label:
+        return "/images/executive-penthouse.jpg"
+    if "ocean" in label or "suite" in label:
+        return "/images/ocean-suite.jpg"
+    return "/images/deluxe-room.jpg"
+
+
+def _room_preview_image_for_tour(cur, room_id):
+    if not _table_exists(cur, 'rooms'):
+        return None
+
+    cur.execute(
+        """
+        SELECT room_name, room_type, images
+        FROM rooms
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (room_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    images = _parse_text_array(row.get("images"))
+    if images:
+        return images[0]
+
+    return _default_tour_image_for_room(row.get("room_name"), row.get("room_type"))
+
+
 def _serialize_date(value):
     if value is None:
         return None
@@ -166,8 +215,18 @@ def _progress_percent(points, tier):
 
 
 def _build_tour_payload(cur, room_id):
+    fallback_panorama = _room_preview_image_for_tour(cur, room_id)
+
     if not _table_exists(cur, 'room_tours'):
-        return None
+        if not fallback_panorama:
+            return None
+        return {
+            "roomId": room_id,
+            "panoramaUrl": fallback_panorama,
+            "initialYaw": 0,
+            "initialPitch": 0,
+            "initialFov": 1.5708,
+        }
 
     cur.execute(
         """
@@ -180,11 +239,23 @@ def _build_tour_payload(cur, room_id):
     )
     row = cur.fetchone()
     if not row:
-        return None
+        if not fallback_panorama:
+            return None
+        return {
+            "roomId": room_id,
+            "panoramaUrl": fallback_panorama,
+            "initialYaw": 0,
+            "initialPitch": 0,
+            "initialFov": 1.5708,
+        }
+
+    panorama_url = row.get("panorama_url")
+    if fallback_panorama and (not panorama_url or panorama_url in GENERIC_TOUR_IMAGE_PATHS):
+        panorama_url = fallback_panorama
 
     return {
         "roomId": row.get("room_id"),
-        "panoramaUrl": row.get("panorama_url"),
+        "panoramaUrl": panorama_url,
         "initialYaw": _to_float(row.get("initial_yaw"), 0),
         "initialPitch": _to_float(row.get("initial_pitch"), 0),
         "initialFov": _to_float(row.get("initial_fov"), 1.5708),
@@ -493,7 +564,7 @@ def admin_owners():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT o.id, o.first_name, o.last_name, o.email, o.contact_number, o.created_at,
-                   h.id AS hotel_id, h.hotel_name, h.hotel_address,
+                   h.id AS hotel_id, h.hotel_name, h.hotel_address, h.hotel_code,
                    COUNT(r.id) AS total_rooms
             FROM owners o
             LEFT JOIN hotels h ON h.owner_id = o.id
@@ -512,6 +583,7 @@ def admin_owners():
                 'hotelId': row.get('hotel_id'),
                 'hotelName': row.get('hotel_name') or 'No Hotel',
                 'hotelAddress': row.get('hotel_address') or '',
+                'hotelCode': row.get('hotel_code') or '',
                 'totalRooms': _to_int(row.get('total_rooms'), 0),
                 'createdAt': _serialize_date(row.get('created_at')),
             })
@@ -1195,39 +1267,135 @@ def change_user_password():
 @app.route('/api/owner/signup', methods=['POST'])
 def owner_signup():
     import re as _re
-    data = request.json
-    f_name = data.get('firstName')
-    l_name = data.get('lastName')
-    email = data.get('email')
-    contact = data.get('contactNumber')
-    password = data.get('password')
+    data = request.get_json(silent=True) or {}
+    f_name = (data.get('firstName') or '').strip()
+    l_name = (data.get('lastName') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    contact = (data.get('contactNumber') or '').strip()
+    password = data.get('password') or ''
     hotel_code = (data.get('hotelCode') or '').strip().upper()
-    m = _re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
-    if not m:
-        return jsonify({'error': 'Invalid hotel code. Format must be INNOVAHMS-{number} (e.g. INNOVAHMS-1)'}), 400
-    hotel_id = int(m.group(1))
+    hotel_name = (data.get('hotelName') or '').strip()
+    hotel_address = (data.get('hotelAddress') or '').strip()
+
+    if not all([f_name, l_name, email, contact, password]):
+        return jsonify({'error': 'Please complete all required fields.'}), 400
+
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters long.'}), 400
+
+    if not hotel_code and not hotel_name:
+        return jsonify({'error': 'Please provide a hotel code or enter a hotel name to create a new hotel.'}), 400
+
     hashed_pw = generate_password_hash(password)
     conn = None
     cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT id, hotel_name, owner_id FROM hotels WHERE id = %s', (hotel_id,))
-        hotel = cur.fetchone()
-        if not hotel:
-            return jsonify({'error': f'Hotel code {hotel_code} does not exist.'}), 404
-        if hotel['owner_id']:
-            return jsonify({'error': f'Hotel code {hotel_code} is already claimed by another owner.'}), 409
+
+        cur.execute('SELECT id FROM owners WHERE LOWER(email) = %s LIMIT 1', (email,))
+        existing_owner = cur.fetchone()
+        if existing_owner:
+            return jsonify({'error': 'This email is already registered as an owner.'}), 409
+
         cur2 = conn.cursor()
+
+        if hotel_code:
+            hotel = None
+            code_format_valid = False
+            if _table_has_column(cur, 'hotels', 'hotel_code'):
+                cur.execute(
+                    '''
+                    SELECT id, hotel_name, owner_id, hotel_code
+                    FROM hotels
+                    WHERE UPPER(COALESCE(hotel_code, '')) = %s
+                    LIMIT 1
+                    ''',
+                    (hotel_code,),
+                )
+                hotel = cur.fetchone()
+
+            if not hotel:
+                m = _re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
+                if m:
+                    code_format_valid = True
+                    hotel_id = int(m.group(1))
+                    cur.execute('SELECT id, hotel_name, owner_id FROM hotels WHERE id = %s', (hotel_id,))
+                    hotel = cur.fetchone()
+
+            if hotel and hotel.get('owner_id'):
+                cur2.close()
+                return jsonify({'error': f'Hotel code {hotel_code} is already claimed by another owner.'}), 409
+
+            if hotel:
+                cur2.execute(
+                    'INSERT INTO owners (first_name, last_name, email, contact_number, password_hash) VALUES (%s, %s, %s, %s, %s) RETURNING id',
+                    (f_name, l_name, email, contact, hashed_pw)
+                )
+                owner_id = cur2.fetchone()[0]
+                cur2.execute('UPDATE hotels SET owner_id = %s WHERE id = %s', (owner_id, hotel['id']))
+                cur2.close()
+                conn.commit()
+                return jsonify({
+                    'message': 'Owner registered and linked to hotel successfully!',
+                    'ownerId': owner_id,
+                    'hotelId': hotel['id'],
+                    'hotelName': hotel.get('hotel_name') or 'Hotel',
+                    'hotelCode': hotel.get('hotel_code') or hotel_code,
+                    'createdHotel': False,
+                }), 201
+
+            if not hotel_name:
+                cur2.close()
+                if code_format_valid:
+                    return jsonify({'error': f'Hotel code {hotel_code} does not exist.'}), 404
+                return jsonify({'error': 'Invalid hotel code. Please use the hotel code assigned by Innova HMS or leave it blank to create a new hotel.'}), 400
+
+        cur.execute("SELECT nextval(pg_get_serial_sequence('hotels', 'id')) AS hotel_id")
+        next_hotel = cur.fetchone() or {}
+        hotel_id = next_hotel.get('hotel_id')
+        if not hotel_id:
+            cur2.close()
+            return jsonify({'error': 'Unable to generate a hotel code right now. Please try again.'}), 500
+
+        generated_hotel_code = f'INNOVAHMS-{hotel_id}'
+
         cur2.execute(
             'INSERT INTO owners (first_name, last_name, email, contact_number, password_hash) VALUES (%s, %s, %s, %s, %s) RETURNING id',
             (f_name, l_name, email, contact, hashed_pw)
         )
         owner_id = cur2.fetchone()[0]
-        cur2.execute('UPDATE hotels SET owner_id = %s WHERE id = %s', (owner_id, hotel_id))
+
+        hotel_columns = ['id', 'owner_id', 'hotel_name']
+        hotel_values = [hotel_id, owner_id, hotel_name]
+
+        if _table_has_column(cur, 'hotels', 'hotel_address'):
+            hotel_columns.append('hotel_address')
+            hotel_values.append(hotel_address or '')
+
+        if _table_has_column(cur, 'hotels', 'hotel_code'):
+            hotel_columns.append('hotel_code')
+            hotel_values.append(generated_hotel_code)
+
+        hotel_placeholders = ', '.join(['%s'] * len(hotel_columns))
+        cur2.execute(
+            f"INSERT INTO hotels ({', '.join(hotel_columns)}) VALUES ({hotel_placeholders}) RETURNING id",
+            tuple(hotel_values),
+        )
+        created_hotel = cur2.fetchone()
+        if created_hotel:
+            hotel_id = created_hotel[0]
+
         cur2.close()
         conn.commit()
-        return jsonify({'message': 'Owner registered and linked to hotel successfully!'}), 201
+        return jsonify({
+            'message': 'Owner registered and hotel created successfully!',
+            'ownerId': owner_id,
+            'hotelId': hotel_id,
+            'hotelName': hotel_name or 'Hotel',
+            'hotelCode': generated_hotel_code,
+            'createdHotel': True,
+        }), 201
     except Exception as e:
         if conn: conn.rollback()
         return jsonify({'error': str(e)}), 400
@@ -1271,10 +1439,17 @@ def _resolve_owner_hotel(cur, owner_id):
     if not _table_exists(cur, "hotels"):
         return None
 
+    select_columns = ["id", "hotel_name"]
+    if _table_has_column(cur, "hotels", "hotel_address"):
+        select_columns.append("hotel_address")
+    if _table_has_column(cur, "hotels", "hotel_logo"):
+        select_columns.append("hotel_logo")
+    columns_sql = ", ".join(select_columns)
+
     if _table_has_column(cur, "hotels", "owner_id"):
         cur.execute(
-            """
-            SELECT id, hotel_name, hotel_address
+            f"""
+            SELECT {columns_sql}
             FROM hotels
             WHERE owner_id = %s
             ORDER BY id ASC
@@ -1287,8 +1462,8 @@ def _resolve_owner_hotel(cur, owner_id):
             return row
 
     cur.execute(
-        """
-        SELECT id, hotel_name, hotel_address
+        f"""
+        SELECT {columns_sql}
         FROM hotels
         ORDER BY id ASC
         LIMIT 1
@@ -1366,6 +1541,520 @@ def _build_forecast_payload(reservation_rows, total_rooms, period):
             },
         },
     }
+
+
+def _coerce_date(value):
+    if value is None:
+        return None
+    if hasattr(value, "date"):
+        try:
+            return value.date() if hasattr(value, "hour") else value
+        except Exception:
+            pass
+    if isinstance(value, str):
+        for fmt in (
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+        ):
+            try:
+                return datetime.strptime(value[:26], fmt).date()
+            except Exception:
+                continue
+    return None
+
+
+def _percent(part, whole):
+    if not whole:
+        return 0.0
+    return round((_to_float(part, 0.0) / max(_to_float(whole, 0.0), 1.0)) * 100, 2)
+
+
+def _default_owner_period_labels(period):
+    today = datetime.utcnow().date()
+    steps = 7 if period == "daily" else 6
+    labels = []
+    for idx in range(steps):
+        if period == "daily":
+            day_value = today - timedelta(days=(steps - idx - 1))
+        else:
+            month_index = today.month - 1 - (steps - idx - 1)
+            year = today.year + (month_index // 12)
+            month = (month_index % 12) + 1
+            day_value = datetime(year, month, 1).date()
+        labels.append(_period_bucket_key(day_value, period))
+    return labels
+
+
+def _owner_room_label(room):
+    if not room:
+        return "Room"
+    return (
+        room.get("room_name")
+        or room.get("room_type")
+        or room.get("room_number")
+        or f"Room {room.get('id')}"
+    )
+
+
+def _owner_room_image(room, hotel=None):
+    if room:
+        for field in ("image_url", "imageUrl", "img", "image"):
+            value = room.get(field)
+            if value:
+                return value
+        images = _parse_text_array(room.get("images"))
+        if images:
+            return images[0]
+        fallback = _default_tour_image_for_room(room.get("room_name"), room.get("room_type"))
+        if fallback:
+            return fallback
+
+    if hotel:
+        return hotel.get("hotel_logo") or "/images/deluxe-room.jpg"
+    return "/images/deluxe-room.jpg"
+
+
+def _fetch_owner_room_rows(cur, hotel_id):
+    if not _table_exists(cur, "rooms"):
+        return []
+
+    query = "SELECT * FROM rooms"
+    params = []
+    if _table_has_column(cur, "rooms", "hotel_id"):
+        query += " WHERE hotel_id = %s"
+        params.append(hotel_id)
+    query += " ORDER BY id ASC"
+    cur.execute(query, tuple(params))
+    return cur.fetchall() or []
+
+
+def _fetch_owner_reservation_rows(cur, hotel_id, limit=900):
+    if not _table_exists(cur, "reservations"):
+        return []
+
+    query = "SELECT * FROM reservations"
+    params = []
+    if _table_has_column(cur, "reservations", "hotel_id"):
+        query += " WHERE hotel_id = %s"
+        params.append(hotel_id)
+    query += " ORDER BY id DESC LIMIT %s"
+    params.append(limit)
+    cur.execute(query, tuple(params))
+    return cur.fetchall() or []
+
+
+def _fetch_owner_customer_map(cur):
+    customers = {}
+    if not _table_exists(cur, "customers"):
+        return customers
+
+    cur.execute(
+        """
+        SELECT id, first_name, last_name, email, contact_number, created_at
+        FROM customers
+        """
+    )
+    for row in cur.fetchall() or []:
+        customers[row.get("id")] = {
+            "id": row.get("id"),
+            "fullName": f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or "Guest",
+            "email": row.get("email") or "",
+            "contactNumber": row.get("contact_number") or "",
+            "createdAt": _serialize_date(row.get("created_at")),
+        }
+    return customers
+
+
+def _behavior_segment(total_spend, booking_count, successful_bookings, cancellation_rate):
+    if cancellation_rate >= 35 or (booking_count >= 2 and successful_bookings == 0):
+        return "RISK"
+    if total_spend >= 30000 or successful_bookings >= 4:
+        return "VIP"
+    if booking_count >= 2:
+        return "LOYAL"
+    return "STANDARD"
+
+
+def _behavior_frequency_label(booking_count, first_date, last_date):
+    if booking_count >= 6:
+        return "Very Frequent"
+    if booking_count >= 3:
+        return "Frequent"
+    if booking_count >= 2:
+        return "Returning"
+    return "Occasional"
+
+
+def _owner_recommendation_cards(hotel, analytics_summary, room_mix, guest_rows):
+    cards = []
+    best_room = room_mix[0] if room_mix else {}
+    weakest_room = room_mix[-1] if len(room_mix) > 1 else best_room
+    vip_guest = next((guest for guest in guest_rows if guest.get("segment") == "VIP"), guest_rows[0] if guest_rows else {})
+    risk_guest = next((guest for guest in guest_rows if guest.get("riskLevel") == "High"), guest_rows[0] if guest_rows else {})
+
+    occupancy_rate = analytics_summary.get("currentOccupancyRate", 0)
+    cancellation_rate = analytics_summary.get("cancellationRate", 0)
+    repeat_rate = analytics_summary.get("repeatGuestRate", 0)
+
+    cards.append({
+        "id": "revenue-optimizer",
+        "title": f"AI Revenue Lift for {best_room.get('label') or 'Top Rooms'}",
+        "summary": (
+            f"Bookings are strongest around {best_room.get('label') or 'your best-selling room type'}. "
+            f"Use this demand signal to push premium pricing bundles while occupancy stays at {round(occupancy_rate)}%."
+        ),
+        "action": "Highlight premium inclusions and raise rates on peak dates.",
+        "metricLabel": "Projected Lift",
+        "metricValue": f"+{max(8, int(round(best_room.get('share', 0) * 0.4)))}%",
+        "priority": "High",
+        "imageUrl": best_room.get("imageUrl") or _owner_room_image(None, hotel),
+    })
+
+    cards.append({
+        "id": "repeat-guest-play",
+        "title": "AI Loyalty Campaign Suggestion",
+        "summary": (
+            f"Repeat guest rate is at {round(repeat_rate)}%. "
+            f"Target returning guests like {vip_guest.get('name') or 'top spenders'} with upgrade offers and tailored add-ons."
+        ),
+        "action": "Launch a returning-guest package with room upgrade and breakfast credit.",
+        "metricLabel": "Retention Focus",
+        "metricValue": f"{round(repeat_rate)}%",
+        "priority": "Medium",
+        "imageUrl": vip_guest.get("imageUrl") or best_room.get("imageUrl") or _owner_room_image(None, hotel),
+    })
+
+    cards.append({
+        "id": "cancel-risk-guard",
+        "title": "AI Cancellation Risk Watch",
+        "summary": (
+            f"Cancellation exposure is {round(cancellation_rate)}%. "
+            f"Focus on guests like {risk_guest.get('name') or 'at-risk bookers'} and room categories like {weakest_room.get('label') or 'lower-performing inventory'}."
+        ),
+        "action": "Offer flexible rebooking, deposit reminders, and pre-arrival confirmation outreach.",
+        "metricLabel": "Risk Guests",
+        "metricValue": str(analytics_summary.get("highRiskGuests", 0)),
+        "priority": "High" if cancellation_rate >= 20 else "Medium",
+        "imageUrl": weakest_room.get("imageUrl") or _owner_room_image(None, hotel),
+    })
+
+    return cards
+
+
+def _build_owner_analytics_payload(cur, owner_id, hotel, period):
+    hotel_id = hotel.get("id")
+    room_rows = _fetch_owner_room_rows(cur, hotel_id)
+    reservations = _fetch_owner_reservation_rows(cur, hotel_id)
+    customers_by_id = _fetch_owner_customer_map(cur)
+
+    room_by_id = {row.get("id"): row for row in room_rows}
+    total_rooms = len(room_rows)
+
+    booked_counter = defaultdict(int)
+    revenue_counter = defaultdict(float)
+    occupied_counter = defaultdict(float)
+    guest_ledger = {}
+    room_mix = {}
+    total_revenue = 0.0
+    total_cancellations = 0
+
+    success_statuses = {"checked_in", "checked_out", "paid", "confirmed", "completed", "occupied"}
+    cancelled_statuses = {"cancelled", "failed", "canceled", "no_show", "no-show"}
+
+    for row in reservations:
+        status_text = str(row.get("status") or "").strip().lower()
+        booking_date = _extract_reservation_date(row)
+        bucket_key = _period_bucket_key(booking_date, period)
+        amount = _extract_reservation_amount(row)
+        room = room_by_id.get(row.get("room_id")) or {}
+        room_label = _owner_room_label(room)
+        room_type_key = (room.get("room_type") or room_label or "General").strip()
+        room_image = _owner_room_image(room, hotel)
+
+        booked_counter[bucket_key] += 1
+        if status_text not in cancelled_statuses:
+            revenue_counter[bucket_key] += amount
+            total_revenue += amount
+        else:
+            total_cancellations += 1
+
+        if status_text in success_statuses:
+            occupied_counter[bucket_key] += 1
+
+        mix = room_mix.setdefault(room_type_key, {
+            "label": room_type_key,
+            "bookingCount": 0,
+            "revenue": 0.0,
+            "imageUrl": room_image,
+        })
+        mix["bookingCount"] += 1
+        if status_text not in cancelled_statuses:
+            mix["revenue"] += amount
+        if not mix.get("imageUrl"):
+            mix["imageUrl"] = room_image
+
+        customer_id = row.get("customer_id")
+        fallback_key = (row.get("guest_name") or "").strip().lower()
+        guest_key = customer_id if customer_id is not None else (fallback_key or f"guest-{row.get('id')}")
+        customer = customers_by_id.get(customer_id) or {}
+        guest = guest_ledger.setdefault(guest_key, {
+            "customerId": customer_id,
+            "name": row.get("guest_name") or customer.get("fullName") or "Guest",
+            "email": customer.get("email") or "",
+            "contactNumber": customer.get("contactNumber") or "",
+            "bookingCount": 0,
+            "successfulBookings": 0,
+            "cancellationCount": 0,
+            "totalSpend": 0.0,
+            "firstBookingDate": None,
+            "lastBookingDate": None,
+            "preferredRoomCounter": Counter(),
+            "imageUrl": room_image,
+        })
+        guest["bookingCount"] += 1
+        if status_text in cancelled_statuses:
+            guest["cancellationCount"] += 1
+        else:
+            guest["successfulBookings"] += 1
+            guest["totalSpend"] += amount
+
+        if room_label:
+            guest["preferredRoomCounter"][room_label] += 1
+
+        if booking_date:
+            if not guest["firstBookingDate"] or booking_date < guest["firstBookingDate"]:
+                guest["firstBookingDate"] = booking_date
+            if not guest["lastBookingDate"] or booking_date > guest["lastBookingDate"]:
+                guest["lastBookingDate"] = booking_date
+
+        if not guest.get("imageUrl"):
+            guest["imageUrl"] = room_image
+
+    labels = sorted(set(booked_counter.keys()) | set(revenue_counter.keys()) | set(occupied_counter.keys()))
+    if not labels:
+        labels = _default_owner_period_labels(period)
+
+    revenue_series = [round(revenue_counter.get(label, 0.0), 2) for label in labels]
+    booking_series = [booked_counter.get(label, 0) for label in labels]
+    occupancy_series = [
+        round(min(100.0, (occupied_counter.get(label, 0.0) / total_rooms) * 100), 2) if total_rooms else 0.0
+        for label in labels
+    ]
+
+    forecast = _build_forecast_payload(reservations, total_rooms, period)
+    forecast_horizon = max(len(forecast.get("labels", [])) - len(labels), 0)
+    projected_revenue = forecast.get("revenueSeries", [0])[-1] if forecast.get("revenueSeries") else 0
+    projected_occupancy = forecast.get("occupancySeries", [0])[-1] if forecast.get("occupancySeries") else 0
+
+    guest_rows = []
+    for guest in guest_ledger.values():
+        booking_count = guest.get("bookingCount", 0)
+        successful_bookings = guest.get("successfulBookings", 0)
+        total_spend = round(guest.get("totalSpend", 0.0), 2)
+        cancellation_count = guest.get("cancellationCount", 0)
+        cancellation_rate = _percent(cancellation_count, booking_count)
+        first_booking = guest.get("firstBookingDate")
+        last_booking = guest.get("lastBookingDate")
+        avg_booking_value = round(total_spend / max(successful_bookings, 1), 2) if successful_bookings else 0.0
+        risk_score = min(
+            100,
+            round(
+                (cancellation_rate * 1.5)
+                + (20 if successful_bookings == 0 and booking_count >= 2 else 0)
+                + (15 if last_booking and (datetime.utcnow().date() - last_booking).days > 120 else 0)
+            ),
+        )
+        segment = _behavior_segment(total_spend, booking_count, successful_bookings, cancellation_rate)
+        guest_rows.append({
+            "customerId": guest.get("customerId"),
+            "name": guest.get("name") or "Guest",
+            "email": guest.get("email") or "",
+            "contactNumber": guest.get("contactNumber") or "",
+            "segment": segment,
+            "riskLevel": "High" if risk_score >= 65 else "Medium" if risk_score >= 35 else "Low",
+            "riskScore": risk_score,
+            "totalSpend": total_spend,
+            "bookingCount": booking_count,
+            "successfulBookings": successful_bookings,
+            "cancellationCount": cancellation_count,
+            "cancellationRate": cancellation_rate,
+            "averageBookingValue": avg_booking_value,
+            "bookingFrequency": _behavior_frequency_label(booking_count, first_booking, last_booking),
+            "preferredRoom": guest.get("preferredRoomCounter", Counter()).most_common(1)[0][0] if guest.get("preferredRoomCounter") else "Room",
+            "firstBookingDate": _serialize_date(first_booking),
+            "lastBookingDate": _serialize_date(last_booking),
+            "imageUrl": guest.get("imageUrl") or _owner_room_image(None, hotel),
+        })
+
+    guest_rows.sort(
+        key=lambda item: (
+            -_to_float(item.get("totalSpend"), 0),
+            -_to_int(item.get("bookingCount"), 0),
+            item.get("name") or "",
+        )
+    )
+
+    repeat_guests = sum(1 for guest in guest_rows if _to_int(guest.get("bookingCount"), 0) > 1)
+    high_risk_guests = [guest for guest in guest_rows if guest.get("riskLevel") == "High"]
+    segment_counter = Counter(guest.get("segment") or "STANDARD" for guest in guest_rows)
+
+    room_mix_rows = []
+    total_room_bookings = sum(item.get("bookingCount", 0) for item in room_mix.values())
+    for item in room_mix.values():
+        row = dict(item)
+        row["revenue"] = round(row.get("revenue", 0.0), 2)
+        row["share"] = round(_percent(row.get("bookingCount", 0), total_room_bookings), 2)
+        room_mix_rows.append(row)
+    room_mix_rows.sort(key=lambda item: (-_to_float(item.get("revenue"), 0.0), -_to_int(item.get("bookingCount"), 0)))
+
+    analytics_summary = {
+        "totalGuests": len(guest_rows),
+        "repeatGuestRate": _percent(repeat_guests, len(guest_rows)),
+        "averageGuestSpendPhp": round(total_revenue / max(len(guest_rows), 1), 2) if guest_rows else 0.0,
+        "cancellationRate": _percent(total_cancellations, len(reservations)),
+        "highRiskGuests": len(high_risk_guests),
+        "currentOccupancyRate": round(occupancy_series[-1], 2) if occupancy_series else 0.0,
+        "currentRevenuePhp": round(revenue_series[-1], 2) if revenue_series else 0.0,
+        "forecastedRevenuePhp": round(projected_revenue, 2),
+        "forecastedOccupancyRate": round(projected_occupancy, 2),
+        "forecastHorizon": forecast_horizon,
+    }
+
+    return {
+        "ownerId": owner_id,
+        "hotelId": hotel_id,
+        "hotelName": hotel.get("hotel_name") or "Innova Property",
+        "period": period,
+        "generatedAt": datetime.utcnow().isoformat(),
+        "summary": analytics_summary,
+        "trends": {
+            "labels": labels,
+            "bookings": booking_series,
+            "revenuePhp": revenue_series,
+            "occupancyRate": occupancy_series,
+        },
+        "forecast": {
+            "labels": forecast.get("labels", []),
+            "revenueSeries": forecast.get("revenueSeries", []),
+            "occupancySeries": forecast.get("occupancySeries", []),
+            "engine": forecast.get("engine", {}),
+        },
+        "behavioralAnalytics": {
+            "segments": [{"label": label, "count": count} for label, count in segment_counter.most_common()],
+            "topGuests": guest_rows[:5],
+            "atRiskGuests": sorted(
+                high_risk_guests,
+                key=lambda item: (-_to_int(item.get("riskScore"), 0), -_to_float(item.get("cancellationRate"), 0.0))
+            )[:5],
+            "guestProfiles": guest_rows[:20],
+        },
+        "roomMix": room_mix_rows[:6],
+        "aiRecommendations": _owner_recommendation_cards(hotel, analytics_summary, room_mix_rows, guest_rows),
+    }
+
+
+def _ensure_guest_offers_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guest_offers (
+            id SERIAL PRIMARY KEY,
+            hotel_id INTEGER REFERENCES hotels(id) ON DELETE CASCADE,
+            title VARCHAR(200) NOT NULL,
+            subtitle VARCHAR(200),
+            description TEXT,
+            original_price NUMERIC(12,2) DEFAULT 0,
+            discounted_price NUMERIC(12,2) DEFAULT 0,
+            discount_percentage INTEGER DEFAULT 0,
+            offer_type VARCHAR(50) DEFAULT 'seasonal',
+            image_url TEXT,
+            badge_text VARCHAR(120),
+            expiry_date DATE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    alter_statements = [
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS hotel_id INTEGER REFERENCES hotels(id) ON DELETE CASCADE",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS title VARCHAR(200)",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS subtitle VARCHAR(200)",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS original_price NUMERIC(12,2) DEFAULT 0",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS discounted_price NUMERIC(12,2) DEFAULT 0",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS discount_percentage INTEGER DEFAULT 0",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50) DEFAULT 'seasonal'",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS image_url TEXT",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS badge_text VARCHAR(120)",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS expiry_date DATE",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+        "ALTER TABLE guest_offers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()",
+    ]
+    for statement in alter_statements:
+        cur.execute(statement)
+
+
+def _build_owner_staff_payload(cur, owner_id, hotel):
+    hotel_id = hotel.get("id")
+    if not _table_exists(cur, "staff"):
+        return {"staff": [], "analytics": {}}
+
+    query = "SELECT * FROM staff"
+    params = []
+    if _table_has_column(cur, "staff", "hotel_id"):
+        query += " WHERE hotel_id = %s"
+        params.append(hotel_id)
+    query += " ORDER BY id DESC"
+    cur.execute(query, tuple(params))
+    rows = cur.fetchall() or []
+
+    staff = []
+    active_count = 0
+    role_counter = Counter()
+    for row in rows:
+        name = row.get("full_name") or f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or "Staff"
+        status_raw = str(row.get("status") or "").strip().lower()
+        on_shift = _is_truthy(row.get("is_on_duty")) or status_raw in {"active", "on_shift", "on duty", "on_duty"}
+        if on_shift:
+            active_count += 1
+        role = row.get("role") or "Staff"
+        role_counter[role] += 1
+        staff.append({
+            "id": row.get("id"),
+            "name": name,
+            "email": row.get("email") or "",
+            "role": role,
+            "status": "On Shift" if on_shift else "Offline",
+            "rating": round(4.2 + ((row.get("id") or 1) % 7) * 0.1, 1),
+            "image": row.get("profile_image") or "",
+        })
+
+    avg_rating = round(sum(_to_float(item.get("rating"), 0) for item in staff) / max(len(staff), 1), 1) if staff else 0
+    analytics = {
+        "activeCount": active_count,
+        "totalCount": len(staff),
+        "avgCleaningSpeed": f"{max(18, 42 - min(active_count, 10))}m",
+        "avgRating": avg_rating,
+        "payrollProjection": len(staff) * 25000,
+        "baseSalary": len(staff) * 22000,
+        "bonuses": len(staff) * 3000,
+        "tardinessCount": max(0, len(staff) // 4),
+        "overtimeHours": len(staff) * 2,
+        "morningShiftCount": active_count,
+        "afternoonShiftCount": max(0, len(staff) - active_count // 2),
+        "nightShiftCount": max(0, len(staff) // 3),
+        "cleaningProgress": [
+            {"name": "Guest Wing", "percentage": min(100, 35 + (active_count * 8))},
+            {"name": "Suite Wing", "percentage": min(100, 28 + (len(staff) * 6))},
+            {"name": "Common Areas", "percentage": min(100, 40 + (active_count * 7))},
+        ],
+        "roles": [{"label": label, "count": count} for label, count in role_counter.most_common()],
+    }
+    return {"ownerId": owner_id, "hotelId": hotel_id, "staff": staff, "analytics": analytics}
 
 
 @app.route('/api/owner/dashboard/<int:owner_id>', methods=['GET'])
@@ -1586,6 +2275,305 @@ def owner_forecast(owner_id):
         payload["hotelId"] = hotel_id
         return jsonify(payload), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/analytics/<int:owner_id>', methods=['GET'])
+def owner_analytics(owner_id):
+    conn = None
+    cur = None
+    try:
+        period = (request.args.get("period") or "monthly").strip().lower()
+        if period not in {"daily", "monthly"}:
+            period = "monthly"
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        payload = _build_owner_analytics_payload(cur, owner_id, hotel, period)
+        return jsonify(payload), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/customers/<int:owner_id>', methods=['GET'])
+def owner_customers(owner_id):
+    conn = None
+    cur = None
+    try:
+        period = (request.args.get("period") or "monthly").strip().lower()
+        if period not in {"daily", "monthly"}:
+            period = "monthly"
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        analytics = _build_owner_analytics_payload(cur, owner_id, hotel, period)
+        return jsonify({
+            "ownerId": owner_id,
+            "hotelId": hotel.get("id"),
+            "hotelName": hotel.get("hotel_name") or "Innova Property",
+            "stats": analytics.get("summary", {}),
+            "segments": analytics.get("behavioralAnalytics", {}).get("segments", []),
+            "customers": analytics.get("behavioralAnalytics", {}).get("guestProfiles", []),
+            "topGuests": analytics.get("behavioralAnalytics", {}).get("topGuests", []),
+            "atRiskGuests": analytics.get("behavioralAnalytics", {}).get("atRiskGuests", []),
+            "trends": analytics.get("trends", {}),
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/staff/<int:owner_id>', methods=['GET'])
+def owner_staff(owner_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+        return jsonify(_build_owner_staff_payload(cur, owner_id, hotel)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/staff/<int:owner_id>', methods=['POST'])
+def owner_add_staff(owner_id):
+    conn = None
+    cur = None
+    try:
+        data = request.json or {}
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        full_name = (data.get("name") or "").strip()
+        email = (data.get("email") or "").strip().lower()
+        role = (data.get("role") or "Housekeeping").strip()
+        salary = _to_float(data.get("salary"), 0)
+        if not full_name or not email:
+            return jsonify({"error": "Name and email are required."}), 400
+
+        name_parts = full_name.split()
+        first_name = name_parts[0]
+        last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "-"
+
+        password_hash = generate_password_hash("staff1234")
+        columns = ["hotel_id", "first_name", "last_name", "email", "contact_number", "password_hash", "role", "status"]
+        values = [hotel.get("id"), first_name, last_name, email, data.get("contactNumber") or "", password_hash, role, "Active"]
+        if _table_has_column(cur, "staff", "hotel_code"):
+            columns.append("hotel_code")
+            values.append(data.get("hotelCode") or f"OWNER-{hotel.get('id')}")
+        if _table_has_column(cur, "staff", "employee_id"):
+            columns.append("employee_id")
+            values.append(f"EMP-{hotel.get('id')}-{int(datetime.utcnow().timestamp())}"[-20:])
+
+        placeholders = ", ".join(["%s"] * len(values))
+        cur.execute(
+            f"INSERT INTO staff ({', '.join(columns)}) VALUES ({placeholders}) RETURNING id",
+            tuple(values),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({"message": "Staff added successfully.", "staffId": row.get("id"), "salary": salary}), 201
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/promotions/<int:owner_id>', methods=['GET'])
+def owner_promotions(owner_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        _ensure_guest_offers_table(cur)
+        cur.execute(
+            """
+            SELECT *
+            FROM guest_offers
+            WHERE hotel_id = %s
+            ORDER BY created_at DESC, id DESC
+            """,
+            (hotel.get("id"),),
+        )
+        rows = cur.fetchall() or []
+        offers = []
+        for row in rows:
+            offers.append({
+                "id": row.get("id"),
+                "title": row.get("title") or "Special Offer",
+                "subtitle": row.get("subtitle") or "",
+                "description": row.get("description") or "",
+                "original_price": _to_float(row.get("original_price"), 0),
+                "discounted_price": _to_float(row.get("discounted_price"), 0),
+                "discount_percentage": _to_int(row.get("discount_percentage"), 0),
+                "offer_type": row.get("offer_type") or "seasonal",
+                "image_url": row.get("image_url") or "/images/signup-img.png",
+                "badge_text": row.get("badge_text") or "Featured Deal",
+                "expiry_date": _serialize_date(row.get("expiry_date")),
+                "is_active": bool(row.get("is_active", True)),
+            })
+        return jsonify({"ownerId": owner_id, "hotelId": hotel.get("id"), "offers": offers}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/promotions/<int:owner_id>', methods=['POST'])
+def owner_create_promotion(owner_id):
+    conn = None
+    cur = None
+    try:
+        data = request.json or {}
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        _ensure_guest_offers_table(cur)
+        cur.execute(
+            """
+            INSERT INTO guest_offers
+            (hotel_id, title, subtitle, description, original_price, discounted_price,
+             discount_percentage, offer_type, image_url, badge_text, expiry_date, is_active, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            RETURNING id
+            """,
+            (
+                hotel.get("id"),
+                (data.get("title") or "Special Offer").strip(),
+                (data.get("subtitle") or "").strip(),
+                (data.get("description") or "").strip(),
+                _to_float(data.get("original_price"), 0),
+                _to_float(data.get("discounted_price"), 0),
+                _to_int(data.get("discount_percentage"), 0),
+                (data.get("offer_type") or "seasonal").strip(),
+                (data.get("image_url") or "/images/signup-img.png").strip(),
+                (data.get("badge_text") or "Featured Deal").strip(),
+                data.get("expiry_date") or None,
+                bool(data.get("is_active", True)),
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({"message": "Promotion created successfully.", "id": row.get("id")}), 201
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/promotions/<int:owner_id>/<int:offer_id>', methods=['PUT'])
+def owner_update_promotion(owner_id, offer_id):
+    conn = None
+    cur = None
+    try:
+        data = request.json or {}
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        _ensure_guest_offers_table(cur)
+        cur.execute(
+            """
+            UPDATE guest_offers
+            SET title = %s,
+                subtitle = %s,
+                description = %s,
+                original_price = %s,
+                discounted_price = %s,
+                discount_percentage = %s,
+                offer_type = %s,
+                image_url = %s,
+                badge_text = %s,
+                expiry_date = %s,
+                is_active = %s,
+                updated_at = NOW()
+            WHERE id = %s AND hotel_id = %s
+            RETURNING id
+            """,
+            (
+                (data.get("title") or "Special Offer").strip(),
+                (data.get("subtitle") or "").strip(),
+                (data.get("description") or "").strip(),
+                _to_float(data.get("original_price"), 0),
+                _to_float(data.get("discounted_price"), 0),
+                _to_int(data.get("discount_percentage"), 0),
+                (data.get("offer_type") or "seasonal").strip(),
+                (data.get("image_url") or "/images/signup-img.png").strip(),
+                (data.get("badge_text") or "Featured Deal").strip(),
+                data.get("expiry_date") or None,
+                bool(data.get("is_active", True)),
+                offer_id,
+                hotel.get("id"),
+            ),
+        )
+        if not cur.fetchone():
+            return jsonify({"error": "Promotion not found."}), 404
+        conn.commit()
+        return jsonify({"message": "Promotion updated successfully."}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/promotions/<int:owner_id>/<int:offer_id>', methods=['DELETE'])
+def owner_delete_promotion(owner_id, offer_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id)
+        if not hotel:
+            return jsonify({"error": "No hotel found for this owner."}), 404
+
+        _ensure_guest_offers_table(cur)
+        cur.execute("DELETE FROM guest_offers WHERE id = %s AND hotel_id = %s RETURNING id", (offer_id, hotel.get("id")))
+        if not cur.fetchone():
+            return jsonify({"error": "Promotion not found."}), 404
+        conn.commit()
+        return jsonify({"message": "Promotion deleted successfully."}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         _safe_close(conn, cur)
@@ -2641,14 +3629,15 @@ def get_guest_offers():
     conn = None
     cur = None
     try:
+        hotel_id = request.args.get('hotel_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        if not _table_exists(cur, 'guest_offers'):
-            return jsonify([]), 200
+        _ensure_guest_offers_table(cur)
 
         select_columns = ['id']
         optional_columns = [
+            'hotel_id',
             'title',
             'subtitle',
             'description',
@@ -2667,11 +3656,18 @@ def get_guest_offers():
                 select_columns.append(column_name)
 
         query = f"SELECT {', '.join(select_columns)} FROM guest_offers"
+        where_clauses = []
+        params = []
         if 'is_active' in select_columns:
-            query += " WHERE COALESCE(is_active, TRUE) = TRUE"
+            where_clauses.append("COALESCE(is_active, TRUE) = TRUE")
+        if hotel_id and 'hotel_id' in select_columns:
+            where_clauses.append("hotel_id = %s")
+            params.append(hotel_id)
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
         query += " ORDER BY id DESC"
 
-        cur.execute(query)
+        cur.execute(query, tuple(params))
         rows = cur.fetchall() or []
 
         offers = []
@@ -2781,12 +3777,21 @@ def reports_full_stats():
     conn = None
     cur = None
     try:
+        owner_id = request.args.get('owner_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
+        hotel_id = hotel.get("id") if hotel else None
 
         rooms = []
         if _table_exists(cur, "rooms"):
-            cur.execute("SELECT * FROM rooms ORDER BY id ASC")
+            room_query = "SELECT * FROM rooms"
+            room_params = []
+            if hotel_id and _table_has_column(cur, "rooms", "hotel_id"):
+                room_query += " WHERE hotel_id = %s"
+                room_params.append(hotel_id)
+            room_query += " ORDER BY id ASC"
+            cur.execute(room_query, tuple(room_params))
             rooms = cur.fetchall() or []
 
         room_by_id = {row.get("id"): row for row in rooms}
@@ -2797,7 +3802,13 @@ def reports_full_stats():
 
         reservations = []
         if _table_exists(cur, "reservations"):
-            cur.execute("SELECT * FROM reservations ORDER BY id DESC LIMIT 1200")
+            reservation_query = "SELECT * FROM reservations"
+            reservation_params = []
+            if hotel_id and _table_has_column(cur, "reservations", "hotel_id"):
+                reservation_query += " WHERE hotel_id = %s"
+                reservation_params.append(hotel_id)
+            reservation_query += " ORDER BY id DESC LIMIT 1200"
+            cur.execute(reservation_query, tuple(reservation_params))
             reservations = cur.fetchall() or []
 
         customer_map = {}
@@ -2872,7 +3883,12 @@ def reports_full_stats():
         staff_count = 0
         active_staff = 0
         if _table_exists(cur, "staff"):
-            cur.execute("SELECT * FROM staff")
+            staff_query = "SELECT * FROM staff"
+            staff_params = []
+            if hotel_id and _table_has_column(cur, "staff", "hotel_id"):
+                staff_query += " WHERE hotel_id = %s"
+                staff_params.append(hotel_id)
+            cur.execute(staff_query, tuple(staff_params))
             staff_rows = cur.fetchall() or []
             staff_count = len(staff_rows)
             active_staff = sum(1 for row in staff_rows if _is_truthy(row.get("is_on_duty")) or str(row.get("status") or "").lower() == "active")
@@ -2882,7 +3898,13 @@ def reports_full_stats():
 
         inventory_alert = {"stock": 0, "item": "No critical items"}
         if _table_exists(cur, "inventory_items"):
-            cur.execute("SELECT * FROM inventory_items ORDER BY id ASC LIMIT 100")
+            inv_query = "SELECT * FROM inventory_items"
+            inv_params = []
+            if hotel_id and _table_has_column(cur, "inventory_items", "hotel_id"):
+                inv_query += " WHERE hotel_id = %s"
+                inv_params.append(hotel_id)
+            inv_query += " ORDER BY id ASC LIMIT 100"
+            cur.execute(inv_query, tuple(inv_params))
             inv_rows = cur.fetchall() or []
             if inv_rows:
                 critical = sorted(
@@ -2939,8 +3961,11 @@ def reports_transactions():
     conn = None
     cur = None
     try:
+        owner_id = request.args.get('owner_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
+        hotel_id = hotel.get("id") if hotel else None
 
         logs = []
         customers = {}
@@ -2950,7 +3975,13 @@ def reports_transactions():
                 customers[row.get("id")] = f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or "Guest"
 
         if _table_exists(cur, "reservations"):
-            cur.execute("SELECT * FROM reservations ORDER BY id DESC LIMIT 80")
+            query = "SELECT * FROM reservations"
+            params = []
+            if hotel_id and _table_has_column(cur, "reservations", "hotel_id"):
+                query += " WHERE hotel_id = %s"
+                params.append(hotel_id)
+            query += " ORDER BY id DESC LIMIT 80"
+            cur.execute(query, tuple(params))
             for row in cur.fetchall() or []:
                 status_text = str(row.get("status") or "PENDING").upper()
                 event = "Reservation Update"
@@ -2990,10 +4021,13 @@ def reports_simulate():
     try:
         payload = request.json or {}
         delta = _to_float(payload.get("delta"), 0)
+        owner_id = _to_int(payload.get("owner_id"), 0)
 
         baseline_revenue = 0.0
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
+        hotel_id = hotel.get("id") if hotel else None
         if _table_exists(cur, "reservations"):
             amount_columns = []
             if _table_has_column(cur, "reservations", "total_amount"):
@@ -3002,7 +4036,13 @@ def reports_simulate():
                 amount_columns.append("total_amount_php")
             if not amount_columns:
                 amount_columns.append("0 AS total_amount")
-            cur.execute(f"SELECT {', '.join(amount_columns)} FROM reservations ORDER BY id DESC LIMIT 300")
+            reservation_query = f"SELECT {', '.join(amount_columns)} FROM reservations"
+            params = []
+            if hotel_id and _table_has_column(cur, "reservations", "hotel_id"):
+                reservation_query += " WHERE hotel_id = %s"
+                params.append(hotel_id)
+            reservation_query += " ORDER BY id DESC LIMIT 300"
+            cur.execute(reservation_query, tuple(params))
             rows = cur.fetchall() or []
             baseline_revenue = sum(
                 _to_float(row.get("total_amount") or row.get("total_amount_php"), 0)
@@ -3039,12 +4079,17 @@ def inventory_overview():
 
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
+        hotel_id = hotel.get("id") if hotel else None
 
         items = []
         if _table_exists(cur, "inventory_items"):
             query = "SELECT * FROM inventory_items"
             params = []
-            if owner_id and _table_has_column(cur, "inventory_items", "owner_id"):
+            if hotel_id and _table_has_column(cur, "inventory_items", "hotel_id"):
+                query += " WHERE hotel_id = %s"
+                params.append(hotel_id)
+            elif owner_id and _table_has_column(cur, "inventory_items", "owner_id"):
                 query += " WHERE owner_id = %s"
                 params.append(owner_id)
             query += " ORDER BY id ASC"
@@ -3623,6 +4668,7 @@ def vision_hotel():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        hotel_id = request.args.get("hotel_id", type=int)
 
         hotel = {
             "id": 0,
@@ -3638,7 +4684,14 @@ def vision_hotel():
             if _table_has_column(cur, "hotels", "longitude"):
                 select_cols.append("longitude")
 
-            cur.execute(f"SELECT {', '.join(select_cols)} FROM hotels ORDER BY id ASC LIMIT 1")
+            query = f"SELECT {', '.join(select_cols)} FROM hotels"
+            params = []
+            if hotel_id:
+                query += " WHERE id = %s"
+                params.append(hotel_id)
+            query += " ORDER BY id ASC LIMIT 1"
+
+            cur.execute(query, tuple(params))
             row = cur.fetchone()
             if row:
                 hotel = {
@@ -3743,6 +4796,48 @@ def vision_rooms():
         return jsonify({"rooms": rooms}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/vision/nearby-hotels', methods=['GET'])
+def vision_nearby_hotels():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        if not _table_exists(cur, "hotels"):
+            return jsonify({"hotels": []}), 200
+
+        selected_hotel_id = request.args.get("hotel_id", type=int)
+        select_cols = ["id", "hotel_name", "hotel_address"]
+        if _table_has_column(cur, "hotels", "latitude"):
+            select_cols.append("latitude")
+        if _table_has_column(cur, "hotels", "longitude"):
+            select_cols.append("longitude")
+
+        cur.execute(f"SELECT {', '.join(select_cols)} FROM hotels ORDER BY id ASC")
+        rows = cur.fetchall() or []
+
+        hotels = []
+        for row in rows:
+            hotels.append({
+                "id": row.get("id"),
+                "name": row.get("hotel_name") or "Hotel",
+                "address": row.get("hotel_address") or "",
+                "lat": _to_float(row.get("latitude"), 0),
+                "lng": _to_float(row.get("longitude"), 0),
+            })
+
+        base_hotel_id = selected_hotel_id or (hotels[0].get("id") if hotels else None)
+        if base_hotel_id:
+            hotels = [hotel for hotel in hotels if hotel.get("id") != base_hotel_id]
+
+        return jsonify({"hotels": hotels}), 200
+    except Exception as e:
+        return jsonify({"error": str(e), "hotels": []}), 200
     finally:
         _safe_close(conn, cur)
 

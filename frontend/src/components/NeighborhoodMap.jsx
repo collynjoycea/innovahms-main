@@ -69,6 +69,7 @@ export default function NeighborhoodMap({
   hotels = [],
   landmarks = [],
   hotelCenter = { lat: 10.3247, lng: 123.9091 },
+  focusedHotelId = null,
   isDarkMode = false,
   className = "",
 }) {
@@ -83,6 +84,7 @@ export default function NeighborhoodMap({
   const [locError, setLocError] = useState("");
   const [nearestHotel, setNearestHotel] = useState(null);
   const debounceRef = useRef(null);
+  const markerRefs = useRef({});
 
   const mapCenter = useMemo(
     () => (hotels[0] ? { lat: hotels[0].lat, lng: hotels[0].lng } : hotelCenter),
@@ -165,6 +167,22 @@ export default function NeighborhoodMap({
     setFlyTarget({ lat: nearestHotel.lat, lng: nearestHotel.lng });
     setFlyZoom(16);
   };
+
+  useEffect(() => {
+    if (!focusedHotelId) return;
+
+    const selectedHotel = hotels.find((hotel) => String(hotel.id) === String(focusedHotelId));
+    if (!selectedHotel) return;
+
+    setFlyTarget({ lat: selectedHotel.lat, lng: selectedHotel.lng });
+    setFlyZoom(16);
+
+    const timer = setTimeout(() => {
+      markerRefs.current[String(focusedHotelId)]?.openPopup?.();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [focusedHotelId, hotels]);
 
   const th = isDarkMode;
 
@@ -306,7 +324,18 @@ export default function NeighborhoodMap({
 
           {/* Hotel markers */}
           {hotels.map((h) => (
-            <Marker key={h.id} position={[h.lat, h.lng]} icon={hotelIcon}>
+            <Marker
+              key={h.id}
+              position={[h.lat, h.lng]}
+              icon={hotelIcon}
+              ref={(marker) => {
+                if (marker) {
+                  markerRefs.current[String(h.id)] = marker;
+                } else {
+                  delete markerRefs.current[String(h.id)];
+                }
+              }}
+            >
               <Popup>
                 <b className="text-sm">{h.name}</b>
                 {h.address && <div className="text-xs text-gray-500 mt-1">{h.address}</div>}

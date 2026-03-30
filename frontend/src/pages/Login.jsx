@@ -4,6 +4,17 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, Facebook } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import FacebookLogin from "react-facebook-login/dist/facebook-login-render-props";
 
+const getPostLoginRedirect = () => {
+  const returnTo = sessionStorage.getItem("returnTo");
+  sessionStorage.removeItem("returnTo");
+
+  if (returnTo?.startsWith("/booking")) {
+    return "/";
+  }
+
+  return returnTo || "/";
+};
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,9 +43,7 @@ export default function Login() {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("customerSession", JSON.stringify(data.user));
         window.dispatchEvent(new Event("userUpdated"));
-        const returnTo = sessionStorage.getItem('returnTo');
-        sessionStorage.removeItem('returnTo');
-        navigate(returnTo || "/");
+        navigate(getPostLoginRedirect());
       } else {
         setError(data.error || "Invalid email or password.");
       }
@@ -57,9 +66,7 @@ export default function Login() {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("customerSession", JSON.stringify(data.user));
         window.dispatchEvent(new Event("userUpdated"));
-        const returnTo = sessionStorage.getItem('returnTo');
-        sessionStorage.removeItem('returnTo');
-        navigate(returnTo || "/");
+        navigate(getPostLoginRedirect());
       } else {
         setError(data.error || "Google login failed.");
       }
@@ -81,9 +88,7 @@ export default function Login() {
         localStorage.setItem("user", JSON.stringify(data.user));
         localStorage.setItem("customerSession", JSON.stringify(data.user));
         window.dispatchEvent(new Event("userUpdated"));
-        const returnTo = sessionStorage.getItem('returnTo');
-        sessionStorage.removeItem('returnTo');
-        navigate(returnTo || "/");
+        navigate(getPostLoginRedirect());
       } else {
         setError(data.error || "Facebook login failed.");
       }

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, AlertTriangle, X, Search, Image as ImageIcon, Users, CheckCircle } from 'lucide-react';
 import resolveImg from '../../utils/resolveImg';
 
-const API_BASE_URL = 'http://localhost:5000';
-
 const Rooms = () => {
   const [notification, setNotification] = useState({ show: false, message: '' });
   const [rooms, setRooms] = useState([]);
@@ -43,9 +41,10 @@ const Rooms = () => {
   useEffect(() => { fetchRooms(); }, []);
 
   const fetchRooms = async () => {
-    const res = await fetch(`${API_BASE_URL}/api/rooms`);
+    if (!hotelId) return;
+    const res = await fetch(`/api/owner/rooms/${hotelId}`);
     const data = await res.json();
-    if (res.ok) setRooms(data.rooms || []);
+    if (res.ok) setRooms(Array.isArray(data) ? data : []);
   };
 
   const filteredRooms = rooms.filter(room => {
@@ -144,8 +143,8 @@ const handleSubmit = async (e) => {
       }
     });
     const url = isEditing 
-      ? `${API_BASE_URL}/api/owner/rooms/update/${currentRoomId}` 
-      : `${API_BASE_URL}/api/owner/rooms/add`;
+      ? `/api/owner/rooms/update/${currentRoomId}` 
+      : `/api/owner/rooms/add`;
   
     const res = await fetch(url, {
       method: isEditing ? 'PUT' : 'POST',

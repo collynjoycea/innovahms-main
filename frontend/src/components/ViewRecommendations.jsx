@@ -24,7 +24,7 @@ const CategoryCard = ({ category, onExplore }) => (
   </div>
 );
 
-const RoomCard = ({ room }) => {
+const RoomCard = ({ room, onAskAI }) => {
   const navigate = useNavigate();
   return (
     <div className="group bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 transition-all hover:shadow-2xl hover:-translate-y-1">
@@ -80,7 +80,11 @@ const RoomCard = ({ room }) => {
           >
             <Search size={14} /> Virtual Tour
           </button>
-          <button className="flex items-center justify-center gap-2 py-3.5 bg-gray-900 text-white font-black rounded-xl hover:bg-[#bf9b30] transition-all shadow-xl active:scale-95 uppercase tracking-widest text-[9px]">
+          <button
+            type="button"
+            onClick={() => onAskAI(room)}
+            className="flex items-center justify-center gap-2 py-3.5 bg-gray-900 text-white font-black rounded-xl hover:bg-[#bf9b30] transition-all shadow-xl active:scale-95 uppercase tracking-widest text-[9px]"
+          >
             <Bot size={14} /> Ask AI
           </button>
         </div>
@@ -223,6 +227,26 @@ const ViewRecommendations = ({ isLoggedIn, userType }) => {
     return () => { isMounted = false; };
   }, [activeFilter, selectedCategory]);
 
+  const handleAskAI = (room) => {
+    const roomName = room?.name || "this room";
+    const locationLabel = room?.location_description || room?.location || "Innova HMS";
+    const basePrice = Number(room?.base_price_php || 0);
+    const prompt = [
+      `I want to know more about ${roomName}.`,
+      `Location: ${locationLabel}.`,
+      basePrice > 0 ? `Price starts at PHP ${basePrice.toLocaleString()} per night.` : null,
+      "Please help me decide if this room is a good fit for me.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    window.dispatchEvent(
+      new CustomEvent("openGlobalAIAssistant", {
+        detail: { prompt },
+      })
+    );
+  };
+
   // View Controller: Ano ang ipapakita sa screen?
   if (selectedCategory) {
     return (
@@ -254,7 +278,7 @@ const ViewRecommendations = ({ isLoggedIn, userType }) => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
               {recommendedRooms.length > 0 ? (
-                recommendedRooms.map(room => <RoomCard key={room.id} room={room} />)
+                recommendedRooms.map(room => <RoomCard key={room.id} room={room} onAskAI={handleAskAI} />)
               ) : (
                 <div className="col-span-3 text-center py-40 border-2 border-dashed border-gray-200 rounded-3xl text-gray-300 font-black uppercase tracking-widest text-xs">
                   No specialized units found for this category.
@@ -316,7 +340,7 @@ const ViewRecommendations = ({ isLoggedIn, userType }) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-            {recommendedRooms.map(room => <RoomCard key={room.id} room={room} />)}
+            {recommendedRooms.map(room => <RoomCard key={room.id} room={room} onAskAI={handleAskAI} />)}
           </div>
         </div>
       </section>

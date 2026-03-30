@@ -6,9 +6,10 @@ const API_BASE = 'http://localhost:5000';
  * - Relative path (/static/uploads/...) → prefixed with API_BASE
  * - Empty/null → fallback image
  */
-export function resolveImg(raw, fallback = '/images/room1.jpg') {
+export function resolveImg(raw, fallback = '/images/deluxe-room.jpg') {
   if (!raw) return fallback;
-  if (typeof raw === 'string' && raw.startsWith('http')) return raw;
+  if (typeof raw === 'string' && (raw.startsWith('http') || raw.startsWith('data:') || raw.startsWith('blob:'))) return raw;
+  if (typeof raw === 'string' && raw.startsWith('/images/')) return raw;
   return `${API_BASE}${raw.startsWith('/') ? '' : '/'}${raw}`;
 }
 

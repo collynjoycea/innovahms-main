@@ -260,6 +260,40 @@ export default function LandingPage() {
   const roomTypeOptions = Array.from(
     new Set(hotelCards.map((room) => room.roomType).filter(Boolean))
   );
+  const buildTourTarget = ({ id, roomName, previewImage, backToPath, backToLabel, bookingPath = "" }) => ({
+    pathname: `/virtual-tour/${id}`,
+    state: {
+      roomName,
+      previewImage,
+      backToPath,
+      backToLabel,
+      bookingPath,
+    },
+  });
+  const suitesSectionPreview = buildTourTarget({
+    id: suiteTourRoomId || "imperial-sanctum-preview",
+    roomName: "The Imperial Sanctum",
+    previewImage: "/images/signup-img.png",
+    backToPath: "/#suites",
+    backToLabel: "Back to Suites",
+    bookingPath: suiteTourRoomId ? `/booking?roomId=${suiteTourRoomId}` : "",
+  });
+  const featuredAmenities = [
+    {
+      id: "wellness-gym-preview",
+      title: "Wellness Gym",
+      desc: "AI-integrated health equipment.",
+      img: "/images/hero-bg-img.png",
+      label: "Fitness",
+    },
+    {
+      id: "dining-hall-preview",
+      title: "Dining Hall",
+      desc: "Futuristic culinary experience.",
+      img: "/images/signup-img.png",
+      label: "Culinary",
+    },
+  ];
 
   return (
     <main className="relative min-h-screen w-full bg-[#f6f1e5] dark:bg-[#0d0c0a] font-sans selection:bg-[#bf9b30]/30 overflow-x-hidden text-[#1a160d] dark:text-[#e5e1d8] transition-colors duration-300">
@@ -408,234 +442,6 @@ export default function LandingPage() {
         </div>
       </section>
 
- {/* --- FACILITIES / AMENITIES SECTION --- */}
-<section id="suites" className="relative pt-8 pb-16 px-6 bg-[#f6f1e5] dark:bg-[#0d0c0a] max-w-7xl mx-auto overflow-hidden scroll-mt-24 transition-colors duration-300">
-  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-    <motion.div 
-      initial={{ opacity: 0, x: -30 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true }}
-      className="max-w-xl text-left"
-    >
-      <p className="font-serif italic text-[#bf9b30] text-xl md:text-2xl mb-1 tracking-wide">
-        Facilities
-      </p>
-      <h2 className="text-3xl md:text-4xl font-bold text-[#1a160d] dark:text-white tracking-tight uppercase mb-2">
-        Our <span className="text-[#bf9b30]">Amenities</span>
-      </h2>
-      <p className="text-[#7d725f] dark:text-gray-400 text-xs md:text-sm font-light leading-relaxed max-w-md">
-        Premium facilities designed to enhance every aspect of your journey.
-      </p>
-    </motion.div>
-
-    <div className="flex items-center gap-3">
-      <Link
-        to="/facilities"
-        className="text-[#bf9b30] text-[10px] font-black uppercase tracking-widest hover:underline"
-      >
-        Explore All Facilities
-      </Link>
-      <Link
-        to={suiteTourRoomId ? `/virtual-tour/${suiteTourRoomId}` : "/vision-suites"}
-        className="rounded-full border border-[#bf9b30]/35 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#7f6525] dark:text-[#bf9b30] hover:bg-[#bf9b30] hover:text-[#0d0c0a] transition-all"
-      >
-        Suites 360 Tour
-      </Link>
-    </div>
-  </div>
-
-  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-    
-    {/* HIGHLIGHT BOX (Now Clickable) */}
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      className="lg:col-span-8 relative group overflow-hidden rounded-xl border border-[#e6ddca] dark:border-white/5 bg-white/95 dark:bg-[#14130f] h-[580px] shadow-[0_22px_46px_rgba(191,155,48,0.14)] dark:shadow-none"
-    >
-      <Link to={suiteTourRoomId ? `/virtual-tour/${suiteTourRoomId}` : "/vision-suites"} className="flex flex-col h-full w-full">
-        <div className="relative h-[65%] overflow-hidden">
-          <img 
-            src="/images/signup-img.png" 
-            alt="Main Facility" 
-            className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-all duration-1000 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#efe8d7] dark:from-[#14130f] via-transparent to-transparent" />
-          <div className="absolute top-4 left-4 bg-[#bf9b30]/10 backdrop-blur-md border border-[#bf9b30]/30 px-3 py-1 rounded-full flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#bf9b30] animate-pulse" />
-            <span className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest">Presidential Suite</span>
-          </div>
-        </div>
-
-        <div className="p-6 flex flex-col justify-between flex-grow">
-          <div>
-            <h3 className="text-2xl md:text-3xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter mb-2 group-hover:text-[#bf9b30] transition-colors">
-              The Imperial <span className="text-[#bf9b30]">Sanctum</span>
-            </h3>
-            <p className="text-[10px] md:text-xs text-[#756a58] dark:text-gray-400 font-light leading-relaxed max-w-xl line-clamp-2">
-              A masterpiece of luxury living spanning 180 sqm. Complete with a private terrace, jacuzzi, personal butler, and panoramic city views.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-8 mt-4 pt-4 border-t border-[#ece3d1] dark:border-white/5">
-            {[
-              { label: "SQM", val: "180" },
-              { label: "GUESTS", val: "4" },
-              { label: "PER NIGHT", val: "18k" },
-              { label: "RATING", val: "4.9" }
-            ].map((spec, i) => (
-              <div key={i} className="flex flex-col">
-                <span className="text-lg font-black text-[#bf9b30] leading-none">{spec.val}</span>
-                <span className="text-[8px] text-[#746957] dark:text-gray-500 font-bold uppercase tracking-tighter mt-1">{spec.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-
-    {/* SIDE CARDS (Now Clickable) */}
-    <div className="lg:col-span-4 flex flex-col gap-4">
-      {[
-        { 
-          title: "Wellness Gym", 
-          desc: "AI-integrated health equipment.", 
-          img: "/images/hero-bg-img.png", 
-          label: "Fitness" 
-        },
-        { 
-          title: "Dining Hall", 
-          desc: "Futuristic culinary experience.", 
-          img: "/images/signup-img.png", 
-          label: "Culinary" 
-        }
-      ].map((item, i) => (
-        <motion.div 
-          key={i}
-          initial={{ opacity: 0, x: 20 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.1 }}
-          className="relative group flex-1 overflow-hidden rounded-lg h-[102px] border border-[#e8decb] dark:border-white/5 shadow-[0_16px_34px_rgba(191,155,48,0.1)] dark:shadow-none"
-        >
-          <Link to="/facilities" className="block w-full h-full">
-            <img 
-              src={item.img} 
-              alt={item.title} 
-              className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-all duration-600"
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
-            <div className="absolute inset-0 flex flex-col justify-end p-5">
-              <span className="text-[8px] text-[#bf9b30] font-black uppercase tracking-[0.3em] mb-1">{item.label}</span>
-              <h4 className="text-md font-bold text-[#1a160d] dark:text-[#e5e1d8] uppercase tracking-wide group-hover:text-[#bf9b30] transition-colors">
-                {item.title}
-              </h4>
-              <p className="text-[9px] text-[#756a58] dark:text-gray-500 font-light mt-0.5 leading-tight line-clamp-2">
-                {item.desc}
-              </p>
-            </div>
-          </Link>
-        </motion.div>
-      ))}
-    </div>
-  </div>
-</section>
-
-
-{/* --- ROOMS SECTION --- */}
-<section id="rooms" className="relative pt-20 pb-10 px-6 max-w-7xl mx-auto scroll-mt-20">
-  <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-    <motion.div
-      initial={{ opacity: 0, x: -30 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true }}
-    >
-      <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Room Collection</p>
-      <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
-        Featured <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Rooms</span>
-      </h2>
-      <p className="text-[#7a6f5e] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
-        Live room inventory connected to your database with quick access to room details and booking.
-      </p>
-    </motion.div>
-    <button
-      type="button"
-      onClick={() => navigate("/recommendations")}
-      className="px-6 py-3 border border-[#bf9b30]/40 text-[#bf9b30] text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-[#bf9b30] hover:text-[#0d0c0a] transition-all"
-    >
-      View All Rooms
-    </button>
-  </div>
-
-  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    {hotelCards.map((hotel, idx) => (
-      <motion.article
-        key={hotel.id || idx}
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        transition={{ delay: idx * 0.1 }}
-        viewport={{ once: true }}
-        className="group bg-white/95 dark:bg-[#14130f] border border-[#e6ddca] dark:border-[#bf9b30]/15 rounded-2xl overflow-hidden shadow-[0_24px_46px_rgba(191,155,48,0.15)] dark:shadow-xl hover:border-[#bf9b30]/40 transition-all duration-500"
-      >
-        <Link to={`/hoteldetail/${hotel.id}`} className="block">
-          <div className="relative h-40 overflow-hidden">
-            <img
-              src={hotel.image}
-              alt={hotel.name}
-              onError={(e) => { e.currentTarget.src = `/images/room1.jpg`; }}
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#f0e8d5] dark:from-[#0d0c0a] via-transparent to-transparent" />
-            <span className={`absolute top-4 right-4 px-4 py-1 rounded-full text-[10px] font-black tracking-[0.2em] border ${
-              hotel.status === "OPEN"
-                ? "bg-emerald-400/15 text-emerald-300 border-emerald-300/40"
-                : "bg-rose-400/15 text-rose-300 border-rose-300/40"
-            }`}>
-              {hotel.status}
-            </span>
-          </div>
-        </Link>
-
-        <div className="p-6">
-          <p className="text-[10px] font-black tracking-[0.22em] uppercase text-[#bf9b30] mb-1">{hotel.forecast}</p>
-          <h3 className="text-lg font-black tracking-tight text-[#1a160d] dark:text-white mb-1 leading-none group-hover:text-[#bf9b30] transition-colors">
-            {hotel.name}
-          </h3>
-          <p className="text-[#766b59] dark:text-gray-400 text-xs leading-relaxed line-clamp-2">{hotel.description}</p>
-
-          <div className="mt-3 pt-3 border-t border-[#bf9b30]/15 flex flex-col gap-2">
-            <p className="text-[10px] text-[#746a58] dark:text-gray-400 flex items-center gap-1">
-              <MapPin size={11} className="text-[#bf9b30]" />
-              {hotel.location}
-            </p>
-            <div className="flex items-center gap-2">
-              <Link
-                to={`/hoteldetail/${hotel.id}`}
-                className="flex-1 text-center py-1.5 rounded-lg border border-[#bf9b30]/50 text-[#bf9b30] text-[9px] font-black uppercase tracking-widest hover:bg-[#bf9b30]/10 transition-all"
-              >
-                Details
-              </Link>
-              <Link
-                to={`/virtual-tour/${hotel.id}`}
-                className="flex-1 text-center py-1.5 rounded-lg border border-[#cdb88a] dark:border-white/20 text-[#8a6f2a] dark:text-white hover:bg-[#f2e8cf] dark:hover:bg-white/10 text-[9px] font-black uppercase tracking-widest transition-all"
-              >
-                360 Tour
-              </Link>
-              <button
-                type="button"
-                onClick={() => navigate(`/booking?roomId=${hotel.id}`)}
-                className="flex-1 py-1.5 rounded-lg bg-[#bf9b30] text-[#0d0c0a] text-[9px] font-black uppercase tracking-widest hover:bg-[#d8b454] transition-all"
-              >
-                Reserve
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.article>
-    ))}
-  </div>
-</section>
-
 {/* --- HOTELS SECTION --- */}
 <section id="hotels" className="relative pt-20 pb-10 px-6 max-w-7xl mx-auto scroll-mt-20">
   <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
@@ -739,6 +545,233 @@ export default function LandingPage() {
         </div>
       </motion.article>
     ))}
+  </div>
+</section>
+
+{/* --- ROOMS SECTION --- */}
+<section id="rooms" className="relative pt-20 pb-10 px-6 max-w-7xl mx-auto scroll-mt-20">
+  <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+    <motion.div
+      initial={{ opacity: 0, x: -30 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Room Collection</p>
+      <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
+        Featured <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Rooms</span>
+      </h2>
+      <p className="text-[#7a6f5e] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
+        Live room inventory connected to your database with quick access to room details and booking.
+      </p>
+    </motion.div>
+    <button
+      type="button"
+      onClick={() => navigate("/recommendations")}
+      className="px-6 py-3 border border-[#bf9b30]/40 text-[#bf9b30] text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-[#bf9b30] hover:text-[#0d0c0a] transition-all"
+    >
+      View All Rooms
+    </button>
+  </div>
+
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    {hotelCards.map((hotel, idx) => (
+      <motion.article
+        key={hotel.id || idx}
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ delay: idx * 0.1 }}
+        viewport={{ once: true }}
+        className="group bg-white/95 dark:bg-[#14130f] border border-[#e6ddca] dark:border-[#bf9b30]/15 rounded-2xl overflow-hidden shadow-[0_24px_46px_rgba(191,155,48,0.15)] dark:shadow-xl hover:border-[#bf9b30]/40 transition-all duration-500"
+      >
+        <Link to={`/hoteldetail/${hotel.id}`} className="block">
+          <div className="relative h-40 overflow-hidden">
+            <img
+              src={hotel.image}
+              alt={hotel.name}
+              onError={(e) => { e.currentTarget.src = '/images/deluxe-room.jpg'; }}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#f0e8d5] dark:from-[#0d0c0a] via-transparent to-transparent" />
+            <span className={`absolute top-4 right-4 px-4 py-1 rounded-full text-[10px] font-black tracking-[0.2em] border ${
+              hotel.status === "OPEN"
+                ? "bg-emerald-400/15 text-emerald-300 border-emerald-300/40"
+                : "bg-rose-400/15 text-rose-300 border-rose-300/40"
+            }`}>
+              {hotel.status}
+            </span>
+          </div>
+        </Link>
+
+        <div className="p-6">
+          <p className="text-[10px] font-black tracking-[0.22em] uppercase text-[#bf9b30] mb-1">{hotel.forecast}</p>
+          <h3 className="text-lg font-black tracking-tight text-[#1a160d] dark:text-white mb-1 leading-none group-hover:text-[#bf9b30] transition-colors">
+            {hotel.name}
+          </h3>
+          <p className="text-[#766b59] dark:text-gray-400 text-xs leading-relaxed line-clamp-2">{hotel.description}</p>
+
+          <div className="mt-3 pt-3 border-t border-[#bf9b30]/15 flex flex-col gap-2">
+            <p className="text-[10px] text-[#746a58] dark:text-gray-400 flex items-center gap-1">
+              <MapPin size={11} className="text-[#bf9b30]" />
+              {hotel.location}
+            </p>
+            <div className="flex items-center gap-2">
+              <Link
+                to={`/hoteldetail/${hotel.id}`}
+                className="flex-1 text-center py-1.5 rounded-lg border border-[#bf9b30]/50 text-[#bf9b30] text-[9px] font-black uppercase tracking-widest hover:bg-[#bf9b30]/10 transition-all"
+              >
+                Details
+              </Link>
+              <Link
+                to={buildTourTarget({
+                  id: hotel.id,
+                  roomName: hotel.name,
+                  previewImage: hotel.image,
+                  backToPath: "/#rooms",
+                  backToLabel: "Back to Rooms",
+                  bookingPath: `/booking?roomId=${hotel.id}`,
+                })}
+                className="flex-1 text-center py-1.5 rounded-lg border border-[#cdb88a] dark:border-white/20 text-[#8a6f2a] dark:text-white hover:bg-[#f2e8cf] dark:hover:bg-white/10 text-[9px] font-black uppercase tracking-widest transition-all"
+              >
+                360 Tour
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigate(`/booking?roomId=${hotel.id}`)}
+                className="flex-1 py-1.5 rounded-lg bg-[#bf9b30] text-[#0d0c0a] text-[9px] font-black uppercase tracking-widest hover:bg-[#d8b454] transition-all"
+              >
+                Reserve
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.article>
+    ))}
+  </div>
+</section>
+
+{/* --- FACILITIES / AMENITIES SECTION --- */}
+<section id="suites" className="relative pt-8 pb-16 px-6 bg-[#f6f1e5] dark:bg-[#0d0c0a] max-w-7xl mx-auto overflow-hidden scroll-mt-24 transition-colors duration-300">
+  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+    <motion.div
+      initial={{ opacity: 0, x: -30 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      className="max-w-xl text-left"
+    >
+      <p className="font-serif italic text-[#bf9b30] text-xl md:text-2xl mb-1 tracking-wide">
+        Facilities
+      </p>
+      <h2 className="text-3xl md:text-4xl font-bold text-[#1a160d] dark:text-white tracking-tight uppercase mb-2">
+        Our <span className="text-[#bf9b30]">Amenities</span>
+      </h2>
+      <p className="text-[#7d725f] dark:text-gray-400 text-xs md:text-sm font-light leading-relaxed max-w-md">
+        Premium facilities designed to enhance every aspect of your journey.
+      </p>
+    </motion.div>
+
+    <div className="flex items-center gap-3">
+      <Link
+        to="/facilities"
+        className="text-[#bf9b30] text-[10px] font-black uppercase tracking-widest hover:underline"
+      >
+        Explore All Facilities
+      </Link>
+    </div>
+  </div>
+
+  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    {/* HIGHLIGHT BOX (Now Clickable) */}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      className="lg:col-span-8 relative group overflow-hidden rounded-xl border border-[#e6ddca] dark:border-white/5 bg-white/95 dark:bg-[#14130f] h-[580px] shadow-[0_22px_46px_rgba(191,155,48,0.14)] dark:shadow-none"
+    >
+      <Link to={suitesSectionPreview} className="flex flex-col h-full w-full">
+        <div className="relative h-[65%] overflow-hidden">
+          <img
+            src="/images/signup-img.png"
+            alt="Main Facility"
+            className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-all duration-1000 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#efe8d7] dark:from-[#14130f] via-transparent to-transparent" />
+          <div className="absolute top-4 left-4 bg-[#bf9b30]/10 backdrop-blur-md border border-[#bf9b30]/30 px-3 py-1 rounded-full flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#bf9b30] animate-pulse" />
+            <span className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest">Presidential Suite</span>
+          </div>
+        </div>
+
+        <div className="p-6 flex flex-col justify-between flex-grow">
+          <div>
+            <h3 className="text-2xl md:text-3xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter mb-2 group-hover:text-[#bf9b30] transition-colors">
+              The Imperial <span className="text-[#bf9b30]">Sanctum</span>
+            </h3>
+            <p className="text-[10px] md:text-xs text-[#756a58] dark:text-gray-400 font-light leading-relaxed max-w-xl line-clamp-2">
+              A masterpiece of luxury living spanning 180 sqm. Complete with a private terrace, jacuzzi, personal butler, and panoramic city views.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-8 mt-4 pt-4 border-t border-[#ece3d1] dark:border-white/5">
+            {[
+              { label: "SQM", val: "180" },
+              { label: "GUESTS", val: "4" },
+              { label: "PER NIGHT", val: "18k" },
+              { label: "RATING", val: "4.9" }
+            ].map((spec, i) => (
+              <div key={i} className="flex flex-col">
+                <span className="text-lg font-black text-[#bf9b30] leading-none">{spec.val}</span>
+                <span className="text-[8px] text-[#746957] dark:text-gray-500 font-bold uppercase tracking-tighter mt-1">{spec.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+
+    {/* SIDE CARDS (Now Clickable) */}
+    <div className="lg:col-span-4 flex flex-col gap-4">
+      {featuredAmenities.map((item, i) => (
+        <motion.div
+          key={item.id}
+          initial={{ opacity: 0, x: 20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className="relative group flex-1 overflow-hidden rounded-lg h-[102px] border border-[#e8decb] dark:border-white/5 shadow-[0_16px_34px_rgba(191,155,48,0.1)] dark:shadow-none"
+        >
+          <Link
+            to={buildTourTarget({
+              id: item.id,
+              roomName: item.title,
+              previewImage: item.img,
+              backToPath: "/#suites",
+              backToLabel: "Back to Suites",
+            })}
+            className="block w-full h-full"
+          >
+            <img
+              src={item.img}
+              alt={item.title}
+              className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-all duration-600"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
+            <div className="absolute inset-0 flex flex-col justify-end p-5">
+              <span className="text-[8px] text-[#bf9b30] font-black uppercase tracking-[0.3em] mb-1">{item.label}</span>
+              <h4 className="text-md font-bold text-[#1a160d] dark:text-[#e5e1d8] uppercase tracking-wide group-hover:text-[#bf9b30] transition-colors">
+                {item.title}
+              </h4>
+              <p className="text-[9px] text-[#756a58] dark:text-gray-500 font-light mt-0.5 leading-tight line-clamp-2">
+                {item.desc}
+              </p>
+              <span className="mt-2 inline-flex w-fit items-center rounded-full border border-[#bf9b30]/35 bg-white/70 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-[#8a6f2a] shadow-sm dark:bg-[#14130f]/80 dark:text-[#bf9b30]">
+                360 Tour
+              </span>
+            </div>
+          </Link>
+        </motion.div>
+      ))}
+    </div>
   </div>
 </section>
 
@@ -896,5 +929,3 @@ export default function LandingPage() {
     </main>
   );
 }
-
-

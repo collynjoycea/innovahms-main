@@ -69,6 +69,21 @@ export default function GlobalAIAssistant() {
   }, []);
 
   useEffect(() => {
+    const handleOpenAssistant = (event) => {
+      const prompt = typeof event?.detail?.prompt === "string" ? event.detail.prompt : "";
+      setIsOpen(true);
+      if (prompt) {
+        setInput(prompt);
+      }
+    };
+
+    window.addEventListener("openGlobalAIAssistant", handleOpenAssistant);
+    return () => {
+      window.removeEventListener("openGlobalAIAssistant", handleOpenAssistant);
+    };
+  }, []);
+
+  useEffect(() => {
     const raw = localStorage.getItem(historyKey);
     if (!raw) {
       setMessages(getDefaultWelcome(sessionUser?.firstName || sessionUser?.first_name || ""));

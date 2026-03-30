@@ -104,14 +104,20 @@ export default function FeaturedRooms() {
     setTourData(null);
     setTourOpen(true);
     setLoadingTour(true);
+    const fallbackTour = {
+      panoramaUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || '/images/deluxe-room.jpg',
+      initialYaw: 0,
+      initialPitch: 0,
+      initialFov: Math.PI / 2,
+    };
     try {
       const res = await fetch(`/api/rooms/${room.id}/tour`);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `Tour load failed (HTTP ${res.status}).`);
-      setTourData(payload.tour || null);
+      setTourData(payload.tour || fallbackTour);
     } catch (error) {
       console.error('Tour fetch error:', error);
-      setTourData(null);
+      setTourData(fallbackTour);
     } finally {
       setLoadingTour(false);
     }
