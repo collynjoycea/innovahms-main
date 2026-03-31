@@ -46,10 +46,10 @@ export default function Footer() {
               <li>
                 <button
                   type="button"
-                  onClick={() => scrollToHomeSection("suites")}
+                  onClick={() => scrollToHomeSection("rooms")}
                   className="hover:text-[#bf9b30] transition-colors"
                 >
-                  Rooms and Suites
+                  Featured Rooms
                 </button>
               </li>
               <li>
@@ -85,16 +85,16 @@ export default function Footer() {
                   +1 (800) 555-0199
                 </a>
               </li>
-              <li className="text-gray-600 dark:text-zinc-400">1200 Smart Ave, Dubai UAE</li>
+              <li className="text-gray-600 dark:text-zinc-400">Metro Manila, Philippines</li>
             </ul>
           </div>
 
           <div className="space-y-4">
             <h3 className="text-gray-900 font-black text-sm uppercase tracking-widest border-b-2 border-[#bf9b30] w-fit pb-1 dark:text-white">
-              Stay Alerted
+              Guest Help
             </h3>
             <p className="text-sm leading-relaxed font-bold text-gray-500 dark:text-zinc-400">
-              Get instant notifications via email or SMS for price drops.
+              Need help with bookings, room access, or account concerns? Reach the team through email or phone.
             </p>
             <div className="flex items-center gap-5">
               <a
@@ -104,10 +104,10 @@ export default function Footer() {
                 Email
               </a>
               <a
-                href="sms:+18005550199"
+                href="tel:+18005550199"
                 className="text-gray-500 font-black text-[11px] uppercase tracking-tighter hover:text-[#bf9b30] transition-colors dark:text-zinc-400"
               >
-                SMS
+                Call
               </a>
             </div>
           </div>
@@ -119,17 +119,17 @@ export default function Footer() {
           </p>
           <div className="flex gap-6">
             <Link to="/about" className="hover:text-gray-900 transition-colors dark:hover:text-white">
-              Privacy Policy
+              About Us
             </Link>
             <Link to="/features" className="hover:text-gray-900 transition-colors dark:hover:text-white">
-              Terms of Service
+              Platform Features
             </Link>
             <button
               type="button"
               onClick={() => scrollToHomeSection("promotions")}
               className="hover:text-gray-900 transition-colors dark:hover:text-white"
             >
-              Cookies
+              Promotions
             </button>
           </div>
         </div>

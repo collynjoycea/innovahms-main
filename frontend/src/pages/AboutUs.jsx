@@ -1,16 +1,15 @@
 import React from 'react';
-import { Sparkles, MapPin, Headset, Globe } from 'lucide-react';
+import { Sparkles, Headset, Globe } from 'lucide-react';
 
 export default function AboutUs() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans relative overflow-x-hidden">
-      
       {/* SECTION 1: HERO */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden bg-stone-900">
         <div className="absolute inset-0 z-0">
-          <img 
-            src="/images/hero-lobby.jpg" 
-            className="w-full h-full object-cover opacity-90" 
+          <img
+            src="/images/hero-lobby.jpg"
+            className="w-full h-full object-cover opacity-90"
             alt="Luxury Interior"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/80" />
@@ -18,7 +17,7 @@ export default function AboutUs() {
 
         <div className="relative z-10 text-center px-6 max-w-5xl">
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-white leading-[1.1] drop-shadow-2xl">
-            Revolutionizing <br /> 
+            Revolutionizing <br />
             Hospitality <span className="text-[#bf9b30]">through AI</span>
           </h1>
           <p className="text-white text-lg md:text-2xl max-w-2xl mx-auto font-medium leading-relaxed drop-shadow-lg opacity-95">
@@ -61,9 +60,9 @@ export default function AboutUs() {
 
             <div className="relative">
               <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-slate-100">
-                <img 
-                  src="/images/about-story-staff.jpg" 
-                  className="w-full h-[500px] object-cover" 
+                <img
+                  src="/images/about-story-staff.jpg"
+                  className="w-full h-[500px] object-cover"
                   alt="Service Excellence"
                 />
               </div>
@@ -92,7 +91,7 @@ export default function AboutUs() {
                   Our Global Footprint
                 </h2>
                 <p className="text-gray-400 text-lg leading-relaxed">
-                  Serving elite hotels and resorts across 45 countries, ensuring standard-setting excellence regardless of location.
+                  Built for hospitality operations that need one connected platform across multiple properties and guest touchpoints.
                 </p>
               </div>
 
@@ -102,8 +101,8 @@ export default function AboutUs() {
                     <Globe className="w-6 h-6 text-[#bf9b30] group-hover:text-white" />
                   </div>
                   <div>
-                    <p className="text-gray-200 font-semibold text-lg">Strategic Regional Hubs</p>
-                    <p className="text-gray-500 text-sm">London • Singapore • New York • Dubai</p>
+                    <p className="text-gray-200 font-semibold text-lg">Operational Coverage</p>
+                    <p className="text-gray-500 text-sm">Hotel groups, resorts, and managed stays connected in one workflow</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-5 group cursor-default">
@@ -112,7 +111,7 @@ export default function AboutUs() {
                   </div>
                   <div>
                     <p className="text-gray-200 font-semibold text-lg">24/7 Enterprise Support</p>
-                    <p className="text-gray-500 text-sm">Real-time monitoring & instant resolution</p>
+                    <p className="text-gray-500 text-sm">Real-time monitoring and instant resolution</p>
                   </div>
                 </div>
               </div>
@@ -122,23 +121,23 @@ export default function AboutUs() {
               <div className="bg-white/5 rounded-[40px] p-4 border border-white/10 overflow-hidden shadow-2xl relative h-[300px] md:h-[520px]">
                 {/* World Map with Pulse Nodes */}
                 <div className="absolute inset-0 z-0">
-                  <img 
-                    src="/images/global-network-map.jpg" 
-                    className="w-full h-full object-cover rounded-[32px] opacity-40 mix-blend-screen" 
+                  <img
+                    src="/images/global-network-map.jpg"
+                    className="w-full h-full object-cover rounded-[32px] opacity-40 mix-blend-screen"
                     alt="World Map"
                   />
-                  
-                  {/* PULSING NODES (London, Singapore, NY, Dubai) */}
-                  <div className="absolute top-[35%] left-[48%]"><PulseNode /></div> {/* London */}
-                  <div className="absolute top-[38%] left-[25%]"><PulseNode /></div> {/* New York */}
-                  <div className="absolute top-[65%] left-[78%]"><PulseNode /></div> {/* Singapore */}
-                  <div className="absolute top-[48%] left-[58%]"><PulseNode /></div> {/* Dubai */}
+
+                  {/* PULSING NODES FOR ACTIVE COVERAGE POINTS */}
+                  <div className="absolute top-[35%] left-[48%]"><PulseNode /></div>
+                  <div className="absolute top-[38%] left-[25%]"><PulseNode /></div>
+                  <div className="absolute top-[65%] left-[78%]"><PulseNode /></div>
+                  <div className="absolute top-[48%] left-[58%]"><PulseNode /></div>
                 </div>
 
                 <div className="relative z-10 h-full flex items-center justify-center pointer-events-none">
-                   <h4 className="text-[#bf9b30] font-black text-2xl md:text-5xl tracking-[0.4em] uppercase opacity-80 drop-shadow-2xl text-center px-4">
-                     Enterprise <br className="md:hidden" /> Network
-                   </h4>
+                  <h4 className="text-[#bf9b30] font-black text-2xl md:text-5xl tracking-[0.4em] uppercase opacity-80 drop-shadow-2xl text-center px-4">
+                    Enterprise <br className="md:hidden" /> Network
+                  </h4>
                 </div>
               </div>
             </div>
@@ -152,7 +151,7 @@ export default function AboutUs() {
           <div className="bg-slate-50 p-16 rounded-[3rem] border border-slate-100 shadow-sm relative overflow-hidden group">
             {/* Subtle background glow on hover */}
             <div className="absolute -inset-full bg-gradient-to-r from-transparent via-[#bf9b30]/5 to-transparent rotate-45 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-            
+
             <h3 className="text-4xl font-black text-slate-900 mb-8 uppercase tracking-tight">Partner with Innova-HMS</h3>
             <button className="bg-[#bf9b30] text-white px-12 py-5 rounded-2xl font-black hover:bg-[#a68628] transition-all transform hover:scale-105 shadow-xl uppercase tracking-widest text-xs">
               Contact Sales
