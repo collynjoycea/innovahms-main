@@ -12,29 +12,54 @@ const Housekeeping = () => {
   });
   const [activeFilter, setActiveFilter] = useState('all');
 
-  const getOwnerId = () => {
+  const getOwnerSession = () => {
     const ownerData = JSON.parse(localStorage.getItem('ownerSession')) || {};
-    return ownerData?.id || 1;
+    return ownerData;
   };
 
   const fetchHousekeepingData = async () => {
     try {
       setLoading(true);
-      const ownerId = getOwnerId();
-      // Replace with your actual API endpoint
-      const response = await fetch(`/api/housekeeping?owner_id=${ownerId}`);
-      
-      if (!response.ok) {
+      const session = getOwnerSession();
+      const hotelId = session?.hotelId || session?.hotel_id;
+      if (!hotelId) {
+        setHousekeepingData([]);
+        setSummary({
+          totalRooms: 0,
+          cleanedToday: 0,
+          pending: 0,
+          inProgress: 0
+        });
+        return;
+      }
+
+      const [statsResponse, tasksResponse] = await Promise.all([
+        fetch(`/api/housekeeping/dashboard-stats?hotel_id=${hotelId}`),
+        fetch(`/api/housekeeping/tasks?hotel_id=${hotelId}`),
+      ]);
+
+      if (!statsResponse.ok || !tasksResponse.ok) {
         throw new Error('Failed to fetch housekeeping data');
       }
-      
-      const data = await response.json();
-      setHousekeepingData(data.items || []);
-      setSummary(data.summary || {
-        totalRooms: 0,
-        cleanedToday: 0,
-        pending: 0,
-        inProgress: 0
+
+      const statsData = await statsResponse.json();
+      const tasksData = await tasksResponse.json();
+      const tasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
+
+      setHousekeepingData(tasks.map((task) => {
+        const normalizedStatus = String(task.status || 'pending').toLowerCase().replace(/\s+/g, '_');
+        return {
+          room: task.room_label || '--',
+          status: normalizedStatus,
+          assignedTo: task.staff_name || '--',
+          lastUpdated: task.completed_at || task.scheduled_time || task.created_at || '--',
+        };
+      }));
+      setSummary({
+        totalRooms: Array.isArray(statsData.roomGrid) ? statsData.roomGrid.length : 0,
+        cleanedToday: Number(statsData.completedToday || 0),
+        pending: Number(statsData.pendingTasks || 0),
+        inProgress: Number(statsData.inProgress || 0)
       });
     } catch (error) {
       console.error('Error fetching housekeeping data:', error);

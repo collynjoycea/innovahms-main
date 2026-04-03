@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, MapPin, Building2 } from 'lucide-react';
+import { ChevronDown, LogOut, MapPin, Building2, CreditCard } from 'lucide-react';
 
 const OwnerHeader = () => {
   const location = useLocation();
@@ -8,28 +8,44 @@ const OwnerHeader = () => {
   
   const [ownerInfo, setOwnerInfo] = useState({
     fullName: 'Hotel Owner',
-    hotelName: 'Property Management'
+    hotelName: 'Subscription Required',
+    subscriptionActive: false,
+    hasHotel: false,
   });
 
   useEffect(() => {
-    const sessionData = localStorage.getItem('ownerSession'); 
-    
-    if (sessionData) {
+    const syncOwner = () => {
+      const sessionData = localStorage.getItem('ownerSession'); 
+      if (!sessionData) {
+        setOwnerInfo({
+          fullName: 'Hotel Owner',
+          hotelName: 'Subscription Required',
+          subscriptionActive: false,
+          hasHotel: false,
+        });
+        return;
+      }
       try {
         const parsedData = JSON.parse(sessionData);
         if (parsedData) {
           setOwnerInfo({
             fullName: `${parsedData.firstName} ${parsedData.lastName}`,
-            hotelName: parsedData.hotelName || 'Innova Property'
+            hotelName: parsedData.hotelName || (parsedData.subscriptionActive ? 'Hotel Setup Required' : 'Subscription Required'),
+            subscriptionActive: Boolean(parsedData.subscriptionActive),
+            hasHotel: Boolean(parsedData.hasHotel),
           });
         }
       } catch (error) {
         console.error("Error parsing owner session:", error);
       }
-    }
+    };
+    syncOwner();
+    window.addEventListener('ownerSessionUpdated', syncOwner);
+    return () => window.removeEventListener('ownerSessionUpdated', syncOwner);
   }, []);
 
   const navItems = [
+    { name: 'Subscription', path: '/owner/subscription' },
     { name: 'Dashboard', path: '/owner' },
     { name: 'Rooms', path: '/owner/rooms' },
     { name: 'Reservations', path: '/owner/reservations' },
@@ -94,7 +110,9 @@ const OwnerHeader = () => {
         >
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-slate-800 tracking-tight capitalize">{ownerInfo.fullName}</p>
-            <p className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest opacity-80">Verified Owner</p>
+            <p className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest opacity-80">
+              {ownerInfo.subscriptionActive ? 'Verified Owner' : 'Subscription Required'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-full border border-[#bf9b30]/20 p-0.5 bg-gradient-to-tr from-[#bf9b30]/10 to-transparent">
             <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[#bf9b30] shadow-sm">
@@ -113,16 +131,17 @@ const OwnerHeader = () => {
               <p className="text-[10px] text-[#bf9b30] font-bold uppercase tracking-widest">{ownerInfo.hotelName}</p>
             </div>
             <button
+              onClick={() => { setShowMenu(false); navigate('/owner/subscription'); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
+            >
+              <CreditCard size={15} /> Manage Subscription
+            </button>
+            <button
               onClick={() => { setShowMenu(false); navigate('/owner/rooms'); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
             >
-              <Building2 size={15} /> Manage Rooms
-            </button>
-            <button
-              onClick={() => { setShowMenu(false); navigate('/owner/staff'); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
-            >
-              <MapPin size={15} /> Hotel Location
+              {ownerInfo.hasHotel ? <Building2 size={15} /> : <MapPin size={15} />}
+              {ownerInfo.hasHotel ? 'Manage Rooms' : 'View Property'}
             </button>
             <div className="border-t border-black/5 mt-1 pt-1">
               <button

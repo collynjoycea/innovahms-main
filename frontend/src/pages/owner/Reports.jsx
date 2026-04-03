@@ -38,6 +38,14 @@ const formatSimulationMetric = (value, type = 'percent') => {
 const toSearchable = (value) => String(value ?? '').toLowerCase();
 
 const Reports = () => {
+  const ownerSession = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('ownerSession') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const ownerId = ownerSession?.id;
   const [data, setData] = useState(null);
   const [logs, setLogs] = useState([]);
   const [simValue, setSimValue] = useState(0);
@@ -65,8 +73,8 @@ const Reports = () => {
     setLoading(true);
     try {
       const [resStats, resLogs] = await Promise.all([
-        axios.get('/api/reports/full-stats'),
-        axios.get('/api/reports/transactions')
+        axios.get('/api/reports/full-stats', { params: ownerId ? { owner_id: ownerId } : {} }),
+        axios.get('/api/reports/transactions', { params: ownerId ? { owner_id: ownerId } : {} })
       ]);
       setData(resStats.data);
       setLogs(resLogs.data);
@@ -179,7 +187,7 @@ const Reports = () => {
 
   const handleRunSimulation = () => {
     setShowSimAlert(true);
-    axios.post('/api/reports/simulate', { delta: simValue })
+    axios.post('/api/reports/simulate', { delta: simValue, owner_id: ownerId })
       .then((res) => {
         setData((prev) => ({
           ...(prev || {}),

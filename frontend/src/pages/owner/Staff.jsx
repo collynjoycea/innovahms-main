@@ -37,7 +37,7 @@ const Staff = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`/api/staff/dashboard?owner_id=${resolvedOwnerId}`);
+      const res = await axios.get(`/api/owner/staff/${resolvedOwnerId}`);
       setStaffData(res.data.staff || []);
       setAnalytics(res.data.analytics || {
         activeCount: 0,
@@ -72,8 +72,7 @@ const Staff = () => {
   const handleAddStaffSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/staff/add', {
-        owner_id: resolvedOwnerId,
+      await axios.post(`/api/owner/staff/${resolvedOwnerId}`, {
         name: newStaff.name,
         email: newStaff.email,
         role: newStaff.role,
