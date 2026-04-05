@@ -28,8 +28,8 @@ except Exception:
 
 app = Flask(__name__, static_folder='static')
 
-# FIX 1: Mas malawak na CORS configuration para sa Vite (5173) at Localhost
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]}})
+# FIX 1: Mas malawak na CORS configuration para sa Vite (5173 at 5174) at Localhost
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://localhost:3000"]}})
 
 # --- CONFIGURATION ---
 
@@ -38,7 +38,7 @@ def get_db_connection():
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "innovahmsdb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "12345"),
+        password=os.getenv("DB_PASSWORD", "lily1245"),
         port=os.getenv("DB_PORT", "5432"),
     )
 
@@ -553,7 +553,10 @@ def _ensure_membership_tables(cur):
         "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     ]
     for statement in membership_package_alters:
-        cur.execute(statement)
+        try:
+            cur.execute(statement)
+        except Exception:
+            pass  # Column might already exist
 
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_packages_slug ON membership_packages(slug)")
 
@@ -590,10 +593,17 @@ def _ensure_membership_tables(cur):
         "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     ]
     for statement in hotel_subscription_alters:
-        cur.execute(statement)
+        try:
+            cur.execute(statement)
+        except Exception:
+            pass  # Column might already exist
 
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_package_subscriptions_hotel_id ON hotel_package_subscriptions(hotel_id)")
-    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_package_subscriptions_owner_id ON hotel_package_subscriptions(owner_id)")
+    # Ensure unique constraint exists (in case index was converted to constraint)
+    try:
+        cur.execute("ALTER TABLE hotel_package_subscriptions ADD CONSTRAINT hotel_package_subscriptions_hotel_id_unique UNIQUE (hotel_id)")
+    except Exception:
+        pass  # Constraint might already exist
 
 
 def _seed_membership_packages(cur):
@@ -984,6 +994,493 @@ def _owner_room_limit_response(subscription):
         "roomLimit": room_limit,
         "currentPlan": subscription.get("packageName"),
     }), 403
+
+
+# --- NOTIFICATION SYSTEM ---
+
+def _ensure_notification_tables(cur):
+    """Ensure notification-related tables exist"""
+    # Notification types table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notification_types (
+            id SERIAL PRIMARY KEY,
+            type_key VARCHAR(50) UNIQUE NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            category VARCHAR(50) NOT NULL,
+            priority VARCHAR(20) DEFAULT 'NORMAL',
+            email_template TEXT,
+            sms_template TEXT,
+            push_template TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # User notification preferences
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_notification_preferences (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            user_type VARCHAR(20) NOT NULL,
+            notification_type_id INTEGER REFERENCES notification_types(id) ON DELETE CASCADE,
+            email_enabled BOOLEAN DEFAULT TRUE,
+            sms_enabled BOOLEAN DEFAULT FALSE,
+            push_enabled BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, user_type, notification_type_id)
+        )
+    """)
+
+    # Notifications table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            user_type VARCHAR(20) NOT NULL,
+            notification_type_id INTEGER REFERENCES notification_types(id) ON DELETE SET NULL,
+            title VARCHAR(200) NOT NULL,
+            message TEXT NOT NULL,
+            data JSONB DEFAULT '{}',
+            is_read BOOLEAN DEFAULT FALSE,
+            email_sent BOOLEAN DEFAULT FALSE,
+            sms_sent BOOLEAN DEFAULT FALSE,
+            push_sent BOOLEAN DEFAULT FALSE,
+            sent_at TIMESTAMP,
+            read_at TIMESTAMP,
+            expires_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Notification logs
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notification_logs (
+            id SERIAL PRIMARY KEY,
+            notification_id INTEGER REFERENCES notifications(id) ON DELETE CASCADE,
+            channel VARCHAR(20) NOT NULL,
+            status VARCHAR(20) NOT NULL,
+            provider_response JSONB DEFAULT '{}',
+            error_message TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Indexes
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, user_type)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, user_type, is_read) WHERE is_read = FALSE")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_notification_logs_notification ON notification_logs(notification_id)")
+
+
+def _seed_notification_types(cur):
+    """Seed default notification types"""
+    _ensure_notification_tables(cur)
+
+    notification_types = [
+        # System/Admin notifications
+        ('system_maintenance', 'System Maintenance', 'Scheduled system maintenance notifications', 'SYSTEM', 'HIGH'),
+        ('admin_user_registration', 'New User Registration', 'New user registration alerts for admins', 'SYSTEM', 'NORMAL'),
+        ('admin_payment_received', 'Payment Received', 'Payment received notifications for admins', 'PAYMENT', 'HIGH'),
+
+        # Owner notifications
+        ('owner_subscription_expiring', 'Subscription Expiring', 'Subscription renewal reminders for owners', 'PAYMENT', 'HIGH'),
+        ('owner_new_booking', 'New Booking', 'New booking notifications for owners', 'BOOKING', 'NORMAL'),
+        ('owner_staff_task_completed', 'Staff Task Completed', 'Task completion notifications for owners', 'STAFF', 'NORMAL'),
+        ('owner_low_inventory', 'Low Inventory Alert', 'Low inventory alerts for owners', 'INVENTORY', 'HIGH'),
+
+        # Customer notifications
+        ('customer_booking_confirmed', 'Booking Confirmed', 'Booking confirmation for customers', 'BOOKING', 'HIGH'),
+        ('customer_checkin_reminder', 'Check-in Reminder', 'Check-in reminders for customers', 'BOOKING', 'NORMAL'),
+        ('customer_payment_due', 'Payment Due', 'Payment due notifications for customers', 'PAYMENT', 'HIGH'),
+        ('customer_loyalty_points', 'Loyalty Points Earned', 'Loyalty points notifications for customers', 'CUSTOMER', 'NORMAL'),
+
+        # Staff notifications
+        ('staff_task_assigned', 'Task Assigned', 'New task assignments for staff', 'STAFF', 'HIGH'),
+        ('staff_shift_reminder', 'Shift Reminder', 'Shift schedule reminders for staff', 'STAFF', 'NORMAL'),
+        ('staff_inventory_alert', 'Inventory Alert', 'Inventory alerts for staff', 'INVENTORY', 'HIGH'),
+        ('staff_maintenance_due', 'Maintenance Due', 'Maintenance reminders for staff', 'MAINTENANCE', 'NORMAL'),
+    ]
+
+    for type_key, name, description, category, priority in notification_types:
+        cur.execute("""
+            INSERT INTO notification_types (type_key, name, description, category, priority)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (type_key) DO NOTHING
+        """, (type_key, name, description, category, priority))
+
+
+def _create_notification(user_id, user_type, notification_type_key, title, message, data=None, expires_at=None):
+    """Create a notification for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        _ensure_notification_tables(cur)
+
+        # Get notification type ID
+        cur.execute("SELECT id FROM notification_types WHERE type_key = %s AND is_active = TRUE", (notification_type_key,))
+        type_row = cur.fetchone()
+        if not type_row:
+            return None
+
+        notification_data = json.dumps(data or {})
+
+        # Create notification
+        cur.execute("""
+            INSERT INTO notifications (user_id, user_type, notification_type_id, title, message, data, expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (user_id, user_type, type_row[0], title, message, notification_data, expires_at))
+
+        notification_id = cur.fetchone()[0]
+        conn.commit()
+
+        # Trigger sending in background
+        threading.Thread(target=_send_notification_async, args=(notification_id,)).start()
+
+        return notification_id
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error creating notification: {e}")
+        return None
+    finally:
+        _safe_close(conn, cur)
+
+
+def _send_notification_async(notification_id):
+    """Send notification via enabled channels asynchronously"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get notification with user preferences
+        cur.execute("""
+            SELECT n.*, nt.email_template, nt.sms_template, nt.push_template,
+                   COALESCE(up.email_enabled, TRUE) as email_enabled,
+                   COALESCE(up.sms_enabled, FALSE) as sms_enabled,
+                   COALESCE(up.push_enabled, TRUE) as push_enabled
+            FROM notifications n
+            LEFT JOIN notification_types nt ON nt.id = n.notification_type_id
+            LEFT JOIN user_notification_preferences up ON up.notification_type_id = nt.id
+                AND up.user_id = n.user_id AND up.user_type = n.user_type
+            WHERE n.id = %s
+        """, (notification_id,))
+
+        notification = cur.fetchone()
+        if not notification:
+            return
+
+        # Send via enabled channels
+        if notification['email_enabled']:
+            _send_email_notification(notification)
+        if notification['sms_enabled']:
+            _send_sms_notification(notification)
+        if notification['push_enabled']:
+            _send_push_notification(notification)
+
+        # Mark as sent
+        cur.execute("""
+            UPDATE notifications
+            SET sent_at = NOW(), email_sent = %s, sms_sent = %s, push_sent = %s
+            WHERE id = %s
+        """, (
+            notification['email_enabled'],
+            notification['sms_enabled'],
+            notification['push_enabled'],
+            notification_id
+        ))
+
+        conn.commit()
+
+    except Exception as e:
+        print(f"Error sending notification {notification_id}: {e}")
+    finally:
+        _safe_close(conn, cur)
+
+
+def _send_email_notification(notification):
+    """Send email notification using SendGrid"""
+    try:
+        sendgrid_key = os.getenv('SENDGRID_API_KEY')
+        if not sendgrid_key:
+            return
+
+        # Get user email based on type
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if notification['user_type'] == 'admin':
+            cur.execute("SELECT email FROM admins WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'owner':
+            cur.execute("SELECT email FROM owners WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'customer':
+            cur.execute("SELECT email FROM customers WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'staff':
+            cur.execute("SELECT email FROM staff WHERE id = %s", (notification['user_id'],))
+
+        user_row = cur.fetchone()
+        if not user_row:
+            return
+
+        user_email = user_row[0]
+
+        # Send email via SendGrid
+        import requests
+        headers = {
+            'Authorization': f'Bearer {sendgrid_key}',
+            'Content-Type': 'application/json'
+        }
+
+        data = {
+            'personalizations': [{
+                'to': [{'email': user_email}],
+                'subject': notification['title']
+            }],
+            'from': {'email': 'noreply@innovahms.com', 'name': 'Innova HMS'},
+            'content': [{
+                'type': 'text/html',
+                'value': f"<p>{notification['message']}</p>"
+            }]
+        }
+
+        response = requests.post('https://api.sendgrid.com/v3/mail/send', headers=headers, json=data)
+
+        # Log the result
+        _log_notification_delivery(notification['id'], 'email',
+            'sent' if response.status_code == 202 else 'failed',
+            {'status_code': response.status_code, 'response': response.text})
+
+    except Exception as e:
+        print(f"Email send error: {e}")
+        _log_notification_delivery(notification['id'], 'email', 'failed', {'error': str(e)})
+    finally:
+        _safe_close(conn, cur)
+
+
+def _send_sms_notification(notification):
+    """Send SMS notification using Twilio"""
+    try:
+        twilio_sid = os.getenv('TWILIO_ACCOUNT_SID')
+        twilio_token = os.getenv('TWILIO_AUTH_TOKEN')
+        twilio_phone = os.getenv('TWILIO_PHONE_NUMBER')
+
+        if not all([twilio_sid, twilio_token, twilio_phone]):
+            return
+
+        # Get user phone based on type
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if notification['user_type'] == 'admin':
+            cur.execute("SELECT contact_number FROM admins WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'owner':
+            cur.execute("SELECT contact_number FROM owners WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'customer':
+            cur.execute("SELECT contact_number FROM customers WHERE id = %s", (notification['user_id'],))
+        elif notification['user_type'] == 'staff':
+            cur.execute("SELECT contact_number FROM staff WHERE id = %s", (notification['user_id'],))
+
+        user_row = cur.fetchone()
+        if not user_row or not user_row[0]:
+            return
+
+        user_phone = user_row[0]
+
+        # Send SMS via Twilio
+        from twilio.rest import Client
+        client = Client(twilio_sid, twilio_token)
+
+        message = client.messages.create(
+            body=notification['message'][:160],  # SMS length limit
+            from_=twilio_phone,
+            to=user_phone
+        )
+
+        _log_notification_delivery(notification['id'], 'sms', 'sent', {'message_sid': message.sid})
+
+    except Exception as e:
+        print(f"SMS send error: {e}")
+        _log_notification_delivery(notification['id'], 'sms', 'failed', {'error': str(e)})
+    finally:
+        _safe_close(conn, cur)
+
+
+def _send_push_notification(notification):
+    """Send push notification (placeholder for future implementation)"""
+    # For now, just log that push notification would be sent
+    _log_notification_delivery(notification['id'], 'push', 'sent', {'note': 'Push notification placeholder'})
+
+
+def _log_notification_delivery(notification_id, channel, status, response_data=None):
+    """Log notification delivery attempt"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO notification_logs (notification_id, channel, status, provider_response)
+            VALUES (%s, %s, %s, %s)
+        """, (notification_id, channel, status, json.dumps(response_data or {})))
+
+        conn.commit()
+
+    except Exception as e:
+        print(f"Error logging notification delivery: {e}")
+    finally:
+        _safe_close(conn, cur)
+
+
+def _get_user_notifications(user_id, user_type, limit=50, unread_only=False):
+    """Get notifications for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        _ensure_notification_tables(cur)
+
+        query = """
+            SELECT n.*, nt.name as type_name, nt.category, nt.priority
+            FROM notifications n
+            LEFT JOIN notification_types nt ON nt.id = n.notification_type_id
+            WHERE n.user_id = %s AND n.user_type = %s
+        """
+
+        params = [user_id, user_type]
+
+        if unread_only:
+            query += " AND n.is_read = FALSE"
+
+        query += " ORDER BY n.created_at DESC LIMIT %s"
+        params.append(limit)
+
+        cur.execute(query, params)
+        notifications = cur.fetchall()
+
+        # Convert data JSON back to dict
+        for notification in notifications:
+            if notification['data']:
+                try:
+                    notification['data'] = json.loads(notification['data'])
+                except:
+                    notification['data'] = {}
+
+        return notifications
+
+    except Exception as e:
+        print(f"Error getting notifications: {e}")
+        return []
+    finally:
+        _safe_close(conn, cur)
+
+
+def _mark_notification_read(notification_id, user_id, user_type):
+    """Mark a notification as read"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            UPDATE notifications
+            SET is_read = TRUE, read_at = NOW()
+            WHERE id = %s AND user_id = %s AND user_type = %s
+        """, (notification_id, user_id, user_type))
+
+        conn.commit()
+        return True
+
+    except Exception as e:
+        print(f"Error marking notification read: {e}")
+        return False
+    finally:
+        _safe_close(conn, cur)
+
+
+def _get_notification_preferences(user_id, user_type):
+    """Get notification preferences for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        _ensure_notification_tables(cur)
+
+        cur.execute("""
+            SELECT nt.type_key, nt.name, nt.description, nt.category,
+                   COALESCE(up.email_enabled, TRUE) as email_enabled,
+                   COALESCE(up.sms_enabled, FALSE) as sms_enabled,
+                   COALESCE(up.push_enabled, TRUE) as push_enabled
+            FROM notification_types nt
+            LEFT JOIN user_notification_preferences up ON up.notification_type_id = nt.id
+                AND up.user_id = %s AND up.user_type = %s
+            WHERE nt.is_active = TRUE
+            ORDER BY nt.category, nt.name
+        """, (user_id, user_type))
+
+        return cur.fetchall()
+
+    except Exception as e:
+        print(f"Error getting notification preferences: {e}")
+        return []
+    finally:
+        _safe_close(conn, cur)
+
+
+def _update_notification_preferences(user_id, user_type, preferences):
+    """Update notification preferences for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        _ensure_notification_tables(cur)
+
+        for pref in preferences:
+            # Get notification type ID
+            cur.execute("SELECT id FROM notification_types WHERE type_key = %s", (pref['type_key'],))
+            type_row = cur.fetchone()
+            if not type_row:
+                continue
+
+            # Upsert preference
+            cur.execute("""
+                INSERT INTO user_notification_preferences
+                (user_id, user_type, notification_type_id, email_enabled, sms_enabled, push_enabled, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (user_id, user_type, notification_type_id) DO UPDATE SET
+                    email_enabled = EXCLUDED.email_enabled,
+                    sms_enabled = EXCLUDED.sms_enabled,
+                    push_enabled = EXCLUDED.push_enabled,
+                    updated_at = NOW()
+            """, (
+                user_id, user_type, type_row[0],
+                pref.get('email_enabled', True),
+                pref.get('sms_enabled', False),
+                pref.get('push_enabled', True)
+            ))
+
+        conn.commit()
+        return True
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error updating notification preferences: {e}")
+        return False
+    finally:
+        _safe_close(conn, cur)
 
 
 # --- ADMIN ENDPOINTS ---
@@ -1380,9 +1877,18 @@ def admin_upsert_package_subscription():
         if status not in {'ACTIVE', 'PENDING', 'CANCELLED', 'EXPIRED'}:
             return jsonify({'error': 'Invalid subscription status.'}), 400
 
+        # Ensure tables exist BEFORE starting transaction
+        try:
+            temp_conn = get_db_connection()
+            temp_cur = temp_conn.cursor()
+            _ensure_membership_tables(temp_cur)
+            temp_conn.commit()
+            _safe_close(temp_conn, temp_cur)
+        except Exception as e:
+            print(f"Warning: Table setup failed: {e}")
+
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        _seed_membership_packages(cur)
 
         cur.execute("SELECT id FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
         hotel_row = cur.fetchone()
@@ -1443,7 +1949,10 @@ def admin_upsert_package_subscription():
         return jsonify({'message': 'Hotel subscription saved successfully.', 'id': updated.get('id')}), 200
     except Exception as e:
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except:
+                pass
         return jsonify({'error': str(e)}), 500
     finally:
         _safe_close(conn, cur)
@@ -1490,6 +1999,85 @@ def admin_renew_package_subscription(subscription_id):
     except Exception as e:
         if conn:
             conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/package-subscriptions', methods=['GET'])
+def admin_get_package_subscriptions():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get all subscriptions with hotel and owner details
+        cur.execute("""
+            SELECT
+                s.id,
+                s.hotel_id,
+                s.owner_id,
+                s.package_id,
+                s.billing_cycle,
+                s.amount,
+                s.status,
+                s.payment_status,
+                s.paymongo_payment_id,
+                s.last_paid_at,
+                s.starts_at,
+                s.renewal_date,
+                s.created_at,
+                s.updated_at,
+                h.hotel_name,
+                h.hotel_address,
+                o.first_name as owner_first_name,
+                o.last_name as owner_last_name,
+                o.email as owner_email,
+                p.name as package_name,
+                p.monthly_price,
+                p.annual_price
+            FROM hotel_package_subscriptions s
+            LEFT JOIN hotels h ON h.id = s.hotel_id
+            LEFT JOIN owners o ON o.id = s.owner_id
+            LEFT JOIN membership_packages p ON p.id = s.package_id
+            ORDER BY s.created_at DESC
+        """)
+
+        subscriptions = []
+        for row in cur.fetchall() or []:
+            subscriptions.append({
+                'id': row.get('id'),
+                'hotel': {
+                    'id': row.get('hotel_id'),
+                    'name': row.get('hotel_name') or 'Unknown Hotel',
+                    'address': row.get('hotel_address') or '',
+                },
+                'owner': {
+                    'id': row.get('owner_id'),
+                    'name': f"{row.get('owner_first_name') or ''} {row.get('owner_last_name') or ''}".strip() or 'Unknown Owner',
+                    'email': row.get('owner_email') or '',
+                },
+                'package': {
+                    'id': row.get('package_id'),
+                    'name': row.get('package_name') or 'Unknown Package',
+                    'monthlyPrice': _to_float(row.get('monthly_price'), 0),
+                    'annualPrice': _to_float(row.get('annual_price'), 0),
+                },
+                'billingCycle': row.get('billing_cycle') or 'MONTHLY',
+                'amount': _to_float(row.get('amount'), 0),
+                'status': row.get('status') or 'PENDING',
+                'paymentStatus': row.get('payment_status') or 'UNPAID',
+                'paymongoPaymentId': row.get('paymongo_payment_id'),
+                'lastPaidAt': _serialize_date(row.get('last_paid_at')),
+                'startsAt': _serialize_date(row.get('starts_at')),
+                'renewalDate': _serialize_date(row.get('renewal_date')),
+                'createdAt': _serialize_date(row.get('created_at')),
+                'updatedAt': _serialize_date(row.get('updated_at')),
+            })
+
+        return jsonify({'subscriptions': subscriptions}), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
         _safe_close(conn, cur)
@@ -1591,6 +2179,208 @@ def admin_reports():
             },
             'revenueChart': {'labels': chart_labels, 'values': chart_values},
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+# --- NOTIFICATION ENDPOINTS ---
+
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    """Get notifications for current user"""
+    # This would need authentication middleware to get user_id and user_type
+    # For now, return empty list
+    return jsonify({'notifications': [], 'unread_count': 0}), 200
+
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['PATCH'])
+def mark_notification_read(notification_id):
+    """Mark a notification as read"""
+    # This would need authentication middleware
+    # For now, return success
+    return jsonify({'message': 'Notification marked as read'}), 200
+
+
+@app.route('/api/notifications/preferences', methods=['GET'])
+def get_notification_preferences():
+    """Get notification preferences for current user"""
+    # This would need authentication middleware
+    # For now, return empty preferences
+    return jsonify({'preferences': []}), 200
+
+
+@app.route('/api/notifications/preferences', methods=['PUT'])
+def update_notification_preferences():
+    """Update notification preferences for current user"""
+    # This would need authentication middleware
+    data = request.get_json() or {}
+    # For now, return success
+    return jsonify({'message': 'Preferences updated successfully'}), 200
+
+
+# Admin notification endpoints
+@app.route('/api/admin/notifications', methods=['GET'])
+def admin_get_notifications():
+    """Admin: Get all notifications or filter by user"""
+    user_id = request.args.get('user_id', type=int)
+    user_type = request.args.get('user_type')
+    limit = min(request.args.get('limit', 50, type=int), 200)
+
+    if user_id and user_type:
+        notifications = _get_user_notifications(user_id, user_type, limit)
+    else:
+        # Get notifications for all users (admin view)
+        conn = None
+        cur = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            _ensure_notification_tables(cur)
+
+            cur.execute("""
+                SELECT n.*, nt.name as type_name, nt.category, nt.priority,
+                       CASE
+                           WHEN n.user_type = 'admin' THEN a.name
+                           WHEN n.user_type = 'owner' THEN o.first_name || ' ' || o.last_name
+                           WHEN n.user_type = 'customer' THEN c.first_name || ' ' || c.last_name
+                           WHEN n.user_type = 'staff' THEN s.first_name || ' ' || s.last_name
+                       END as user_name
+                FROM notifications n
+                LEFT JOIN notification_types nt ON nt.id = n.notification_type_id
+                LEFT JOIN admins a ON a.id = n.user_id AND n.user_type = 'admin'
+                LEFT JOIN owners o ON o.id = n.user_id AND n.user_type = 'owner'
+                LEFT JOIN customers c ON c.id = n.user_id AND n.user_type = 'customer'
+                LEFT JOIN staff s ON s.id = n.user_id AND n.user_type = 'staff'
+                ORDER BY n.created_at DESC
+                LIMIT %s
+            """, (limit,))
+
+            notifications = cur.fetchall()
+
+            # Convert data JSON back to dict
+            for notification in notifications:
+                if notification['data']:
+                    try:
+                        notification['data'] = json.loads(notification['data'])
+                    except:
+                        notification['data'] = {}
+
+        except Exception as e:
+            print(f"Error getting all notifications: {e}")
+            notifications = []
+        finally:
+            _safe_close(conn, cur)
+
+    return jsonify({'notifications': notifications}), 200
+
+
+@app.route('/api/admin/notifications', methods=['POST'])
+def admin_create_notification():
+    """Admin: Create a notification for a user"""
+    data = request.get_json() or {}
+
+    user_id = data.get('user_id')
+    user_type = data.get('user_type')
+    notification_type_key = data.get('type_key')
+    title = data.get('title')
+    message = data.get('message')
+    notification_data = data.get('data')
+
+    if not all([user_id, user_type, notification_type_key, title, message]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    notification_id = _create_notification(user_id, user_type, notification_type_key, title, message, notification_data)
+
+    if notification_id:
+        return jsonify({'message': 'Notification created successfully', 'id': notification_id}), 201
+    else:
+        return jsonify({'error': 'Failed to create notification'}), 500
+
+
+@app.route('/api/admin/notifications/types', methods=['GET'])
+def admin_get_notification_types():
+    """Admin: Get all notification types"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        _ensure_notification_tables(cur)
+
+        cur.execute("""
+            SELECT * FROM notification_types
+            WHERE is_active = TRUE
+            ORDER BY category, name
+        """)
+
+        types = cur.fetchall()
+        return jsonify({'types': types}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/notifications/bulk', methods=['POST'])
+def admin_bulk_notifications():
+    """Admin: Send bulk notifications to multiple users"""
+    data = request.get_json() or {}
+
+    user_filters = data.get('user_filters', {})  # e.g., {'user_type': 'owner', 'hotel_id': 1}
+    notification_type_key = data.get('type_key')
+    title = data.get('title')
+    message = data.get('message')
+    notification_data = data.get('data')
+
+    if not all([notification_type_key, title, message]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Build query to get target users
+        query = "SELECT id, '{}' as user_type FROM {}".format(
+            user_filters.get('user_type', 'owner'),
+            {'admin': 'admins', 'owner': 'owners', 'customer': 'customers', 'staff': 'staff'}.get(
+                user_filters.get('user_type', 'owner'), 'owners'
+            )
+        )
+
+        conditions = []
+        params = []
+
+        if 'hotel_id' in user_filters and user_filters['user_type'] == 'staff':
+            conditions.append("hotel_id = %s")
+            params.append(user_filters['hotel_id'])
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        cur.execute(query, params)
+        users = cur.fetchall()
+
+        created_count = 0
+        for user in users:
+            notification_id = _create_notification(
+                user['id'], user['user_type'], notification_type_key,
+                title, message, notification_data
+            )
+            if notification_id:
+                created_count += 1
+
+        return jsonify({
+            'message': f'Bulk notification sent to {created_count} users',
+            'sent_count': created_count
+        }), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
@@ -3665,6 +4455,52 @@ def owner_analytics(owner_id):
         _safe_close(conn, cur)
 
 
+# Owner notification endpoints
+@app.route('/api/owner/notifications/<int:owner_id>', methods=['GET'])
+def owner_get_notifications(owner_id):
+    """Owner: Get notifications"""
+    limit = min(request.args.get('limit', 50, type=int), 200)
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+
+    notifications = _get_user_notifications(owner_id, 'owner', limit, unread_only)
+    unread_count = len([n for n in notifications if not n['is_read']]) if not unread_only else len(notifications)
+
+    return jsonify({
+        'notifications': notifications,
+        'unread_count': unread_count
+    }), 200
+
+
+@app.route('/api/owner/notifications/<int:owner_id>/<int:notification_id>/read', methods=['PATCH'])
+def owner_mark_notification_read(owner_id, notification_id):
+    """Owner: Mark notification as read"""
+    success = _mark_notification_read(notification_id, owner_id, 'owner')
+    if success:
+        return jsonify({'message': 'Notification marked as read'}), 200
+    else:
+        return jsonify({'error': 'Failed to mark notification as read'}), 500
+
+
+@app.route('/api/owner/notifications/preferences/<int:owner_id>', methods=['GET'])
+def owner_get_notification_preferences(owner_id):
+    """Owner: Get notification preferences"""
+    preferences = _get_notification_preferences(owner_id, 'owner')
+    return jsonify({'preferences': preferences}), 200
+
+
+@app.route('/api/owner/notifications/preferences/<int:owner_id>', methods=['PUT'])
+def owner_update_notification_preferences(owner_id):
+    """Owner: Update notification preferences"""
+    data = request.get_json() or {}
+    preferences = data.get('preferences', [])
+
+    success = _update_notification_preferences(owner_id, 'owner', preferences)
+    if success:
+        return jsonify({'message': 'Preferences updated successfully'}), 200
+    else:
+        return jsonify({'error': 'Failed to update preferences'}), 500
+
+
 @app.route('/api/owner/customers/<int:owner_id>', methods=['GET'])
 def owner_customers(owner_id):
     conn = None
@@ -4053,6 +4889,53 @@ def register_staff():
             conn.rollback()
             conn.close()
         return jsonify({"error": str(e)}), 500
+
+        return jsonify({"error": str(e)}), 500
+
+# Staff notification endpoints
+@app.route('/api/staff/notifications/<int:staff_id>', methods=['GET'])
+def staff_get_notifications(staff_id):
+    """Staff: Get notifications"""
+    limit = min(request.args.get('limit', 50, type=int), 200)
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+
+    notifications = _get_user_notifications(staff_id, 'staff', limit, unread_only)
+    unread_count = len([n for n in notifications if not n['is_read']]) if not unread_only else len(notifications)
+
+    return jsonify({
+        'notifications': notifications,
+        'unread_count': unread_count
+    }), 200
+
+
+@app.route('/api/staff/notifications/<int:staff_id>/<int:notification_id>/read', methods=['PATCH'])
+def staff_mark_notification_read(staff_id, notification_id):
+    """Staff: Mark notification as read"""
+    success = _mark_notification_read(notification_id, staff_id, 'staff')
+    if success:
+        return jsonify({'message': 'Notification marked as read'}), 200
+    else:
+        return jsonify({'error': 'Failed to mark notification as read'}), 500
+
+
+@app.route('/api/staff/notifications/preferences/<int:staff_id>', methods=['GET'])
+def staff_get_notification_preferences(staff_id):
+    """Staff: Get notification preferences"""
+    preferences = _get_notification_preferences(staff_id, 'staff')
+    return jsonify({'preferences': preferences}), 200
+
+
+@app.route('/api/staff/notifications/preferences/<int:staff_id>', methods=['PUT'])
+def staff_update_notification_preferences(staff_id):
+    """Staff: Update notification preferences"""
+    data = request.get_json() or {}
+    preferences = data.get('preferences', [])
+
+    success = _update_notification_preferences(staff_id, 'staff', preferences)
+    if success:
+        return jsonify({'message': 'Preferences updated successfully'}), 200
+    else:
+        return jsonify({'error': 'Failed to update preferences'}), 500
 
 # --- ROOM MANAGEMENT ---
 
@@ -5826,6 +6709,52 @@ def get_customer_dashboard(customer_id):
         return jsonify({"error": str(e)}), 500
     finally:
         _safe_close(conn, cur)
+
+
+# Customer notification endpoints
+@app.route('/api/customer/notifications/<int:customer_id>', methods=['GET'])
+def customer_get_notifications(customer_id):
+    """Customer: Get notifications"""
+    limit = min(request.args.get('limit', 50, type=int), 200)
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+
+    notifications = _get_user_notifications(customer_id, 'customer', limit, unread_only)
+    unread_count = len([n for n in notifications if not n['is_read']]) if not unread_only else len(notifications)
+
+    return jsonify({
+        'notifications': notifications,
+        'unread_count': unread_count
+    }), 200
+
+
+@app.route('/api/customer/notifications/<int:customer_id>/<int:notification_id>/read', methods=['PATCH'])
+def customer_mark_notification_read(customer_id, notification_id):
+    """Customer: Mark notification as read"""
+    success = _mark_notification_read(notification_id, customer_id, 'customer')
+    if success:
+        return jsonify({'message': 'Notification marked as read'}), 200
+    else:
+        return jsonify({'error': 'Failed to mark notification as read'}), 500
+
+
+@app.route('/api/customer/notifications/preferences/<int:customer_id>', methods=['GET'])
+def customer_get_notification_preferences(customer_id):
+    """Customer: Get notification preferences"""
+    preferences = _get_notification_preferences(customer_id, 'customer')
+    return jsonify({'preferences': preferences}), 200
+
+
+@app.route('/api/customer/notifications/preferences/<int:customer_id>', methods=['PUT'])
+def customer_update_notification_preferences(customer_id):
+    """Customer: Update notification preferences"""
+    data = request.get_json() or {}
+    preferences = data.get('preferences', [])
+
+    success = _update_notification_preferences(customer_id, 'customer', preferences)
+    if success:
+        return jsonify({'message': 'Preferences updated successfully'}), 200
+    else:
+        return jsonify({'error': 'Failed to update preferences'}), 500
 
 
 @app.route('/api/innova/summary/<int:customer_id>', methods=['GET'])

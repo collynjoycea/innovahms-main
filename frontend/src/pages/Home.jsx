@@ -1,8 +1,7 @@
 ﻿import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Star } from "lucide-react";
-import GuestReviewsSection from "../components/GuestReviewsSection";
+import { MapPin, Star, CalendarDays, Users, Sparkles, ArrowRight } from "lucide-react";
 import resolveImg from "../utils/resolveImg";
 
 const fallbackHotelCards = [
@@ -98,6 +97,10 @@ export default function LandingPage() {
       window.removeEventListener("storage", sync);
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
 
   useEffect(() => {
     // Clear any existing interval first
@@ -296,7 +299,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <main className="relative min-h-screen w-full bg-[#f6f1e5] dark:bg-[#0d0c0a] font-sans selection:bg-[#bf9b30]/30 overflow-x-hidden text-[#1a160d] dark:text-[#e5e1d8] transition-colors duration-300">
+    <main className={`relative min-h-screen w-full ${isDark ? "dark" : ""} bg-white dark:bg-[#0d0c0a] font-sans selection:bg-[#bf9b30]/30 overflow-x-hidden text-[#1a160d] dark:text-[#e5e1d8] transition-colors duration-300`}>
       
       <section id="hero" className="relative h-screen w-full overflow-hidden shadow-2xl">
         <AnimatePresence mode="wait">
@@ -331,111 +334,119 @@ export default function LandingPage() {
         `}</style>
 
         <div className="relative z-20 mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-6 text-center">
-          
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="mb-6"
+            className="mb-5"
           >
-            <h2 className="text-[10px] font-bold uppercase tracking-[0.8em] text-[#bf9b30]">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.44em] text-[#f7e8b2] opacity-90">
               The Evolution of Travel
             </h2>
-            <h1 className="mt-4 text-7xl md:text-[10rem] font-black tracking-tighter leading-none bg-gradient-to-b from-white via-[#f5f1da] to-[#bf9b30] bg-clip-text text-transparent drop-shadow-2xl">
-              INNOVA<span className="text-[#bf9b30]">.</span>HMS
+            <h1 className="mt-4 text-5xl md:text-6xl xl:text-[5.8rem] font-black leading-none tracking-tight text-white drop-shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              INNOVA<span className="text-[#f7d881]">.</span>HMS
             </h1>
           </motion.div>
 
-          <div className="max-w-2xl">
-            <motion.p 
+          <div className="max-w-3xl">
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4, duration: 0.8 }}
-              className="mt-2 text-[12px] md:text-sm leading-relaxed tracking-[0.1em] text-white/85 font-light drop-shadow-md"
+              className="mx-auto mt-2 text-sm leading-relaxed tracking-[0.02em] text-white/90 font-light drop-shadow-md"
             >
-              INNOVA-HMS is designed to provide guests with a smarter, faster, and more convenient hotel experience. 
-              Through our intelligent management platform, explore rooms, make reservations, and manage 
-              your sanctuary anywhere in the world.
+              INNOVA-HMS is designed to provide guests with a smarter, faster, and more convenient hotel experience.
+              Through our intelligent management platform, explore rooms, make reservations, and manage your sanctuary anywhere in the world.
             </motion.p>
           </div>
 
-          {/* HERO AVAILABILITY CONSOLE */}
-          <motion.div 
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55, duration: 0.8 }}
+            className="mt-8 flex flex-wrap justify-center gap-3"
+          >
+            {[
+              "Smart booking",
+              "Live availability",
+              "Instant confirmation",
+            ].map((label) => (
+              <span key={label} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-white/90 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+                <Sparkles size={12} className="text-[#f1d27b]" />
+                {label}
+              </span>
+            ))}
+          </motion.div>
+
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className={`mt-16 w-full max-w-4xl overflow-hidden rounded-[1.4rem] border backdrop-blur-xl shadow-[0_26px_56px_rgba(0,0,0,0.4)] transition-all duration-300 ${
-              isDark
-                ? "border-[#bf9b30]/40 bg-black/70"
-                : "border-white/60 bg-white/80"
+            transition={{ delay: 0.7, duration: 0.8 }}
+            className={`mt-16 w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-white/20 backdrop-blur-2xl shadow-[0_30px_80px_rgba(0,0,0,0.24)] transition-all duration-300 ${
+              isDark ? "bg-black/70" : "bg-white/10"
             }`}
           >
-            <div className="flex flex-col md:flex-row items-stretch">
-              <div className={`flex-1 px-7 py-5 border-b md:border-b-0 md:border-r text-left ${
-                isDark ? "border-[#bf9b30]/20" : "border-[#bf9b30]/25"
-              }`}>
-                <span className="block text-[10px] uppercase tracking-[0.26em] text-[#bf9b30] font-black mb-2">Check Availability</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={heroCheckIn}
-                    onChange={(e) => setHeroCheckIn(e.target.value)}
-                    className={`h-9 w-full rounded-md border px-2 text-[13px] font-semibold outline-none focus:border-[#bf9b30] transition-colors ${
-                      isDark
-                        ? "border-[#bf9b30]/20 bg-white/10 text-[#f0e6d2] placeholder:text-white/30"
-                        : "border-[#bf9b30]/30 bg-white/70 text-[#1a160d] placeholder:text-[#1a160d]/30"
-                    }`}
-                  />
-                  <span className={`text-xs font-bold flex-shrink-0 ${isDark ? "text-[#ab9870]" : "text-[#bf9b30]"}`}>—</span>
-                  <input
-                    type="date"
-                    value={heroCheckOut}
-                    onChange={(e) => setHeroCheckOut(e.target.value)}
-                    className={`h-9 w-full rounded-md border px-2 text-[13px] font-semibold outline-none focus:border-[#bf9b30] transition-colors ${
-                      isDark
-                        ? "border-[#bf9b30]/20 bg-white/10 text-[#f0e6d2] placeholder:text-white/30"
-                        : "border-[#bf9b30]/30 bg-white/70 text-[#1a160d] placeholder:text-[#1a160d]/30"
-                    }`}
-                  />
+            <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr_0.5fr] gap-3 p-5 sm:p-6">
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/10 p-4 backdrop-blur-xl shadow-inner">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Check-in</p>
+                    <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
+                      <CalendarDays size={16} className="text-[#f7db8b]" />
+                      <span>{heroCheckIn}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Check-out</p>
+                    <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
+                      <CalendarDays size={16} className="text-[#f7db8b]" />
+                      <span>{heroCheckOut}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 px-7 py-5 text-left">
-                <span className="block text-[10px] uppercase tracking-[0.26em] text-[#bf9b30] font-black mb-2">Guest Occupancy</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={heroGuests}
-                    onChange={(e) => setHeroGuests(Math.max(1, Number(e.target.value) || 1))}
-                    className={`h-9 rounded-md border px-3 text-[13px] font-semibold outline-none focus:border-[#bf9b30] transition-colors ${
-                      isDark
-                        ? "border-[#bf9b30]/20 bg-white/10 text-[#f0e6d2]"
-                        : "border-[#bf9b30]/30 bg-white/70 text-[#1a160d]"
-                    }`}
-                  />
-                  <select
-                    value={heroRoomType}
-                    onChange={(e) => setHeroRoomType(e.target.value)}
-                    className={`h-9 rounded-md border px-3 text-[13px] font-semibold outline-none focus:border-[#bf9b30] transition-colors ${
-                      isDark
-                        ? "border-[#bf9b30]/20 bg-[#1a1208] text-[#f0e6d2]"
-                        : "border-[#bf9b30]/30 bg-white/70 text-[#1a160d]"
-                    }`}
-                  >
-                    <option value="Any">Any Room</option>
-                    {roomTypeOptions.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/10 p-4 backdrop-blur-xl shadow-inner">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Guests</p>
+                    <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
+                      <Users size={16} className="text-[#f7db8b]" />
+                      <input
+                        type="number"
+                        min="1"
+                        max="12"
+                        value={heroGuests}
+                        onChange={(e) => setHeroGuests(Math.max(1, Number(e.target.value) || 1))}
+                        className="w-full bg-transparent text-[13px] font-semibold text-white/90 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Room type</p>
+                    <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
+                      <Sparkles size={16} className="text-[#f7db8b]" />
+                      <select
+                        value={heroRoomType}
+                        onChange={(e) => setHeroRoomType(e.target.value)}
+                        className="w-full bg-transparent text-[13px] font-semibold text-white/90 outline-none"
+                      >
+                        <option value="Any">Any Room</option>
+                        {roomTypeOptions.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={handleHeroAvailabilitySearch}
-                className="m-2 min-h-14 px-8 md:px-12 rounded-xl bg-[#bf9b30] text-[11px] font-black uppercase tracking-[0.22em] text-[#0d0c0a] hover:bg-[#d8b454] hover:scale-[1.01] active:scale-95 transition-all shadow-lg"
+                className="flex min-h-[88px] items-center justify-center rounded-[1.5rem] bg-[#f7d881] px-8 py-4 text-[12px] font-black uppercase tracking-[0.24em] text-[#0d0c0a] shadow-[0_18px_40px_rgba(0,0,0,0.22)] transition-all hover:scale-[1.01]"
               >
-                Initiate Search
+                Search Rooms
               </button>
             </div>
           </motion.div>
@@ -503,8 +514,7 @@ export default function LandingPage() {
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.1 }}
         viewport={{ once: true }}
-        className="group bg-white/95 dark:bg-[#14130f] border border-[#e6ddca] dark:border-[#bf9b30]/15 rounded-2xl overflow-hidden shadow-[0_24px_46px_rgba(191,155,48,0.15)] dark:shadow-xl hover:border-[#bf9b30]/40 transition-all duration-500"
-      >
+       className="group overflow-hidden rounded-[2rem] border border-[#e7dcc4] bg-white shadow-[0_24px_50px_rgba(69,40,10,0.12)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_32px_62px_rgba(191,155,48,0.18)] dark:border-[#3a2b18] dark:bg-[#11100c] dark:shadow-[0_24px_46px_rgba(0,0,0,0.34)]"  >
         <div className="relative h-48 overflow-hidden">
           <img
             src={hotel.img}
@@ -581,7 +591,7 @@ export default function LandingPage() {
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.1 }}
         viewport={{ once: true }}
-        className="group bg-white/95 dark:bg-[#14130f] border border-[#e6ddca] dark:border-[#bf9b30]/15 rounded-2xl overflow-hidden shadow-[0_24px_46px_rgba(191,155,48,0.15)] dark:shadow-xl hover:border-[#bf9b30]/40 transition-all duration-500"
+        className="group overflow-hidden rounded-[1.8rem] border border-[#e9dec6] bg-white/95 shadow-[0_22px_44px_rgba(191,155,48,0.12)] transition-all duration-500 hover:-translate-y-0.5 hover:shadow-[0_28px_56px_rgba(191,155,48,0.18)] dark:border-[#3a2b18] dark:bg-[#151310] dark:shadow-[0_24px_48px_rgba(0,0,0,0.35)]"
       >
         <Link to={`/hoteldetail/${hotel.id}`} className="block">
           <div className="relative h-40 overflow-hidden">
@@ -649,283 +659,6 @@ export default function LandingPage() {
   </div>
 </section>
 
-{/* --- FACILITIES / AMENITIES SECTION --- */}
-<section id="suites" className="relative pt-8 pb-16 px-6 bg-[#f6f1e5] dark:bg-[#0d0c0a] max-w-7xl mx-auto overflow-hidden scroll-mt-24 transition-colors duration-300">
-  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-    <motion.div
-      initial={{ opacity: 0, x: -30 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true }}
-      className="max-w-xl text-left"
-    >
-      <p className="font-serif italic text-[#bf9b30] text-xl md:text-2xl mb-1 tracking-wide">
-        Facilities
-      </p>
-      <h2 className="text-3xl md:text-4xl font-bold text-[#1a160d] dark:text-white tracking-tight uppercase mb-2">
-        Our <span className="text-[#bf9b30]">Amenities</span>
-      </h2>
-      <p className="text-[#7d725f] dark:text-gray-400 text-xs md:text-sm font-light leading-relaxed max-w-md">
-        Premium facilities designed to enhance every aspect of your journey.
-      </p>
-    </motion.div>
-
-    <div className="flex items-center gap-3">
-      <Link
-        to="/facilities"
-        className="text-[#bf9b30] text-[10px] font-black uppercase tracking-widest hover:underline"
-      >
-        Explore All Facilities
-      </Link>
-    </div>
-  </div>
-
-  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-
-    {/* HIGHLIGHT BOX (Now Clickable) */}
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      className="lg:col-span-8 relative group overflow-hidden rounded-xl border border-[#e6ddca] dark:border-white/5 bg-white/95 dark:bg-[#14130f] h-[580px] shadow-[0_22px_46px_rgba(191,155,48,0.14)] dark:shadow-none"
-    >
-      <Link to={suitesSectionPreview} className="flex flex-col h-full w-full">
-        <div className="relative h-[65%] overflow-hidden">
-          <img
-            src="/images/signup-img.png"
-            alt="Main Facility"
-            className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-all duration-1000 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#efe8d7] dark:from-[#14130f] via-transparent to-transparent" />
-          <div className="absolute top-4 left-4 bg-[#bf9b30]/10 backdrop-blur-md border border-[#bf9b30]/30 px-3 py-1 rounded-full flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#bf9b30] animate-pulse" />
-            <span className="text-[9px] font-bold text-[#bf9b30] uppercase tracking-widest">Presidential Suite</span>
-          </div>
-        </div>
-
-        <div className="p-6 flex flex-col justify-between flex-grow">
-          <div>
-            <h3 className="text-2xl md:text-3xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter mb-2 group-hover:text-[#bf9b30] transition-colors">
-              The Imperial <span className="text-[#bf9b30]">Sanctum</span>
-            </h3>
-            <p className="text-[10px] md:text-xs text-[#756a58] dark:text-gray-400 font-light leading-relaxed max-w-xl line-clamp-2">
-              A masterpiece of luxury living spanning 180 sqm. Complete with a private terrace, jacuzzi, personal butler, and panoramic city views.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-8 mt-4 pt-4 border-t border-[#ece3d1] dark:border-white/5">
-            {[
-              { label: "SQM", val: "180" },
-              { label: "GUESTS", val: "4" },
-              { label: "PER NIGHT", val: "18k" },
-              { label: "RATING", val: "4.9" }
-            ].map((spec, i) => (
-              <div key={i} className="flex flex-col">
-                <span className="text-lg font-black text-[#bf9b30] leading-none">{spec.val}</span>
-                <span className="text-[8px] text-[#746957] dark:text-gray-500 font-bold uppercase tracking-tighter mt-1">{spec.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-
-    {/* SIDE CARDS (Now Clickable) */}
-    <div className="lg:col-span-4 flex flex-col gap-4">
-      {featuredAmenities.map((item, i) => (
-        <motion.div
-          key={item.id}
-          initial={{ opacity: 0, x: 20 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.1 }}
-          className="relative group flex-1 overflow-hidden rounded-lg h-[102px] border border-[#e8decb] dark:border-white/5 shadow-[0_16px_34px_rgba(191,155,48,0.1)] dark:shadow-none"
-        >
-          <Link
-            to={buildTourTarget({
-              id: item.id,
-              roomName: item.title,
-              previewImage: item.img,
-              backToPath: "/#suites",
-              backToLabel: "Back to Suites",
-            })}
-            className="block w-full h-full"
-          >
-            <img
-              src={item.img}
-              alt={item.title}
-              className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-all duration-600"
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
-            <div className="absolute inset-0 flex flex-col justify-end p-5">
-              <span className="text-[8px] text-[#bf9b30] font-black uppercase tracking-[0.3em] mb-1">{item.label}</span>
-              <h4 className="text-md font-bold text-[#1a160d] dark:text-[#e5e1d8] uppercase tracking-wide group-hover:text-[#bf9b30] transition-colors">
-                {item.title}
-              </h4>
-              <p className="text-[9px] text-[#756a58] dark:text-gray-500 font-light mt-0.5 leading-tight line-clamp-2">
-                {item.desc}
-              </p>
-              <span className="mt-2 inline-flex w-fit items-center rounded-full border border-[#bf9b30]/35 bg-white/70 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.22em] text-[#8a6f2a] shadow-sm dark:bg-[#14130f]/80 dark:text-[#bf9b30]">
-                360 Tour
-              </span>
-            </div>
-          </Link>
-        </motion.div>
-      ))}
-    </div>
-  </div>
-</section>
-
-{/* --- PROMOTIONS SECTION --- */}
-<section id="promotions" className="relative pt-10 pb-20 px-6 max-w-7xl mx-auto scroll-mt-24">
-  <div className="mb-12">
-    <p className="text-[10px] font-bold uppercase tracking-[0.5em] text-[#bf9b30] mb-2"></p>
-    <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
-      Current <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Promotions</span>
-    </h2>
-    <p className="text-[#7a6f5e] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
-      Personalized deals crafted by our AI system based on your preferences and stay history.
-    </p>
-  </div>
-
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-    {promotionCards.map((offer, idx) => (
-      <motion.div
-        key={idx}
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        transition={{ delay: idx * 0.1 }}
-        viewport={{ once: true }}
-        className="relative group bg-white/95 dark:bg-[#14130f] border border-[#e7dec9] dark:border-[#bf9b30]/10 rounded-2xl p-8 flex flex-col h-full hover:border-[#bf9b30]/40 transition-all duration-500 overflow-hidden shadow-[0_22px_42px_rgba(191,155,48,0.13)] dark:shadow-none"
-      >
-        {/* Subtle Glow Effect */}
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#bf9b30]/5 blur-[80px] group-hover:bg-[#bf9b30]/10 transition-all" />
-
-        {/* Icon & Badge */}
-        <div className="flex flex-col gap-4 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-[#efe7d5] dark:bg-[#22211c] flex items-center justify-center text-lg border border-[#e3d9c4] dark:border-white/5 shadow-inner">
-            {offer.icon}
-          </div>
-          <span className="w-fit px-3 py-1 rounded-full border border-[#bf9b30]/30 bg-[#bf9b30]/5 text-[9px] font-black text-[#bf9b30] uppercase tracking-widest">
-            {offer.badge}
-          </span>
-        </div>
-
-        {/* Content */}
-        <div className="flex-grow">
-          <h3 className="text-xl font-black text-[#1a160d] dark:text-white uppercase tracking-tight mb-3 group-hover:text-[#bf9b30] transition-colors">
-            {offer.title}
-          </h3>
-          <p className="text-[11px] text-[#766b59] dark:text-gray-500 font-light leading-relaxed mb-8">
-            {offer.desc}
-          </p>
-        </div>
-
-        {/* Promo Value */}
-        <div className="mb-8">
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-black text-[#bf9b30] tracking-tighter">{offer.promo}</span>
-            <span className="text-[10px] font-bold text-[#8b806d] dark:text-gray-400 uppercase tracking-widest">{offer.sub}</span>
-          </div>
-          <p className="text-[9px] text-[#877c68] dark:text-gray-600 mt-2 flex items-center gap-1">
-              {offer.expiry}
-          </p>
-        </div>
-
-        {/* Action Button */}
-        <button
-          type="button"
-          onClick={handlePromotionAccess}
-          className="w-full py-3 bg-[#bf9b30] text-[#0d0c0a] text-[10px] font-black uppercase tracking-[0.2em] rounded-lg hover:bg-[#d4ac37] active:scale-[0.98] transition-all shadow-lg shadow-[#bf9b30]/10"
-        >
-          {sessionUser?.id ? "Open Privileged Offer" : "Sign In to Claim"}
-        </button>
-      </motion.div>
-    ))}
-  </div>
-</section>
-
-{/* --- AI CONCIERGE SECTION --- */}
-<section id="ai-concierge" className="relative pt-10 pb-20 px-6 max-w-7xl mx-auto scroll-mt-24">
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-    
-    {/* LEFT SIDE: Heading & Features */}
-    <motion.div 
-      initial={{ opacity: 0, x: -30 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true }}
-    >
-      <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Powered by Rasa AI</p>
-      <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none mb-6">
-        AI <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Guest Assistant</span>
-      </h2>
-      <p className="text-[#7a6f5d] dark:text-gray-400 text-sm font-light leading-relaxed max-w-md mb-10">
-        Our intelligent assistant is available 24/7 to help with bookings, recommendations, and any inquiry you may have.
-      </p>
-
-      {/* Features List */}
-      <div className="space-y-4">
-        {[
-          { title: "Smart Room Recommendations", desc: "AI analyzes your preferences and history to suggest the perfect room.", icon: "AI" },
-          { title: "Interactive Hotel Map", desc: "Explore hotel grounds and nearby attractions via OpenStreetMap.", icon: "MAP" },
-          { title: "Virtual 360 Room Tours", desc: "Experience any room before booking with immersive virtual tours.", icon: "360" },
-          { title: "Personalized Notifications", desc: "Receive alerts for booking confirmations, promos, and stay updates.", icon: "AL" }
-        ].map((feat, i) => (
-          <div key={i} className="flex items-start gap-4 p-4 rounded-xl border border-[#e8ddc8] dark:border-white/5 bg-white/95 dark:bg-[#14130f] hover:border-[#bf9b30]/30 transition-all group shadow-[0_14px_30px_rgba(191,155,48,0.11)] dark:shadow-none">
-            <div className="w-10 h-10 rounded-lg bg-[#efe7d5] dark:bg-[#1a1915] flex items-center justify-center text-lg border border-[#e5dbc5] dark:border-white/5 shadow-inner group-hover:bg-[#bf9b30]/10 transition-colors">
-              {feat.icon}
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-[#1a160d] dark:text-white uppercase tracking-wide">{feat.title}</h4>
-              <p className="text-[11px] text-[#786d5b] dark:text-gray-500 font-light mt-0.5">{feat.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </motion.div>
-    {/* RIGHT SIDE: Terms Details */}
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      className="relative bg-white/95 dark:bg-[#14130f] rounded-3xl border border-[#e6dcc7] dark:border-[#bf9b30]/20 shadow-[0_25px_46px_rgba(191,155,48,0.15)] dark:shadow-2xl overflow-hidden p-8 md:p-10"
-    >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(191,155,48,0.14),transparent_48%)]" />
-      <div className="relative z-10">
-        <div className="w-14 h-14 rounded-2xl bg-[#bf9b30]/15 border border-[#bf9b30]/30 flex items-center justify-center mb-6">
-          <span className="text-2xl">AI</span>
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-[0.32em] text-[#bf9b30] mb-2">
-          AI Concierge
-        </p>
-        <h3 className="text-3xl md:text-4xl font-black text-[#1a160d] dark:text-white uppercase tracking-tight leading-tight">
-          View Service <span className="text-[#bf9b30]">Details</span>
-        </h3>
-        <p className="mt-4 text-sm text-[#6f6452] dark:text-gray-400 leading-relaxed">
-          Chat is now handled by the floating AI Assisted widget. For policies, usage terms, and service coverage, open Terms of Service.
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate("/terms-of-service")}
-          className="mt-8 inline-flex items-center justify-center rounded-xl bg-[#bf9b30] px-7 py-3 text-[10px] font-black uppercase tracking-[0.26em] text-[#0d0c0a] hover:bg-[#d8b454] transition-all"
-        >
-          View Details
-        </button>
-        <div className="mt-6 border-t border-[#e8decb] dark:border-white/10 pt-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-[#807460] dark:text-gray-500 font-bold">
-            Ai Concierge
-          </p>
-          <p className="text-xs text-[#6f6452] dark:text-gray-400 mt-1"></p>
-        </div>
-      </div>
-    </motion.div>
-
-  </div>
-</section>
-
-{/* --- GUEST REVIEWS SECTION --- */}
-<section id="guest-reviews" className="relative pt-10 pb-20 px-6 max-w-7xl mx-auto overflow-hidden">
-  <GuestReviewsSection sessionUser={sessionUser} />
-</section>
     </main>
   );
 }

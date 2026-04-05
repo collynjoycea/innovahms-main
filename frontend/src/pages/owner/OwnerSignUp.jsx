@@ -53,10 +53,7 @@ export default function OwnerSignUp() {
         className="w-full max-w-5xl bg-[#14130f] rounded-3xl shadow-2xl border border-[#bf9b30]/10 overflow-hidden flex flex-col md:flex-row min-h-[600px]"
       >
         <div className="md:w-5/12 relative overflow-hidden bg-black flex flex-col justify-between p-10">
-          <div
-            className="absolute inset-0 z-0 bg-cover bg-center opacity-40 grayscale-[50%]"
-            style={{ backgroundImage: 'url("/images/suite-luxury.jpg")' }}
-          />
+          <div className="owner-signup-hero-image absolute inset-0 z-0 bg-cover bg-center opacity-40 grayscale-[50%]" />
           <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#0d0c0a] via-transparent to-transparent" />
 
           <div className="relative z-20">
@@ -199,6 +196,14 @@ export default function OwnerSignUp() {
           </form>
         </div>
       </motion.div>
+      <style>{`
+        .owner-signup-hero-image {
+          background-image: url("/images/suite-luxury.jpg");
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+        }
+      `}</style>
     </div>
   );
 }

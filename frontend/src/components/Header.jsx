@@ -1,47 +1,60 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  User, LogOut, Settings, ChevronDown,
-  Sun, Moon, Building2, Users, ShieldCheck,
-  Briefcase, Crown, LayoutDashboard
+  BookOpen,
+  Briefcase,
+  Building2,
+  ChevronDown,
+  Crown,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sun,
+  User,
+  Users,
+  X,
 } from "lucide-react";
 
 const NAV_LINKS = [
-  { name: "Hotels",       id: "hotels" },
-  { name: "Rooms",        id: "rooms" },
-  { name: "Suites",       id: "suites" },
-  { name: "Promotions",   id: "promotions" },
-  { name: "Reviews",      id: "guest-reviews" },
-  { name: "AI Concierge", id: "ai-concierge" },
+  { label: "Home", path: "/" },
+  { label: "Features", path: "/features" },
+  { label: "About Us", path: "/about" },
+  { label: "Privileges", path: "/privileges" },
+  { label: "Vision Suites", path: "/vision-suites" },
 ];
 
 export default function Header() {
-  const [user, setUser]                           = useState(null);
+  const [user, setUser] = useState(null);
   const [membershipSummary, setMembershipSummary] = useState(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
-  const [openDrop, setOpenDrop]                   = useState(null); // "user" | "login" | "signup" | null
-  const [isDarkMode, setIsDarkMode]               = useState(false);
+  const [openDrop, setOpenDrop] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
-  const dropRef  = useRef(null);
+  const dropRef = useRef(null);
 
   const closeAll = () => setOpenDrop(null);
-  const toggle   = (name) => setOpenDrop((prev) => (prev === name ? null : name));
+  const toggle = (name) => setOpenDrop((prev) => (prev === name ? null : name));
 
-  // ── CLICK OUTSIDE ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) closeAll();
+    const handler = (event) => {
+      if (dropRef.current && !dropRef.current.contains(event.target)) {
+        closeAll();
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── CLOSE ON ROUTE CHANGE ──────────────────────────────────────────────────
-  useEffect(() => { closeAll(); }, [location.pathname, location.search]);
+  useEffect(() => {
+    closeAll();
+  }, [location.pathname, location.search]);
 
-  // ── THEME ──────────────────────────────────────────────────────────────────
   const syncTheme = (theme) => {
     const dark = theme === "dark";
     document.documentElement.classList.toggle("dark", dark);
@@ -54,10 +67,16 @@ export default function Header() {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     syncTheme(saved || (prefersDark ? "dark" : "light"));
 
-    const onStorage = (e) => { if (!e.key || e.key === "theme") syncTheme(localStorage.getItem("theme") || "light"); };
-    const onCustom  = (e) => syncTheme(e?.detail?.theme || localStorage.getItem("theme") || "light");
+    const onStorage = (event) => {
+      if (!event.key || event.key === "theme") {
+        syncTheme(localStorage.getItem("theme") || "light");
+      }
+    };
+    const onCustom = (event) => syncTheme(event?.detail?.theme || localStorage.getItem("theme") || "light");
+
     window.addEventListener("storage", onStorage);
     window.addEventListener("themeChanged", onCustom);
+
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("themeChanged", onCustom);
@@ -71,29 +90,45 @@ export default function Header() {
     window.dispatchEvent(new CustomEvent("themeChanged", { detail: { theme: next } }));
   };
 
-  // ── USER ───────────────────────────────────────────────────────────────────
-  const loadUser = () => {
-    const staff    = localStorage.getItem("staffUser");
-    const customer = localStorage.getItem("user");
-    try {
-      if (staff) {
-        const p = JSON.parse(staff);
-        const n = p?.user && typeof p.user === "object" ? p.user : p;
-        setUser({ ...n, displayName: n.firstName || n.first_name || n.name || "Staff", isStaff: true, role: n.role || "Staff" });
-      } else if (customer) {
-        const p = JSON.parse(customer);
-        const n = p?.user && typeof p.user === "object" ? p.user : p;
-        setUser({ ...n, displayName: n.firstName || n.first_name || n.name || "User", isStaff: false });
-      } else {
+  useEffect(() => {
+    const loadUser = () => {
+      const staffRaw = localStorage.getItem("staffUser");
+      const customerRaw = localStorage.getItem("user") || localStorage.getItem("customerSession");
+
+      try {
+        if (staffRaw) {
+          const parsed = JSON.parse(staffRaw);
+          const normalized = parsed?.user && typeof parsed.user === "object" ? parsed.user : parsed;
+          setUser({
+            ...normalized,
+            displayName: normalized.firstName || normalized.first_name || normalized.name || "Staff",
+            isStaff: true,
+            role: normalized.role || "Staff",
+          });
+          return;
+        }
+
+        if (customerRaw) {
+          const parsed = JSON.parse(customerRaw);
+          const normalized = parsed?.user && typeof parsed.user === "object" ? parsed.user : parsed;
+          setUser({
+            ...normalized,
+            displayName: normalized.firstName || normalized.first_name || normalized.name || "Guest",
+            isStaff: false,
+          });
+          return;
+        }
+
+        setUser(null);
+      } catch {
         setUser(null);
       }
-    } catch { setUser(null); }
-  };
+    };
 
-  useEffect(() => {
     loadUser();
     window.addEventListener("userUpdated", loadUser);
     window.addEventListener("storage", loadUser);
+
     return () => {
       window.removeEventListener("userUpdated", loadUser);
       window.removeEventListener("storage", loadUser);
@@ -102,284 +137,401 @@ export default function Header() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
-      if (!user || user.isStaff) { setMembershipSummary(null); return; }
+
+    const loadMembership = async () => {
+      if (!user || user.isStaff) {
+        setMembershipSummary(null);
+        return;
+      }
+
       const rawId = user.id || user.customer_id || user.user_id;
-      if (!rawId) { setMembershipSummary(null); return; }
+      if (!rawId) {
+        setMembershipSummary(null);
+        return;
+      }
+
       try {
         setMembershipLoading(true);
-        const res  = await fetch(`/api/innova/summary/${String(rawId).split(":")[0]}`);
-        const data = await res.json().catch(() => ({}));
-        if (mounted && res.ok) setMembershipSummary(data);
-      } catch { if (mounted) setMembershipSummary(null); }
-      finally  { if (mounted) setMembershipLoading(false); }
+        const response = await fetch(`/api/innova/summary/${String(rawId).split(":")[0]}`);
+        const payload = await response.json().catch(() => ({}));
+        if (mounted && response.ok) {
+          setMembershipSummary(payload);
+        }
+      } catch {
+        if (mounted) setMembershipSummary(null);
+      } finally {
+        if (mounted) setMembershipLoading(false);
+      }
     };
-    load();
-    return () => { mounted = false; };
+
+    loadMembership();
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
-  // ── LOGOUT ─────────────────────────────────────────────────────────────────
+  const go = (path) => {
+    closeAll();
+    navigate(path);
+  };
+
+  const handleLogoClick = (event) => {
+    event.preventDefault();
+    closeAll();
+    if (location.pathname !== "/" || location.hash) {
+      navigate("/");
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleLogout = () => {
-    ["user","customerSession","staffUser","staffSession","hrSession","adminSession","ownerSession"]
-      .forEach((k) => localStorage.removeItem(k));
+    ["user", "customerSession", "staffUser", "staffSession", "hrSession", "adminSession", "ownerSession"]
+      .forEach((key) => localStorage.removeItem(key));
     setUser(null);
     closeAll();
     window.dispatchEvent(new Event("userUpdated"));
     navigate("/");
   };
 
-  // ── LOGO ───────────────────────────────────────────────────────────────────
-  const handleLogoClick = (e) => {
-    e.preventDefault();
-    closeAll();
-    if (location.pathname !== "/" || location.hash) navigate("/");
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 120);
+  const handleFindRoom = () => go("/vision-suites");
+
+  const handleBookings = () => {
+    if (user?.isStaff) {
+      go("/staff/dashboard");
+      return;
+    }
+    if (user) {
+      go("/customer/bookings");
+      return;
+    }
+    go("/login");
   };
 
-  // ── SCROLL TO SECTION ──────────────────────────────────────────────────────
-  const scrollTo = (id) => {
-    closeAll();
-    if (location.pathname !== "/") { navigate(`/#${id}`); return; }
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  // ── NAV HELPER ─────────────────────────────────────────────────────────────
-  const go = (path) => { closeAll(); navigate(path); };
-
-  const tier   = membershipSummary?.tier   || "STANDARD";
+  const isActiveRoute = (path) => (path === "/" ? location.pathname === "/" : location.pathname.startsWith(path));
+  const tier = membershipSummary?.tier || "STANDARD";
   const points = Number(membershipSummary?.points || 0);
 
+  const surfaceClass = isDarkMode
+    ? "border-white/10 bg-[#0d0c0a]/92 text-[#ece4d2] shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+    : "border-[#e7dcc8] bg-[#fffdfa]/96 text-[#241c12] shadow-[0_12px_35px_rgba(120,92,27,0.10)]";
+
+  const navShellClass = isDarkMode
+    ? "border-white/10 bg-white/5"
+    : "border-[#ddd5c8] bg-[#fbf9f4]";
+
+  const ghostButtonClass = isDarkMode
+    ? "border-white/10 bg-white/5 text-[#e8ddc2] hover:bg-white/10"
+    : "border-[#e5dccb] bg-white text-[#5b4b2c] hover:bg-[#f9f4e9]";
+
+  const iconButtonClass = isDarkMode
+    ? "border-white/10 bg-white/5 text-[#e8ddc2] hover:bg-white/10"
+    : "border-[#e5dccb] bg-white text-[#5d4d30] hover:bg-[#fbf6ec]";
+
+  const menuPanelClass = isDarkMode ? "border-white/10 bg-[#12100d]" : "border-[#e5dccb] bg-white";
+
   return (
-    <header className={`fixed top-0 left-0 right-0 z-[1000] w-full border-b transition-colors duration-300 ${
-      isDarkMode
-        ? 'border-white/10 bg-zinc-950/90 backdrop-blur-md shadow-[0_1px_0_rgba(255,255,255,0.05)]'
-        : 'border-[#c9a84c]/20 bg-white/90 backdrop-blur-md shadow-sm'
-    }`}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 gap-4" ref={dropRef}>
+    <header className={`fixed inset-x-0 top-0 z-[1000] border-b backdrop-blur-2xl transition-colors duration-300 ${surfaceClass}`}>
+      <div className="mx-auto max-w-[1320px] px-5 py-2.5 sm:px-7" ref={dropRef}>
+        <div className="flex min-h-[60px] items-center justify-between gap-4">
+          <Link to="/" onClick={handleLogoClick} className="min-w-0 flex-shrink-0">
+            <img src="/images/logo.png" alt="Innova HMS" className="h-9 w-auto sm:h-10" />
+          </Link>
 
-        {/* LOGO */}
-        <Link to="/" onClick={handleLogoClick} className="flex-shrink-0">
-          <img src="/images/logo.png" alt="Innova HMS" className="h-10 w-auto scale-125 origin-left" />
-        </Link>
+          <nav className={`hidden lg:flex items-center gap-1 rounded-full border px-1.5 py-1.5 ${navShellClass}`}>
+            {NAV_LINKS.map((item) => {
+              const active = isActiveRoute(item.path);
+              return (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={() => go(item.path)}
+                  className={`whitespace-nowrap rounded-full px-5 py-2 text-sm font-medium transition-all ${
+                    active
+                      ? "bg-[#c8a33a] text-white shadow-[0_8px_20px_rgba(199,159,60,0.20)]"
+                      : isDarkMode
+                        ? "text-[#d5cab1] hover:bg-white/8 hover:text-white"
+                        : "text-[#544835] hover:bg-white hover:text-[#b58a27]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
 
-        {/* NAV */}
-        <nav className={`hidden lg:flex items-center gap-1 rounded-full border px-1 py-1 transition-colors duration-300 ${
-          isDarkMode ? 'border-white/10 bg-white/5' : 'border-zinc-200 bg-zinc-100/50'
-        }`}>
-          {NAV_LINKS.map((link) => (
+          <div className="flex items-center gap-2.5">
             <button
-              key={link.id}
               type="button"
-              onClick={() => scrollTo(link.id)}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
-                isDarkMode
-                  ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                  : 'text-zinc-600 hover:bg-white hover:text-[#c9a84c]'
-              }`}
+              onClick={handleFindRoom}
+              className={`hidden lg:inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all ${ghostButtonClass}`}
             >
-              {link.name}
+              <Search size={16} className="text-[#c79f3c]" />
+              Find a Room
             </button>
-          ))}
-        </nav>
 
-        {/* RIGHT ACTIONS */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleBookings}
+              className="hidden sm:inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#f3e3b4] px-4 py-2 text-sm font-semibold text-[#a17817] shadow-[0_8px_20px_rgba(199,159,60,0.14)] transition-all hover:bg-[#edd89f]"
+            >
+              <BookOpen size={16} />
+              {user?.isStaff ? "Dashboard" : "My Bookings"}
+            </button>
 
-          {/* THEME */}
-          <button
-            onClick={toggleTheme}
-            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-105 active:scale-95 ${
-              isDarkMode
-                ? 'border-[#bf9b30]/40 bg-zinc-800 text-[#bf9b30] hover:bg-zinc-700'
-                : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-[#bf9b30]'
-            }`}
-          >
-            {isDarkMode ? <Sun size={16} strokeWidth={2.5} /> : <Moon size={16} strokeWidth={2.5} />}
-          </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-all ${iconButtonClass}`}
+            >
+              {isDarkMode ? <Sun size={17} strokeWidth={2.2} /> : <Moon size={17} strokeWidth={2.2} />}
+            </button>
 
-          <div className={`h-7 w-px ${isDarkMode ? 'bg-white/10' : 'bg-zinc-200'}`} />
+            {user ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggle("user")}
+                  className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold shadow-md transition-all ${
+                    user.isStaff
+                      ? "bg-[#b79036] text-white hover:bg-[#9f7b2a]"
+                      : "bg-[#171717] text-white hover:bg-[#272727] dark:bg-[#f3e3b4] dark:text-[#3c2a06] dark:hover:bg-[#ebd393]"
+                  }`}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/15">
+                    {user.isStaff ? <Briefcase size={13} /> : <User size={13} />}
+                  </span>
+                  <span className="hidden max-w-[140px] truncate sm:inline">
+                    {user.displayName}
+                    {user.isStaff ? ` (${user.role})` : ""}
+                  </span>
+                  <ChevronDown size={14} className={`transition-transform ${openDrop === "user" ? "rotate-180" : ""}`} />
+                </button>
 
-          {/* ── LOGGED IN ── */}
-          {user ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggle("user")}
-                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-white shadow-md transition-all ${
-                  user.isStaff
-                    ? "bg-[#b3903c] hover:bg-[#96772f]"
-                    : "bg-zinc-900 hover:bg-zinc-700 dark:bg-[#c9a84c] dark:hover:bg-[#a68a3e]"
-                }`}
-              >
-                <div className="h-6 w-6 rounded-full border border-white/20 bg-white/20 flex items-center justify-center">
-                  {user.isStaff ? <Briefcase size={11} /> : <User size={11} />}
-                </div>
-                <span className="hidden sm:inline max-w-[120px] truncate">
-                  {user.displayName}{user.isStaff ? ` (${user.role})` : ""}
-                </span>
-                <ChevronDown size={13} className={`transition-transform ${openDrop === "user" ? "rotate-180" : ""}`} />
-              </button>
-
-              {openDrop === "user" && (
-                <div className={`absolute right-0 mt-3 w-64 origin-top-right rounded-2xl border shadow-2xl z-[1001] overflow-hidden ${
-                  isDarkMode ? 'border-white/10 bg-zinc-900' : 'border-zinc-200 bg-white'
-                }`}>
-
-                  {/* MEMBERSHIP BADGE — customer only */}
-                  {!user.isStaff && (
-                    <button
-                      type="button"
-                      onClick={() => go("/offers?view=privileged")}
-                      className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-[#bf9b30]/10 to-[#f5e6b0]/20 dark:from-[#bf9b30]/15 dark:to-transparent border-b border-[#bf9b30]/20 hover:from-[#bf9b30]/20 transition-all text-left"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-[#bf9b30]/20 flex items-center justify-center flex-shrink-0">
-                        <Crown size={14} className="text-[#bf9b30]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#bf9b30]">
-                          {membershipLoading ? "Syncing..." : `${tier} Member`}
-                        </p>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          {membershipLoading ? "—" : `${points.toLocaleString()} pts · View Privileges`}
-                        </p>
-                      </div>
-                      <ChevronDown size={12} className="-rotate-90 text-zinc-400 flex-shrink-0" />
-                    </button>
-                  )}
-
-                  <div className="p-2">
-                    <p className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      {user.isStaff ? "Staff Portal" : "My Account"}
-                    </p>
-
-                    {user.isStaff ? (
+                {openDrop === "user" ? (
+                  <div className={`absolute right-0 mt-3 w-72 overflow-hidden rounded-[1.4rem] border shadow-2xl ${menuPanelClass}`}>
+                    {!user.isStaff ? (
                       <button
                         type="button"
-                        onClick={() => go("/staff/profile")}
-                        className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                          isDarkMode ? 'text-zinc-300 hover:bg-white/5' : 'text-zinc-700 hover:bg-zinc-100'
-                        }`}
+                        onClick={() => go("/privileges")}
+                        className="flex w-full items-center gap-3 border-b border-[#c79f3c]/20 bg-gradient-to-r from-[#f7edd1] via-[#fbf7ea] to-white px-4 py-4 text-left transition-all hover:from-[#f1e2b6] hover:to-[#fff8e5] dark:from-[#3a2d11] dark:via-[#1a1611] dark:to-[#12100d]"
                       >
-                        <Settings size={16} className="text-zinc-400" /> Profile Settings
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#c79f3c]/15 text-[#c79f3c]">
+                          <Crown size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.24em] text-[#c79f3c]">
+                            {membershipLoading ? "Syncing..." : `${tier} Member`}
+                          </span>
+                          <span className={`block truncate pt-1 text-xs ${isDarkMode ? "text-[#b8ab8d]" : "text-[#7a6b50]"}`}>
+                            {membershipLoading ? "Checking your perks..." : `${points.toLocaleString()} pts available`}
+                          </span>
+                        </span>
+                        <ChevronDown size={14} className="-rotate-90 text-[#b79a5b]" />
                       </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => go("/customer/dashboard")}
-                          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                            isDarkMode ? 'text-zinc-300 hover:bg-white/5' : 'text-zinc-700 hover:bg-zinc-100'
-                          }`}
-                        >
-                          <LayoutDashboard size={16} className="text-zinc-400" /> Dashboard
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => go("/profile")}
-                          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                            isDarkMode ? 'text-zinc-300 hover:bg-white/5' : 'text-zinc-700 hover:bg-zinc-100'
-                          }`}
-                        >
-                          <Settings size={16} className="text-zinc-400" /> Profile Settings
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => go("/rewards")}
-                          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                            isDarkMode ? 'text-zinc-300 hover:bg-white/5' : 'text-zinc-700 hover:bg-zinc-100'
-                          }`}
-                        >
-                          <Crown size={16} className="text-zinc-400" /> Membership & Rewards
-                        </button>
-                      </>
-                    )}
+                    ) : null}
 
-                    <div className={`my-1.5 h-px ${isDarkMode ? 'bg-white/5' : 'bg-zinc-100'}`} />
+                    <div className="p-2">
+                      <p className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.24em] ${isDarkMode ? "text-[#8f846e]" : "text-[#aa9875]"}`}>
+                        {user.isStaff ? "Staff Portal" : "My Account"}
+                      </p>
 
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                    >
-                      <LogOut size={16} /> Log Out
-                    </button>
+                      {user.isStaff ? (
+                        <button
+                          type="button"
+                          onClick={() => go("/staff/dashboard")}
+                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                        >
+                          <LayoutDashboard size={16} className="text-[#c79f3c]" />
+                          Dashboard
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => go("/customer/dashboard")}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          >
+                            <LayoutDashboard size={16} className="text-[#c79f3c]" />
+                            Dashboard
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => go("/customer/bookings")}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          >
+                            <BookOpen size={16} className="text-[#c79f3c]" />
+                            My Bookings
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => go("/profile")}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          >
+                            <Settings size={16} className="text-[#c79f3c]" />
+                            Profile Settings
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => go("/rewards")}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          >
+                            <Crown size={16} className="text-[#c79f3c]" />
+                            Membership & Rewards
+                          </button>
+                        </>
+                      )}
+
+                      <div className={`my-2 h-px ${isDarkMode ? "bg-white/10" : "bg-[#efe6d5]"}`} />
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm text-red-500 transition-all hover:bg-red-50 dark:hover:bg-red-500/10"
+                      >
+                        <LogOut size={16} />
+                        Log Out
+                      </button>
+                    </div>
                   </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="hidden items-center gap-2 md:flex">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => toggle("login")}
+                    className={`inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${isDarkMode ? "text-[#efe4cb] hover:bg-white/5" : "text-[#7b673f] hover:bg-[#f8f2e5]"}`}
+                  >
+                    Login
+                    <ChevronDown size={14} className={`transition-transform ${openDrop === "login" ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {openDrop === "login" ? (
+                    <div className={`absolute right-0 mt-3 w-64 rounded-[1.4rem] border p-2 shadow-2xl ${menuPanelClass}`}>
+                      {[
+                        { to: "/login", label: "Login as Customer", icon: <Users size={16} className="text-[#c79f3c]" /> },
+                        { to: "/owner/login", label: "Login as Hotel Owner", icon: <Building2 size={16} className="text-[#c79f3c]" /> },
+                        { to: "/staff/login", label: "Login as Hotel Staff", icon: <Briefcase size={16} className="text-[#c79f3c]" /> },
+                        { to: "/admin/login", label: "Super Admin", icon: <ShieldCheck size={16} className="text-[#c79f3c]" /> },
+                      ].map((item) => (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={closeAll}
+                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                        >
+                          {item.icon}
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              )}
-            </div>
 
-          ) : (
-            /* ── NOT LOGGED IN ── */
-            <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => toggle("signup")}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#c79f3c] px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(199,159,60,0.28)] transition-all hover:bg-[#ae8525]"
+                  >
+                    Register
+                    <ChevronDown size={14} className={`transition-transform ${openDrop === "signup" ? "rotate-180" : ""}`} />
+                  </button>
 
-              {/* LOGIN */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggle("login")}
-                  className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-[#c9a84c] hover:text-[#a68a3e] dark:text-white transition-colors"
-                >
-                  Login <ChevronDown size={13} className={`transition-transform ${openDrop === "login" ? "rotate-180" : ""}`} />
-                </button>
-                {openDrop === "login" && (
-                  <div className={`absolute right-0 mt-3 w-60 origin-top-right rounded-2xl border p-2 shadow-2xl z-[1001] ${
-                    isDarkMode ? 'border-white/10 bg-zinc-900' : 'border-zinc-200 bg-white'
-                  }`}>
-                    {[
-                      { to: "/login",       icon: <Users size={16} className="text-[#c9a84c]" />,      label: "Login as Customer" },
-                      { to: "/owner/login", icon: <Building2 size={16} className="text-[#c9a84c]" />,  label: "Login as Hotel Owner" },
-                      { to: "/staff/login", icon: <Briefcase size={16} className="text-[#c9a84c]" />,  label: "Login as Hotel Staff" },
-                      { to: "/admin/login", icon: <ShieldCheck size={16} className="text-[#c9a84c]" />, label: "Super Admin" },
-                    ].map((item) => (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        onClick={closeAll}
-                        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                          isDarkMode ? 'text-zinc-300 hover:bg-white/5' : 'text-zinc-700 hover:bg-zinc-100'
-                        }`}
-                      >
-                        {item.icon} {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                  {openDrop === "signup" ? (
+                    <div className={`absolute right-0 mt-3 w-64 rounded-[1.4rem] border p-2 shadow-2xl ${menuPanelClass}`}>
+                      {[
+                        { to: "/signup", label: "Signup as Customer", icon: <Users size={16} className="text-[#c79f3c]" /> },
+                        { to: "/owner/signup", label: "Signup as Owner", icon: <Building2 size={16} className="text-[#c79f3c]" /> },
+                        { to: "/staff/signup", label: "Signup as Staff", icon: <Briefcase size={16} className="text-[#c79f3c]" /> },
+                      ].map((item) => (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={closeAll}
+                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                        >
+                          {item.icon}
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
+            )}
 
-              {/* REGISTER */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggle("signup")}
-                  className="flex items-center gap-1 rounded-full bg-[#c9a84c] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-[#c9a84c]/30 transition-all hover:scale-105 hover:bg-[#a68a3e]"
-                >
-                  Register <ChevronDown size={13} className={`transition-transform ${openDrop === "signup" ? "rotate-180" : ""}`} />
-                </button>
-                {openDrop === "signup" && (
-                  <div className="absolute right-0 mt-3 w-60 origin-top-right rounded-2xl border border-zinc-200 bg-white p-2 shadow-2xl z-[1001] dark:border-white/10 dark:bg-zinc-900">
-                    {[
-                      { to: "/signup",       icon: <Users size={16} className="text-[#c9a84c]" />,     label: "Signup as Customer" },
-                      { to: "/owner/signup", icon: <Building2 size={16} className="text-[#c9a84c]" />, label: "Signup as Owner" },
-                      { to: "/staff/signup", icon: <Briefcase size={16} className="text-[#c9a84c]" />, label: "Sign as Staff" },
-                    ].map((item) => (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        onClick={closeAll}
-                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5 transition-colors"
-                      >
-                        {item.icon} {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => toggle("mobile")}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border lg:hidden ${iconButtonClass}`}
+            >
+              {openDrop === "mobile" ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
+
+        {openDrop === "mobile" ? (
+          <div className={`mt-4 rounded-[1.6rem] border p-3 shadow-xl lg:hidden ${menuPanelClass}`}>
+            <div className="grid grid-cols-2 gap-2">
+              {NAV_LINKS.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={() => go(item.path)}
+                  className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
+                    isActiveRoute(item.path)
+                      ? "bg-[#c79f3c] text-white"
+                      : isDarkMode
+                        ? "bg-white/5 text-[#e6dac1]"
+                        : "bg-[#faf6ee] text-[#604f33]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleFindRoom}
+                className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${ghostButtonClass}`}
+              >
+                Find a Room
+              </button>
+              <button
+                type="button"
+                onClick={handleBookings}
+                className="rounded-2xl bg-[#f3e3b4] px-4 py-3 text-sm font-semibold text-[#9d7618]"
+              >
+                {user?.isStaff ? "Open Dashboard" : "My Bookings"}
+              </button>
+            </div>
+
+            {!user ? (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => go("/login")}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${ghostButtonClass}`}
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => go("/signup")}
+                  className="rounded-2xl bg-[#c79f3c] px-4 py-3 text-sm font-bold text-white"
+                >
+                  Register
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </header>
   );

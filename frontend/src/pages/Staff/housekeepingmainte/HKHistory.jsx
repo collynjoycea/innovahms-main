@@ -36,6 +36,7 @@ const HKHistory = () => {
     gold:      '#c9a84c',
     shadow:    isDarkMode ? 'shadow-[0_20px_50px_rgba(0,0,0,0.5)]' : 'shadow-[0_15px_40px_rgba(0,0,0,0.08)]',
   };
+  const goldTextClass = 'text-[#c9a84c]';
 
   return (
     <div className={`p-8 min-h-screen transition-all duration-500 ${theme.bg}`}>
@@ -44,7 +45,7 @@ const HKHistory = () => {
       <div className={`flex flex-col md:flex-row justify-between items-end border-b pb-8 ${theme.border} mb-12`}>
         <div className="text-left">
           <h1 className={`text-3xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-            Task <span style={{ color: theme.gold }}>History</span>
+            Task <span className={goldTextClass}>History</span>
           </h1>
           <p className={`text-[10px] font-bold ${theme.textSub} uppercase tracking-[0.3em] mt-2`}>
             Operations Portal • Performance & Cleaning Logs
@@ -101,7 +102,7 @@ const HKHistory = () => {
                 </div>
                 <div>
                   <h4 className={`text-[15px] font-black uppercase tracking-tight ${theme.textMain}`}>
-                    {item.task_type} — <span style={{ color: theme.gold }}>{item.room_label}</span>
+                    {item.task_type} — <span className={goldTextClass}>{item.room_label}</span>
                   </h4>
                   <p className={`text-[12px] font-medium ${theme.textSub} mt-1 leading-relaxed`}>
                     {item.staff_name ? `Assigned to ${item.staff_name} • ` : ''}{item.completed_at ? new Date(item.completed_at).toLocaleString() : ''}

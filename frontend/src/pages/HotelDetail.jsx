@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Camera,
+  Star,
 } from "lucide-react";
 import resolveImg from "../utils/resolveImg";
 
@@ -35,6 +36,7 @@ export default function HotelDetail() {
   const [error, setError] = useState("");
   const [imgIndex, setImgIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -59,6 +61,16 @@ export default function HotelDetail() {
         if (mounted) setLoading(false);
       });
 
+    // Fetch reviews for this room
+    fetch("/api/reviews")
+      .then((r) => r.json())
+      .then((data) => {
+        if (mounted) setReviews(data.reviews || []);
+      })
+      .catch(() => {
+        // Ignore errors for reviews
+      });
+
     return () => {
       mounted = false;
     };
@@ -81,6 +93,19 @@ export default function HotelDetail() {
   }, [room]);
 
   const currentImg = imgError ? FALLBACKS[0] : images[imgIndex] || FALLBACKS[0];
+
+  const roomReviews = useMemo(() => {
+    if (!room || !reviews.length) return [];
+    const roomName = room.roomName || room.name || "";
+    const hotelName = room.location_description || "";
+    return reviews.filter((rev) => {
+      const revRoom = rev.roomName || "";
+      const revHotel = rev.hotelName || "";
+      return revRoom.toLowerCase().includes(roomName.toLowerCase()) ||
+             revHotel.toLowerCase().includes(hotelName.toLowerCase()) ||
+             revRoom.toLowerCase().includes(hotelName.toLowerCase());
+    });
+  }, [room, reviews]);
 
   if (loading) {
     return (
@@ -279,6 +304,56 @@ export default function HotelDetail() {
           </div>
         </div>
       </section>
+
+      {/* REVIEWS SECTION */}
+      {roomReviews.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <div className="mb-10">
+            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Guest Voices</p>
+            <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
+              Guest <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Reviews</span>
+            </h2>
+            <p className="text-[#7a6f5d] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
+              What guests say about this room.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {roomReviews.slice(0, 6).map((rev) => (
+              <div key={rev.id} className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 p-6 rounded-2xl hover:border-[#bf9b30]/20 transition-all group shadow-lg">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#bf9b30]/10 flex items-center justify-center font-black text-[#bf9b30] text-sm">
+                      {rev.guestName?.[0] || "G"}
+                    </div>
+                    <div>
+                      <h4 className="text-[13px] font-black text-[#1a160d] dark:text-white uppercase tracking-tight">{rev.guestName}</h4>
+                      <p className="text-[9px] text-[#7d725f] dark:text-zinc-500 font-bold uppercase">
+                        {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString("en-PH", { month: "short", year: "numeric" }) : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} size={10} fill={s <= rev.rating ? "#bf9b30" : "transparent"} className={s <= rev.rating ? "text-[#bf9b30]" : "text-slate-300 dark:text-zinc-600"} />
+                    ))}
+                  </div>
+                </div>
+                {rev.title && <p className="text-[12px] font-black text-[#1a160d] dark:text-white mb-1">{rev.title}</p>}
+                <p className="text-[11px] text-[#726756] dark:text-zinc-400 font-light leading-relaxed italic">"{rev.comment}"</p>
+              </div>
+            ))}
+          </div>
+
+          {roomReviews.length > 6 && (
+            <div className="text-center mt-8">
+              <p className="text-sm text-slate-500 dark:text-zinc-400">
+                Showing 6 of {roomReviews.length} reviews
+              </p>
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

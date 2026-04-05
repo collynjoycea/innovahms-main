@@ -12,25 +12,39 @@ const MapServices = () => {
     let mounted = true;
     const load = async () => {
       try {
-        const [hotelRes, lmRes] = await Promise.all([
-          fetch('/api/vision/hotel'),
+        const [hotelsRes, lmRes] = await Promise.all([
+          fetch('/api/vision/nearby-hotels'),
           fetch('/api/vision/landmarks'),
         ]);
-        const hotelPayload = await hotelRes.json().catch(() => ({}));
+        const hotelsPayload = await hotelsRes.json().catch(() => ({}));
         const lmPayload = await lmRes.json().catch(() => ({}));
 
         if (!mounted) return;
 
-        const h = hotelPayload.hotel;
-        if (h?.location) {
-          setHotels([{
-            id: h.id || 1,
-            name: h.name || 'Hotel',
-            lat: h.location.lat,
-            lng: h.location.lng,
-            address: h.locationLabel || '',
-          }]);
+        const hotelsData = hotelsPayload.hotels || [];
+        const allHotels = hotelsData.map(hotel => ({
+          id: hotel.id,
+          name: hotel.name || 'Hotel',
+          lat: hotel.lat,
+          lng: hotel.lng,
+          address: hotel.address || '',
+        }));
+
+        // Also add the main hotel from vision/hotel endpoint
+        const hotelRes = await fetch('/api/vision/hotel');
+        const hotelPayload = await hotelRes.json().catch(() => ({}));
+        const mainHotel = hotelPayload.hotel;
+        if (mainHotel?.location) {
+          allHotels.unshift({
+            id: mainHotel.id || 1,
+            name: mainHotel.name || 'Main Hotel',
+            lat: mainHotel.location.lat,
+            lng: mainHotel.location.lng,
+            address: mainHotel.locationLabel || '',
+          });
         }
+
+        setHotels(allHotels);
         setLandmarks(lmPayload.landmarks || []);
       } catch {
         // silently fall back to empty — map still renders

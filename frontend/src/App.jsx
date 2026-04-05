@@ -77,6 +77,7 @@ import AdminSystemLogs from "./pages/admin/SystemLogs";
 import AdminSettings from "./pages/admin/Settings";
 import AdminAiConfig from "./pages/admin/AiConfig";
 import AdminMapServices from "./pages/admin/MapServices";
+import AdminNotifications from "./pages/Admin/AdminNotifications";
 
 // --- OWNER PAGES ---
 import OwnerLogin from "./pages/owner/OwnerLogin"; 
@@ -97,6 +98,7 @@ import Home from "./pages/Home";
 import AboutUs from "./pages/AboutUs";
 import Facilities from "./pages/Facilities";
 import Features from "./pages/Features";
+import Privileges from "./pages/Privileges";
 import HotelDetail from "./pages/HotelDetail";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
@@ -107,6 +109,8 @@ import ViewRecommendations from "./components/ViewRecommendations";
 import VirtualTour from "./components/VirtualTour";
 import GuestsOffer from "./components/GuestsOffer";
 import CustomerDashboard from "./customer/CustomerDashboard";
+import CustomerBookings from "./customer/CustomerBookings";
+import CustomerReviews from "./customer/CustomerReviews";
 import InnovaSuites from "./customer/InnovaSuites";
 import Rewards from "./pages/customer/Rewards";
 import VisionSuites from "./pages/customer/VisionSuites";
@@ -151,6 +155,7 @@ function App() {
           <Route path="/about" element={<AboutUs />} />
           <Route path="/about-us" element={<Navigate to="/about" replace />} />
           <Route path="/features" element={<Features />} />
+          <Route path="/privileges" element={<Privileges />} />
           <Route path="/terms-of-service" element={<Navigate to="/features" replace />} />
           <Route path="/facilities" element={<Facilities />} />
           <Route path="/hoteldetail/:id" element={<HotelDetail />} />
@@ -165,6 +170,22 @@ function App() {
             element={
               <ProtectedCustomer>
                 <CustomerDashboard />
+              </ProtectedCustomer>
+            }
+          />
+          <Route
+            path="/customer/bookings"
+            element={
+              <ProtectedCustomer>
+                <CustomerBookings />
+              </ProtectedCustomer>
+            }
+          />
+          <Route
+            path="/customer/reviews"
+            element={
+              <ProtectedCustomer>
+                <CustomerReviews />
               </ProtectedCustomer>
             }
           />
@@ -294,6 +315,7 @@ function App() {
           <Route path="logs" element={<AdminSystemLogs />} />
           <Route path="api" element={<AdminAiConfig />} />
           <Route path="maps" element={<AdminMapServices />} />
+          <Route path="notifications" element={<AdminNotifications />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
 

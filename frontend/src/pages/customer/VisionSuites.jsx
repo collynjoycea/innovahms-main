@@ -1,15 +1,36 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { MapPin, MessageCircle, X, Send } from "lucide-react";
+import {
+  ArrowUpDown,
+  BedDouble,
+  CalendarDays,
+  Hotel,
+  MapPin,
+  MessageCircle,
+  RotateCcw,
+  Search,
+  Send,
+  SlidersHorizontal,
+  Users,
+  X,
+} from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Marzipano from "marzipano";
 import resolveImg from "../../utils/resolveImg";
 import NeighborhoodMap from "../../components/NeighborhoodMap";
+import { extractCustomerSession } from "../../customer/customerHelpers";
 
 const php = (value) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(
     Number(value || 0)
   );
+
+const friendlyDate = (value) => {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+};
 
 const haversineKm = (a, b) => {
   const toRad = (d) => (d * Math.PI) / 180;
@@ -107,10 +128,12 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
 }
 
 export default function VisionSuites() {
+  const PAGE_SIZE = 6;
   const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sessionUser, setSessionUser] = useState(null);
 
   const [hotel, setHotel] = useState(null);
   const [locationLabel, setLocationLabel] = useState("Hotel Location");
@@ -125,6 +148,9 @@ export default function VisionSuites() {
   const [rooms, setRooms] = useState([]);
   const [hotelSearch, setHotelSearch] = useState("");
   const [activeHotelFilter, setActiveHotelFilter] = useState("all");
+  const [selectedRoomType, setSelectedRoomType] = useState("all");
+  const [sortMode, setSortMode] = useState("recommended");
+  const [currentPage, setCurrentPage] = useState(1);
   const [landmarks, setLandmarks] = useState([]);
   const [nearbyHotels, setNearbyHotels] = useState([]);
   const [focusedNearbyHotelId, setFocusedNearbyHotelId] = useState(null);
@@ -212,9 +238,33 @@ export default function VisionSuites() {
       hotelId,
     });
     if (hotelId) setActiveHotelFilter(hotelId);
+    else setActiveHotelFilter("all");
+    setHotelSearch("");
+    setSelectedRoomType("all");
+    setSortMode("recommended");
+    setCurrentPage(1);
 
     loadVision(query);
   }, [location.search]);
+
+  useEffect(() => {
+    setSessionUser(extractCustomerSession());
+  }, []);
+
+  useEffect(() => {
+    if (!location.hash) return;
+
+    const sectionId = location.hash.replace("#", "");
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(sectionId);
+      if (!target) return;
+
+      const top = target.getBoundingClientRect().top + window.scrollY - 112;
+      window.scrollTo({ top: Math.max(0, top) });
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [location.hash, loading]);
 
   const openTour = async (room) => {
     setTourRoom(room);
@@ -335,6 +385,77 @@ export default function VisionSuites() {
     setFocusedNearbyHotelId(String(hotelItem.id));
   };
 
+  const hotelFilterOptions = useMemo(() => {
+    const map = new Map();
+    (rooms || []).forEach((room) => {
+      if (room.hotelId && room.hotelName) {
+        map.set(String(room.hotelId), room.hotelName);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [rooms]);
+
+  const roomTypeOptions = useMemo(
+    () => Array.from(new Set((rooms || []).map((room) => room.type).filter(Boolean))),
+    [rooms]
+  );
+
+  const filteredRooms = useMemo(() => {
+    const query = hotelSearch.trim().toLowerCase();
+    const next = (rooms || []).filter((room) => {
+      const matchHotel = activeHotelFilter === "all" || String(room.hotelId) === String(activeHotelFilter);
+      const matchRoomType = selectedRoomType === "all" || String(room.type || "").toLowerCase() === String(selectedRoomType).toLowerCase();
+      const matchSearch =
+        !query ||
+        String(room.hotelName || "").toLowerCase().includes(query) ||
+        String(room.name || "").toLowerCase().includes(query) ||
+        String(room.type || "").toLowerCase().includes(query);
+
+      return matchHotel && matchRoomType && matchSearch;
+    });
+
+    if (sortMode === "price-asc") {
+      next.sort((a, b) => Number(a.basePricePhp || 0) - Number(b.basePricePhp || 0));
+    } else if (sortMode === "price-desc") {
+      next.sort((a, b) => Number(b.basePricePhp || 0) - Number(a.basePricePhp || 0));
+    } else if (sortMode === "capacity") {
+      next.sort((a, b) => Number(b.capacity || 0) - Number(a.capacity || 0));
+    }
+
+    return next;
+  }, [rooms, hotelSearch, activeHotelFilter, selectedRoomType, sortMode]);
+
+  const clearCollectionFilters = () => {
+    setHotelSearch("");
+    setSelectedRoomType("all");
+    setSortMode("recommended");
+    setActiveHotelFilter(searchContext.hotelId || "all");
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [hotelSearch, activeHotelFilter, selectedRoomType, sortMode, searchContext.from, searchContext.to, searchContext.guests, searchContext.view]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRooms.length / PAGE_SIZE));
+  const paginatedRooms = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRooms.slice(start, start + PAGE_SIZE);
+  }, [filteredRooms, currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const activeFilterTags = [
+    searchContext.view && searchContext.view !== "All" ? `${searchContext.view} rooms` : null,
+    searchContext.guests ? `${searchContext.guests} guest${Number(searchContext.guests) > 1 ? "s" : ""}` : null,
+    searchContext.from ? `From ${friendlyDate(searchContext.from)}` : null,
+    searchContext.to ? `To ${friendlyDate(searchContext.to)}` : null,
+  ].filter(Boolean);
+
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-[#0d0c0a] text-[#1a160d] dark:text-[#e8e2d5] transition-colors duration-300">
       <TourModal open={tourOpen} onClose={() => setTourOpen(false)} roomName={tourRoom?.name} tour={tourData} loading={tourLoading} />
@@ -395,7 +516,7 @@ export default function VisionSuites() {
       ) : null}
 
       {/* SECTION 1 */}
-<section className="relative h-screen flex items-center justify-center overflow-hidden">
+<section className="relative min-h-[54vh] flex items-center justify-center overflow-hidden">
   <div className="absolute inset-0 z-0">
     <img 
       src="/images/vision-lobby.jpg" 
@@ -407,12 +528,12 @@ export default function VisionSuites() {
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.6)_100%)]" />
   </div>
 
-  <div className="relative z-10 text-center px-4 max-w-5xl w-full">
+  <div className="relative z-10 text-center px-4 max-w-5xl w-full py-12">
     <motion.h1
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
      
-      className="text-5xl md:text-7xl font-serif tracking-tight leading-tight mb-10 text-white drop-shadow-lg"
+      className="text-4xl md:text-6xl font-serif tracking-tight leading-tight mb-8 text-white drop-shadow-lg"
     >
       Experience the Future of <br />
       <span className="italic text-[#bf9b30] font-light">Refined Living</span>
@@ -468,7 +589,7 @@ export default function VisionSuites() {
 </section>
 
       {/* SECTION 2 */}
-      <section className="py-20 px-6 max-w-7xl mx-auto">
+      <section className="py-12 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-10">
           <h2 className="text-4xl font-serif mb-3">The Vision Collection</h2>
           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">
@@ -476,92 +597,289 @@ export default function VisionSuites() {
           </p>
         </div>
 
-        {(() => {
-          const hotelMap = {};
-          (rooms || []).forEach(r => { if (r.hotelId) hotelMap[r.hotelId] = r.hotelName; });
-          const filtered = (rooms || []).filter(r => {
-            const matchHotel = activeHotelFilter === 'all' || String(r.hotelId) === String(activeHotelFilter);
-            const q = hotelSearch.trim().toLowerCase();
-            const matchSearch = !q || (r.hotelName || '').toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q);
-            return matchHotel && matchSearch;
-          });
-          return (
-            <>
-              <div className="flex flex-col sm:flex-row gap-3 mb-8 items-center justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveHotelFilter('all')}
-                    className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${
-                      activeHotelFilter === 'all'
-                        ? 'bg-[#bf9b30] text-white shadow-md'
-                        : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-[#d2c7b2] hover:bg-[#bf9b30]/20'
-                    }`}
-                  >
-                    All Hotels
-                  </button>
-                  {Object.entries(hotelMap).map(([id, name]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setActiveHotelFilter(id)}
-                      className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${
-                        String(activeHotelFilter) === String(id)
-                          ? 'bg-[#bf9b30] text-white shadow-md'
-                          : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-[#d2c7b2] hover:bg-[#bf9b30]/20'
-                      }`}
-                    >
-                      {name}
-                    </button>
-                  ))}
+        <div className="grid gap-6 lg:grid-cols-[288px_minmax(0,1fr)] lg:items-start relative">
+         <aside className="self-start">
+          <div className="lg:sticky lg:top-20 max-h-[calc(100vh-6rem)] overflow-y-auto"></div> 
+            <div className="rounded-[2rem] border border-[#e9decb] bg-white/95 p-4 shadow-[0_20px_55px_rgba(15,23,42,0.08)] lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-[#15130f]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bf9b30]">Filters</p>
+                  <h3 className="mt-1.5 text-xl font-black text-slate-900 dark:text-white">Find your fit</h3>
                 </div>
-                <input
-                  type="text"
-                  value={hotelSearch}
-                  onChange={e => setHotelSearch(e.target.value)}
-                  placeholder="Search hotel or room..."
-                  className="w-full sm:w-64 rounded-full border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-5 py-2 text-sm text-slate-700 dark:text-[#e6dece] focus:outline-none focus:ring-2 focus:ring-[#bf9b30]/40"
-                />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f6efe1] text-[#bf9b30] dark:bg-white/5">
+                  <SlidersHorizontal size={17} />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {filtered.map((room) => (
-                  <motion.div
-                    key={room.id}
-                    whileHover={{ y: -10 }}
-                    className="group relative aspect-[4/5] rounded-[32px] overflow-hidden shadow-xl bg-slate-100"
+              <div className="mt-4 space-y-3">
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-[#a89b84]">
+                    <Search size={14} />
+                    Search
+                  </span>
+                  <input
+                    type="text"
+                    value={hotelSearch}
+                    onChange={(e) => setHotelSearch(e.target.value)}
+                    placeholder="Hotel or room name"
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-[#a89b84]">
+                    <Hotel size={14} />
+                    Hotel
+                  </span>
+                  <select
+                    value={activeHotelFilter}
+                    onChange={(e) => setActiveHotelFilter(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
                   >
+                    <option value="all">All Hotels</option>
+                    {hotelFilterOptions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-[#a89b84]">
+                    <BedDouble size={14} />
+                    Room type
+                  </span>
+                  <select
+                    value={selectedRoomType}
+                    onChange={(e) => setSelectedRoomType(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                  >
+                    <option value="all">All Room Types</option>
+                    {roomTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-[#a89b84]">
+                    <ArrowUpDown size={14} />
+                    Sort by
+                  </span>
+                  <select
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                  >
+                    <option value="recommended">Recommended</option>
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
+                    <option value="capacity">Capacity</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-[1.5rem] border border-[#eee4d1] bg-[#fcfaf5] p-3.5 dark:border-white/10 dark:bg-white/5">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Search summary</p>
+                <div className="mt-3 space-y-2.5 text-sm text-slate-600 dark:text-[#cfc2aa]">
+                  <div className="flex items-start gap-3">
+                    <CalendarDays size={16} className="mt-0.5 text-[#bf9b30]" />
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {searchContext.from ? friendlyDate(searchContext.from) : "Flexible dates"}
+                        {searchContext.to ? ` - ${friendlyDate(searchContext.to)}` : ""}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-[#9e9178]">Stay dates from the home search</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Users size={16} className="mt-0.5 text-[#bf9b30]" />
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {searchContext.guests ? `${searchContext.guests} guest(s)` : "Guest count not specified"}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-[#9e9178]">
+                        Refine more using the filters above
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={clearCollectionFilters}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-sm font-black uppercase tracking-[0.22em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+              >
+                <RotateCcw size={15} />
+                Clear filters
+              </button>
+            </div>
+          </aside>
+
+          <div className="min-w-0">
+            <div className="rounded-[2rem] border border-[#e9decb] bg-white/95 p-5 shadow-[0_20px_55px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#15130f]">
+              <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bf9b30]">Available rooms</p>
+                  <h3 className="mt-2 text-3xl font-black text-slate-900 dark:text-white">
+                    {filteredRooms.length} stay option{filteredRooms.length === 1 ? "" : "s"} ready to browse
+                  </h3>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-[#a89b84]">
+                    Showing 6 rooms per page with a cleaner 3-column layout.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {activeFilterTags.length ? activeFilterTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]"
+                    >
+                      {tag}
+                    </span>
+                  )) : (
+                    <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                      Flexible browsing
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {paginatedRooms.map((room, index) => (
+                <motion.article
+                  key={room.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.06 }}
+                  className="group overflow-hidden rounded-[1.7rem] border border-[#e7dcc8] bg-white shadow-[0_20px_42px_rgba(15,23,42,0.08)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#14120e]"
+                >
+                  <div className="relative h-52 overflow-hidden">
                     <img
                       src={resolveImg(room.imageUrl)}
                       alt={room.name}
-                      onError={(e) => { e.currentTarget.src = '/images/room1.jpg'; }}
-                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                      onError={(e) => { e.currentTarget.src = "/images/room1.jpg"; }}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-                    <div className="absolute bottom-7 left-7 right-7 text-white">
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bf9b30] mb-1">{room.tagline || "Vision Suite"}</p>
-                      <h3 className="text-2xl font-serif mb-1">{room.name}</h3>
-                      <p className="text-[10px] text-[#bf9b30]/80 font-bold uppercase tracking-wider mb-2">{room.hotelName}</p>
-                      <p className="text-xs text-white/75 font-semibold mb-5">
-                        {room.capacity} guests · from <span className="text-white font-black">{php(room.basePricePhp)}</span>/night
-                      </p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#9b7619] shadow-lg">
+                      {php(room.basePricePhp)} per night
+                    </div>
+                    <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#f3d37d]">
+                          {room.tagline || "Vision Suite"}
+                        </p>
+                        <h4 className="mt-1.5 text-xl font-black leading-tight text-white">{room.name}</h4>
+                      </div>
+                      <div className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white backdrop-blur-md">
+                        {room.type || "Suite"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5">
+                    <div className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-[#b9ac93]">
+                      <MapPin size={14} className="text-[#bf9b30]" />
+                      <span className="truncate">{room.hotelName || locationLabel}</span>
+                    </div>
+
+                    <p className="mt-3 text-[13px] leading-relaxed text-slate-600 dark:text-[#cdbfa8]">
+                      {room.description || "Designed for comfort with smart hospitality features."}
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                        {room.capacity} guests
+                      </span>
+                      {room.type ? (
+                        <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                          {room.type}
+                        </span>
+                      ) : null}
+                      {room.hasVirtualTour ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                          360 tour available
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-2.5">
                       <button
                         type="button"
                         onClick={() => openTour(room)}
-                        className="w-full py-4 border border-white/30 backdrop-blur-md rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all"
+                        className="flex-1 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
                       >
-                        Explore in 360
+                        {room.hasVirtualTour ? "Explore in 360" : "Open Preview"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/booking?roomId=${room.id}`)}
+                        className="flex-1 rounded-2xl bg-[#bf9b30] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:bg-[#aa882a]"
+                      >
+                        Reserve now
                       </button>
                     </div>
-                  </motion.div>
-                ))}
-              </div>
+                  </div>
+                </motion.article>
+              ))}
+            </div>
 
-              {loading && rooms.length === 0 && <div className="mt-10 text-center text-slate-500 font-semibold">Loading rooms...</div>}
-              {!loading && filtered.length === 0 && <div className="mt-10 text-center text-slate-500 font-semibold">No rooms found.</div>}
-            </>
-          );
-        })()}
+            {!loading && filteredRooms.length > 0 ? (
+              <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[1.5rem] border border-[#e9decb] bg-white/90 px-5 py-4 shadow-sm dark:border-white/10 dark:bg-[#15130f] md:flex-row">
+                <p className="text-sm font-medium text-slate-500 dark:text-[#b8ab93]">
+                  Page {currentPage} of {totalPages}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                  >
+                    Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`h-10 min-w-10 rounded-full px-3 text-sm font-bold transition-all ${
+                        currentPage === page
+                          ? "bg-[#bf9b30] text-white shadow-md"
+                          : "border border-[#e0d3b6] text-[#7b683e] hover:bg-[#faf4e8] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {loading && rooms.length === 0 ? (
+              <div className="mt-10 text-center text-slate-500 font-semibold">Loading rooms...</div>
+            ) : null}
+            {!loading && filteredRooms.length === 0 ? (
+              <div className="mt-10 rounded-[2rem] border border-dashed border-slate-300 bg-white/70 px-6 py-12 text-center text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-[#b5a88e]">
+                No rooms found for the current filters.
+              </div>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       {/* SECTION 3 — Neighborhood Discovery */}
@@ -638,49 +956,50 @@ export default function VisionSuites() {
         </div>
       </section>
 
-      {/* Hook */}
-      <section className="py-20 px-6 max-w-7xl mx-auto">
-        <div className="rounded-[36px] border border-slate-200 bg-white p-10 md:p-14 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30] mb-3">Unlock More</p>
-              <h3 className="text-4xl font-serif text-slate-900">Join Innova-HMS to Unlock Full Features</h3>
-              <p className="mt-4 text-slate-600 leading-relaxed">
-                Personalized AI recommendations, loyalty points, and exclusive route guides are available for registered users.
-              </p>
-              <div className="mt-8 flex gap-3">
-                <a
-                  href="/signup"
-                  className="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-[#bf9b30] text-white font-black uppercase text-[11px] tracking-[0.25em] hover:brightness-95"
-                >
-                  Create Account
-                </a>
-                <a
-                  href="/login"
-                  className="inline-flex items-center justify-center px-8 py-4 rounded-2xl border border-slate-200 bg-white text-slate-800 font-black uppercase text-[11px] tracking-[0.25em] hover:bg-slate-50"
-                >
-                  Login
-                </a>
+      {!sessionUser?.id ? (
+        <section className="py-20 px-6 max-w-7xl mx-auto">
+          <div className="rounded-[36px] border border-slate-200 bg-white p-10 md:p-14 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30] mb-3">Unlock More</p>
+                <h3 className="text-4xl font-serif text-slate-900">Join Innova-HMS to Unlock Full Features</h3>
+                <p className="mt-4 text-slate-600 leading-relaxed">
+                  Personalized AI recommendations, loyalty points, and exclusive route guides are available for registered users.
+                </p>
+                <div className="mt-8 flex gap-3">
+                  <a
+                    href="/signup"
+                    className="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-[#bf9b30] text-white font-black uppercase text-[11px] tracking-[0.25em] hover:brightness-95"
+                  >
+                    Create Account
+                  </a>
+                  <a
+                    href="/login"
+                    className="inline-flex items-center justify-center px-8 py-4 rounded-2xl border border-slate-200 bg-white text-slate-800 font-black uppercase text-[11px] tracking-[0.25em] hover:bg-slate-50"
+                  >
+                    Login
+                  </a>
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-xs font-black text-slate-900">AI Recommendations</p>
-                <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Tailored rooms based on your preferences.</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-xs font-black text-slate-900">Loyalty Points Preview</p>
-                <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Book this and earn 500 Innova Points.</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-xs font-black text-slate-900">Exclusive Route Guide</p>
-                <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Unlock custom travel routes and shuttle tracking.</p>
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-black text-slate-900">AI Recommendations</p>
+                  <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Tailored rooms based on your preferences.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-black text-slate-900">Loyalty Points Preview</p>
+                  <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Book this and earn 500 Innova Points.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-black text-slate-900">Exclusive Route Guide</p>
+                  <p className="text-sm text-slate-600 mt-1 blur-[2px] select-none">Unlock custom travel routes and shuttle tracking.</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

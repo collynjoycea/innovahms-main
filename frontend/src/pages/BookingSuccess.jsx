@@ -69,8 +69,7 @@ export default function BookingSuccess() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 font-sans"
-      style={{ backgroundImage: "url('/images/herobg.jpg')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+    <div className="booking-success-page min-h-screen flex items-center justify-center px-4 font-sans">
       <div className="fixed inset-0 bg-black/60 z-0" />
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(191,155,48,0.12)_0%,transparent_60%)] z-0" />
 
@@ -194,6 +193,15 @@ export default function BookingSuccess() {
           </div>
         </div>
       </div>
+      <style>{`
+        .booking-success-page {
+          background-attachment: fixed;
+          background-image: url("/images/herobg.jpg");
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+        }
+      `}</style>
     </div>
   );
 }

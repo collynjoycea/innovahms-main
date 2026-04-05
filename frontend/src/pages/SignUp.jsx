@@ -275,7 +275,7 @@ export default function SignUp() {
               />
             </div>
           
-            <div style={{ display: 'none' }}>
+            <div className="signup-hidden-facebook">
               <FacebookLogin
                 appId="760975413559116"
                 callback={responseFacebook}
@@ -309,6 +309,11 @@ export default function SignUp() {
           </div>
         </div>
       </div>
+      <style>{`
+        .signup-hidden-facebook {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 }

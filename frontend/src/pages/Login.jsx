@@ -99,12 +99,7 @@ export default function Login() {
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center overflow-hidden font-sans pt-20"
-      style={{
-        backgroundImage: "url('/images/herobg.jpg')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+      className="login-page-shell fixed inset-0 flex items-center justify-center overflow-hidden font-sans pt-20"
     >
       {/* Dark overlay */}
       <div className="absolute inset-0 bg-black/55" />
@@ -248,6 +243,14 @@ export default function Login() {
           </div>
         </div>
       </div>
+      <style>{`
+        .login-page-shell {
+          background-image: url("/images/herobg.jpg");
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+        }
+      `}</style>
     </div>
   );
 }

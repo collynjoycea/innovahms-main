@@ -48,7 +48,8 @@ const AdminSidebar = ({ isDarkMode }) => {
     {
       title: "Administration",
       items: [
-        { name: 'System Logs', path: '/admin/logs', icon: <History /> }
+        { name: 'System Logs', path: '/admin/logs', icon: <History /> },
+        { name: 'Notifications', path: '/admin/notifications', icon: <Zap /> }
       ]
     }
   ];

@@ -375,8 +375,7 @@ export default function Booking() {
         onSuccess={() => { setQrData(null); setShowSuccess(true); }}
         onClose={() => setQrData(null)} />
 
-      <div className="min-h-screen font-sans relative"
-        style={{ backgroundImage: "url('/images/herobg.jpg')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      <div className="booking-page-shell min-h-screen font-sans relative">
         <div className="fixed inset-0 bg-black/60 pointer-events-none z-0" />
         <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(191,155,48,0.12)_0%,transparent_60%)] pointer-events-none z-0" />
 
@@ -590,6 +589,16 @@ export default function Booking() {
 
           </div>
         </div>
+
+        <style>{`
+          .booking-page-shell {
+            background-attachment: fixed;
+            background-image: url("/images/herobg.jpg");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+          }
+        `}</style>
       </div>
     </>
   );

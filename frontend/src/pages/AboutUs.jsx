@@ -5,28 +5,24 @@ export default function AboutUs() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans relative overflow-x-hidden">
       {/* SECTION 1: HERO */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-stone-900">
+      <section className="relative min-h-[54vh] flex items-center justify-center overflow-hidden bg-stone-900">
         <div className="absolute inset-0 z-0">
           <img
             src="/images/hero-lobby.jpg"
             className="w-full h-full object-cover opacity-90"
             alt="Luxury Interior"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/80" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black/80" />
         </div>
 
-        <div className="relative z-10 text-center px-6 max-w-5xl">
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-white leading-[1.1] drop-shadow-2xl">
+        <div className="relative z-10 max-w-5xl px-6 py-12 text-center">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-5 text-white leading-[1.05] drop-shadow-2xl">
             Revolutionizing <br />
             Hospitality <span className="text-[#bf9b30]">through AI</span>
           </h1>
-          <p className="text-white text-lg md:text-2xl max-w-2xl mx-auto font-medium leading-relaxed drop-shadow-lg opacity-95">
+          <p className="max-w-2xl mx-auto text-base md:text-xl font-medium leading-relaxed text-white/95 drop-shadow-lg">
             Empowering high-end hospitality management with intelligent automation and seamless guest experiences.
           </p>
-
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce hidden md:block">
-            <div className="w-1 h-12 bg-gradient-to-b from-[#bf9b30] to-transparent rounded-full mx-auto" />
-          </div>
         </div>
       </section>
 
