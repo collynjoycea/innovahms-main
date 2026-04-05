@@ -33,8 +33,8 @@ export default function OwnerSignUp() {
 
       if (response.ok) {
         const successMessage = data.createdHotel
-          ? `Registration successful!\nHotel code: ${data.hotelCode}\n\nPlease log in to continue.`
-          : `Registration successful!\nLinked hotel code: ${data.hotelCode}\n\nPlease log in to continue.`;
+          ? `Registration successful.\nHotel code: ${data.hotelCode}\n\nYou can log in now, but owner actions stay locked until subscription payment.`
+          : `Registration successful.\nLinked hotel code: ${data.hotelCode}\n\nYou can log in now, but owner actions stay locked until subscription payment.`;
         alert(successMessage);
         navigate('/owner/login');
       } else {
@@ -70,7 +70,7 @@ export default function OwnerSignUp() {
               <Building2 size={32} className="text-[#bf9b30] mb-4" />
               <h2 className="text-2xl font-serif italic text-white mb-2">Partner with Excellence</h2>
               <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-widest font-bold">
-                Use an existing hotel code to claim a property, or leave it blank to create a new hotel and auto-generate a code.
+                Use an existing hotel code to claim a property, or leave it blank to create a new hotel during signup.
               </p>
             </div>
           </div>

@@ -8,6 +8,7 @@ import os
 import json
 import requests
 import threading
+import re
 from datetime import datetime, timedelta
 from collections import Counter, defaultdict
 from flask import Flask, jsonify
@@ -34,10 +35,11 @@ CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://12
 
 def get_db_connection():
     return psycopg2.connect(
-        host="localhost",
-        database="innovahmsdb",
-        user="postgres",
-        password="lily1245" 
+        host=os.getenv("DB_HOST", "localhost"),
+        database=os.getenv("DB_NAME", "innovahmsdb"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", "12345"),
+        port=os.getenv("DB_PORT", "5432"),
     )
 
 UPLOAD_FOLDER = 'static/uploads/rooms'
@@ -374,6 +376,616 @@ def _linear_project(values, horizon):
         projected.append(max(0.0, last + (slope * idx)))
     return projected
 
+
+def _slugify(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+
+
+def _parse_date_input(value):
+    if not value:
+        return None
+    if hasattr(value, "isoformat"):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text[:19], fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _default_renewal_date(cycle, anchor=None):
+    base = _parse_date_input(anchor) or datetime.utcnow().date()
+    cycle_name = str(cycle or "MONTHLY").upper()
+    return base + timedelta(days=365 if cycle_name == "ANNUAL" else 30)
+
+
+def _subscription_cycle_dates(row=None, cycle=None, carry_requires_payment_proof=False):
+    today = datetime.utcnow().date()
+    current_row = row or {}
+    current_status = str(current_row.get("status") or "PENDING").upper()
+    current_renewal = _parse_date_input(current_row.get("renewal_date"))
+    has_prior_paid_period = bool(current_row.get("last_paid_at"))
+    should_carry_remaining = bool(
+        current_status == "ACTIVE"
+        and current_renewal
+        and current_renewal > today
+        and (has_prior_paid_period or not carry_requires_payment_proof)
+    )
+    anchor_date = current_renewal if should_carry_remaining else today
+    return today, _default_renewal_date(cycle or current_row.get("billing_cycle"), anchor_date)
+
+
+def _days_until_date(value):
+    target = _parse_date_input(value)
+    if not target:
+        return None
+    return (target - datetime.utcnow().date()).days
+
+
+def _package_amount_for_cycle(package_row, cycle):
+    if not package_row:
+        return 0.0
+    cycle_name = str(cycle or "MONTHLY").upper()
+    if cycle_name == "ANNUAL":
+        annual = _to_float(package_row.get("annual_price"), 0)
+        if annual > 0:
+            return annual
+        return round(_to_float(package_row.get("monthly_price"), 0) * 12, 2)
+    return _to_float(package_row.get("monthly_price"), 0)
+
+
+OWNER_PLAN_DEFINITIONS = {
+    "starter": {
+        "name": "Starter",
+        "slug": "starter",
+        "description": "Core owner tools for boutique and emerging hotel properties.",
+        "monthly_price": 8000,
+        "annual_price": 86400,
+        "max_rooms": 30,
+        "display_order": 1,
+        "is_popular": False,
+        "features": [
+            "Dashboard overview",
+            "Room management",
+            "Reservations and customers",
+            "Guest reviews",
+            "Up to 30 rooms",
+        ],
+        "allowed_features": {"dashboard", "rooms", "reservations", "customers", "reviews"},
+    },
+    "pro": {
+        "name": "Pro",
+        "slug": "pro",
+        "description": "Operational suite for growing hotels that need team and stock workflows.",
+        "monthly_price": 25000,
+        "annual_price": 270000,
+        "max_rooms": 100,
+        "display_order": 2,
+        "is_popular": True,
+        "features": [
+            "Everything in Starter",
+            "Housekeeping workspace",
+            "Inventory monitoring",
+            "Staff management",
+            "Up to 100 rooms",
+        ],
+        "allowed_features": {"dashboard", "rooms", "reservations", "customers", "reviews", "housekeeping", "inventory", "staff"},
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "slug": "enterprise",
+        "description": "Full management suite with analytics and premium operator controls.",
+        "monthly_price": 50000,
+        "annual_price": 540000,
+        "max_rooms": None,
+        "display_order": 3,
+        "is_popular": False,
+        "features": [
+            "Everything in Pro",
+            "Advanced reports",
+            "Simulation tools",
+            "Promotion management",
+            "Unlimited rooms",
+        ],
+        "allowed_features": {"dashboard", "rooms", "reservations", "customers", "reviews", "housekeeping", "inventory", "staff", "reports", "promotions"},
+    },
+}
+
+
+OWNER_FEATURE_CATALOG = {
+    "dashboard": {"label": "Dashboard", "requiredPlan": "Starter"},
+    "rooms": {"label": "Room Management", "requiredPlan": "Starter"},
+    "reservations": {"label": "Reservations", "requiredPlan": "Starter"},
+    "customers": {"label": "Customer Management", "requiredPlan": "Starter"},
+    "reviews": {"label": "Reviews", "requiredPlan": "Starter"},
+    "housekeeping": {"label": "Housekeeping", "requiredPlan": "Pro"},
+    "inventory": {"label": "Inventory", "requiredPlan": "Pro"},
+    "staff": {"label": "Staff Management", "requiredPlan": "Pro"},
+    "reports": {"label": "Reports", "requiredPlan": "Enterprise"},
+    "promotions": {"label": "Promotions", "requiredPlan": "Enterprise"},
+}
+
+
+def _owner_plan_definition(slug):
+    return OWNER_PLAN_DEFINITIONS.get(str(slug or "").strip().lower(), {})
+
+
+def _owner_plan_allowed_features(slug):
+    return sorted(_owner_plan_definition(slug).get("allowed_features", set()))
+
+
+def _ensure_membership_tables(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS membership_packages (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(80) NOT NULL,
+            slug VARCHAR(80),
+            description TEXT,
+            monthly_price NUMERIC(12, 2) DEFAULT 0,
+            annual_price NUMERIC(12, 2) DEFAULT 0,
+            max_rooms INTEGER,
+            features TEXT[] DEFAULT ARRAY[]::TEXT[],
+            is_popular BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    membership_package_alters = [
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS slug VARCHAR(80)",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS monthly_price NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS annual_price NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS max_rooms INTEGER",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS features TEXT[] DEFAULT ARRAY[]::TEXT[]",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS is_popular BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE membership_packages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ]
+    for statement in membership_package_alters:
+        cur.execute(statement)
+
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_packages_slug ON membership_packages(slug)")
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS hotel_package_subscriptions (
+            id SERIAL PRIMARY KEY,
+            hotel_id INTEGER REFERENCES hotels(id) ON DELETE CASCADE,
+            package_id INTEGER REFERENCES membership_packages(id) ON DELETE RESTRICT,
+            billing_cycle VARCHAR(20) DEFAULT 'MONTHLY',
+            amount NUMERIC(12, 2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'PENDING',
+            starts_at DATE DEFAULT CURRENT_DATE,
+            renewal_date DATE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    hotel_subscription_alters = [
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES owners(id) ON DELETE CASCADE",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS hotel_id INTEGER REFERENCES hotels(id) ON DELETE CASCADE",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS package_id INTEGER REFERENCES membership_packages(id) ON DELETE RESTRICT",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) DEFAULT 'MONTHLY'",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS amount NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'PENDING'",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'UNPAID'",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS paymongo_payment_id TEXT",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS last_paid_at TIMESTAMP",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS starts_at DATE DEFAULT CURRENT_DATE",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS renewal_date DATE",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE hotel_package_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ]
+    for statement in hotel_subscription_alters:
+        cur.execute(statement)
+
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_package_subscriptions_hotel_id ON hotel_package_subscriptions(hotel_id)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_package_subscriptions_owner_id ON hotel_package_subscriptions(owner_id)")
+
+
+def _seed_membership_packages(cur):
+    _ensure_membership_tables(cur)
+
+    for package in OWNER_PLAN_DEFINITIONS.values():
+        cur.execute(
+            """
+            INSERT INTO membership_packages (
+                name, slug, description, monthly_price, annual_price,
+                max_rooms, features, is_popular, is_active, display_order
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                monthly_price = EXCLUDED.monthly_price,
+                annual_price = EXCLUDED.annual_price,
+                max_rooms = EXCLUDED.max_rooms,
+                features = EXCLUDED.features,
+                is_popular = EXCLUDED.is_popular,
+                is_active = TRUE,
+                display_order = EXCLUDED.display_order,
+                updated_at = NOW()
+            """,
+            (
+                package["name"],
+                package["slug"],
+                package["description"],
+                package["monthly_price"],
+                package["annual_price"],
+                package["max_rooms"],
+                package["features"],
+                package["is_popular"],
+                package["display_order"],
+            ),
+        )
+
+    cur.execute(
+        """
+        SELECT id, monthly_price
+        FROM membership_packages
+        WHERE slug = 'starter'
+        LIMIT 1
+        """
+    )
+    starter = cur.fetchone() or {}
+    return _to_int(starter.get("id"), 0), _to_float(starter.get("monthly_price"), 0)
+
+
+def _ensure_hotel_subscription(cur, hotel_id, package_id, amount, status="ACTIVE", cycle="MONTHLY"):
+    if not hotel_id or not package_id:
+        return
+
+    normalized_cycle = str(cycle or "MONTHLY").upper()
+    normalized_status = str(status or "PENDING").upper()
+    cur.execute(
+        """
+        INSERT INTO hotel_package_subscriptions (
+            hotel_id, package_id, billing_cycle, amount, status, starts_at, renewal_date
+        )
+        VALUES (%s, %s, %s, %s, %s, CURRENT_DATE, %s)
+        ON CONFLICT (hotel_id) DO NOTHING
+        """,
+        (
+            hotel_id,
+            package_id,
+            normalized_cycle,
+            amount,
+            normalized_status,
+            _default_renewal_date(normalized_cycle),
+        ),
+    )
+
+
+def _backfill_hotel_subscriptions(cur):
+    starter_id, starter_amount = _seed_membership_packages(cur)
+    if not starter_id:
+        return
+
+    cur.execute(
+        """
+        UPDATE hotel_package_subscriptions s
+        SET owner_id = h.owner_id
+        FROM hotels h
+        WHERE s.hotel_id = h.id
+          AND s.owner_id IS NULL
+          AND h.owner_id IS NOT NULL
+        """
+    )
+
+    cur.execute(
+        """
+        INSERT INTO hotel_package_subscriptions (
+            owner_id, hotel_id, package_id, billing_cycle, amount, status, payment_status, starts_at, renewal_date
+        )
+        SELECT
+            h.owner_id,
+            h.id,
+            %s,
+            'MONTHLY',
+            %s,
+            'PENDING',
+            'UNPAID',
+            CURRENT_DATE,
+            NULL
+        FROM hotels h
+        LEFT JOIN hotel_package_subscriptions s ON s.hotel_id = h.id
+        WHERE s.id IS NULL
+        """,
+        (starter_id, starter_amount),
+    )
+
+
+def _get_owner_subscription(cur, owner_id):
+    _ensure_membership_tables(cur)
+    cur.execute(
+        """
+        SELECT
+            s.*,
+            p.name AS package_name,
+            p.slug AS package_slug,
+            p.description AS package_description,
+            p.monthly_price,
+            p.annual_price,
+            p.max_rooms,
+            p.features,
+            h.hotel_name,
+            h.hotel_code,
+            h.hotel_address
+        FROM hotel_package_subscriptions s
+        LEFT JOIN membership_packages p ON p.id = s.package_id
+        LEFT JOIN hotels h ON h.id = s.hotel_id
+        WHERE s.owner_id = %s
+           OR (s.owner_id IS NULL AND h.owner_id = %s)
+        ORDER BY s.updated_at DESC NULLS LAST, s.id DESC
+        LIMIT 1
+        """,
+        (owner_id, owner_id),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    if row.get("owner_id") is None:
+        cur.execute(
+            "UPDATE hotel_package_subscriptions SET owner_id = %s WHERE id = %s",
+            (owner_id, row.get("id")),
+        )
+        row["owner_id"] = owner_id
+
+    renewal_date = _parse_date_input(row.get("renewal_date"))
+    status = str(row.get("status") or "PENDING").upper()
+    if status == "ACTIVE" and renewal_date and renewal_date < datetime.utcnow().date():
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET status = 'EXPIRED', payment_status = CASE WHEN payment_status = 'PAID' THEN 'PAID' ELSE payment_status END, updated_at = NOW()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (row.get("id"),),
+        )
+        refreshed = cur.fetchone()
+        if refreshed:
+            row.update(refreshed)
+            row["package_name"] = row.get("package_name")
+    return row
+
+
+def _serialize_owner_subscription(row):
+    if not row:
+        return {
+            "id": None,
+            "status": "UNPAID",
+            "paymentStatus": "UNPAID",
+            "isActive": False,
+            "packageId": None,
+            "packageName": None,
+            "packageSlug": None,
+            "billingCycle": None,
+            "amount": 0,
+            "renewalDate": None,
+            "hotelId": None,
+            "hotelName": None,
+            "hotelCode": None,
+            "hotelAddress": None,
+            "hasHotel": False,
+            "maxRooms": None,
+            "roomLimit": None,
+            "features": [],
+            "allowedOwnerFeatures": [],
+            "daysUntilRenewal": None,
+            "expiringSoon": False,
+        }
+
+    status = str(row.get("status") or "PENDING").upper()
+    renewal_date = _parse_date_input(row.get("renewal_date"))
+    is_active = status == "ACTIVE" and (renewal_date is None or renewal_date >= datetime.utcnow().date())
+    days_until_renewal = _days_until_date(renewal_date)
+    expiring_soon = bool(is_active and days_until_renewal is not None and 1 <= days_until_renewal <= 7)
+    plan_slug = row.get("package_slug")
+    room_limit = row.get("max_rooms")
+    if room_limit is None:
+        room_limit = _owner_plan_definition(plan_slug).get("max_rooms")
+    allowed_features = _owner_plan_allowed_features(plan_slug) if is_active else []
+    return {
+        "id": row.get("id"),
+        "status": status,
+        "paymentStatus": str(row.get("payment_status") or "UNPAID").upper(),
+        "isActive": is_active,
+        "packageId": row.get("package_id"),
+        "packageName": row.get("package_name"),
+        "packageSlug": row.get("package_slug"),
+        "packageDescription": row.get("package_description") or "",
+        "billingCycle": str(row.get("billing_cycle") or "MONTHLY").upper(),
+        "amount": _to_float(row.get("amount"), 0),
+        "renewalDate": _serialize_date(row.get("renewal_date")),
+        "lastPaidAt": _serialize_date(row.get("last_paid_at")),
+        "hotelId": row.get("hotel_id"),
+        "hotelName": row.get("hotel_name"),
+        "hotelCode": row.get("hotel_code"),
+        "hotelAddress": row.get("hotel_address"),
+        "hasHotel": bool(row.get("hotel_id")),
+        "maxRooms": row.get("max_rooms"),
+        "roomLimit": room_limit,
+        "features": row.get("features") or [],
+        "allowedOwnerFeatures": allowed_features,
+        "daysUntilRenewal": days_until_renewal,
+        "expiringSoon": expiring_soon,
+    }
+
+
+def _owner_has_active_subscription(cur, owner_id):
+    subscription = _get_owner_subscription(cur, owner_id)
+    return _serialize_owner_subscription(subscription).get("isActive", False)
+
+
+def _owner_subscription_required_response():
+    return jsonify({
+        "error": "An active subscription is required before using this owner function.",
+        "code": "SUBSCRIPTION_REQUIRED",
+    }), 403
+
+
+def _hotel_owner_id(cur, hotel_id):
+    cur.execute("SELECT owner_id FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
+    row = cur.fetchone() or {}
+    return row.get("owner_id")
+
+
+def _room_owner_id(cur, room_id):
+    cur.execute(
+        """
+        SELECT h.owner_id
+        FROM rooms r
+        JOIN hotels h ON h.id = r.hotel_id
+        WHERE r.id = %s
+        LIMIT 1
+        """,
+        (room_id,),
+    )
+    row = cur.fetchone() or {}
+    return row.get("owner_id")
+
+
+def _reservation_owner_id(cur, reservation_id):
+    cur.execute(
+        """
+        SELECT COALESCE(h.owner_id, hr.owner_id) AS owner_id
+        FROM reservations r
+        LEFT JOIN hotels h ON h.id = r.hotel_id
+        LEFT JOIN rooms rm ON rm.id = r.room_id
+        LEFT JOIN hotels hr ON hr.id = rm.hotel_id
+        WHERE r.id = %s
+        LIMIT 1
+        """,
+        (reservation_id,),
+    )
+    row = cur.fetchone() or {}
+    return row.get("owner_id")
+
+
+def _owner_can_mutate(cur, owner_id):
+    return bool(owner_id) and _owner_has_active_subscription(cur, owner_id)
+
+
+def _owner_session_payload(cur, owner_row):
+    subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_row.get("id")))
+    return {
+        "id": owner_row.get("id"),
+        "firstName": owner_row.get("first_name"),
+        "lastName": owner_row.get("last_name"),
+        "email": owner_row.get("email"),
+        "hotelName": subscription.get("hotelName"),
+        "hotelId": subscription.get("hotelId"),
+        "hotelCode": subscription.get("hotelCode"),
+        "address": subscription.get("hotelAddress") or owner_row.get("hotel_address", ""),
+        "latitude": owner_row.get("latitude"),
+        "longitude": owner_row.get("longitude"),
+        "subscriptionStatus": subscription.get("status"),
+        "subscriptionActive": subscription.get("isActive"),
+        "subscriptionPlan": subscription.get("packageName"),
+        "subscriptionPlanSlug": subscription.get("packageSlug"),
+        "subscriptionRenewalDate": subscription.get("renewalDate"),
+        "subscriptionDaysRemaining": subscription.get("daysUntilRenewal"),
+        "subscriptionExpiringSoon": subscription.get("expiringSoon"),
+        "allowedOwnerFeatures": subscription.get("allowedOwnerFeatures") or [],
+        "roomLimit": subscription.get("roomLimit"),
+        "hasHotel": subscription.get("hasHotel"),
+    }
+
+
+def _owner_subscription_success_response(cur, owner_id, amount, is_simulated):
+    cur.execute(
+        """
+        SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
+        FROM owners o
+        LEFT JOIN hotels h ON o.id = h.owner_id
+        WHERE o.id = %s
+        LIMIT 1
+        """,
+        (owner_id,),
+    )
+    owner = cur.fetchone()
+    return jsonify({
+        'status': 'paid',
+        'amount': amount,
+        'subscription': _serialize_owner_subscription(_get_owner_subscription(cur, owner_id)),
+        'session': _owner_session_payload(cur, owner) if owner else None,
+        'isSimulated': is_simulated,
+    }), 200
+
+
+def _owner_subscription_simulation_enabled():
+    raw = os.getenv("PAYMONGO_SUBSCRIPTION_SIMULATION")
+    if str(raw or "").strip():
+        return _is_truthy(raw)
+    secret_key = str(os.getenv("PAYMONGO_SECRET_KEY", "") or "").strip()
+    if not secret_key or "your_" in secret_key:
+        return True
+    return secret_key.startswith("sk_test_")
+
+
+def _owner_subscription_simulated_link_id(owner_id, package_id, billing_cycle):
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    cycle_name = str(billing_cycle or "MONTHLY").upper()
+    return f"simsub_{owner_id}_{package_id}_{cycle_name}_{stamp}"
+
+
+def _owner_subscription_checkout_url(frontend_url, state, simulated=False):
+    suffix = "&simulation=1" if simulated else ""
+    return f"{frontend_url}/owner/subscription?payment={state}{suffix}"
+
+
+def _owner_access_state(cur, owner_id):
+    subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_id))
+    return subscription, set(subscription.get("allowedOwnerFeatures") or [])
+
+
+def _owner_feature_required_response(feature_key, subscription=None):
+    feature_meta = OWNER_FEATURE_CATALOG.get(feature_key, {})
+    label = feature_meta.get("label") or "This feature"
+    required_plan = feature_meta.get("requiredPlan") or "a higher-tier plan"
+    return jsonify({
+        "error": f"{label} is not included in your current subscription plan. Upgrade to {required_plan} to unlock it.",
+        "code": "PLAN_UPGRADE_REQUIRED",
+        "feature": feature_key,
+        "requiredPlan": required_plan,
+        "currentPlan": (subscription or {}).get("packageName"),
+    }), 403
+
+
+def _owner_feature_guard(cur, owner_id, feature_key, mutation=False):
+    subscription, allowed_features = _owner_access_state(cur, owner_id)
+    if not subscription.get("isActive"):
+        return (_owner_subscription_required_response() if mutation else None), subscription
+    if feature_key in allowed_features:
+        return None, subscription
+    return _owner_feature_required_response(feature_key, subscription), subscription
+
+
+def _owner_room_limit_response(subscription):
+    room_limit = subscription.get("roomLimit")
+    return jsonify({
+        "error": f"Your current subscription only allows up to {room_limit} rooms. Upgrade your plan to add more rooms.",
+        "code": "ROOM_LIMIT_REACHED",
+        "roomLimit": room_limit,
+        "currentPlan": subscription.get("packageName"),
+    }), 403
+
+
 # --- ADMIN ENDPOINTS ---
 
 @app.route('/api/admin/login', methods=['POST'])
@@ -589,6 +1201,295 @@ def admin_owners():
             })
         return jsonify({'owners': owners, 'total': len(owners)}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/packages', methods=['GET'])
+def admin_packages():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
+        conn.commit()
+
+        cur.execute(
+            """
+            SELECT
+                id, name, slug, description, monthly_price, annual_price,
+                max_rooms, features, is_popular, is_active, display_order,
+                created_at, updated_at
+            FROM membership_packages
+            ORDER BY display_order ASC, monthly_price ASC, name ASC
+            """
+        )
+        package_rows = cur.fetchall() or []
+        packages = []
+        for row in package_rows:
+            packages.append({
+                'id': row.get('id'),
+                'name': row.get('name') or '',
+                'slug': row.get('slug') or _slugify(row.get('name')),
+                'description': row.get('description') or '',
+                'monthlyPrice': _to_float(row.get('monthly_price'), 0),
+                'annualPrice': _to_float(row.get('annual_price'), 0),
+                'maxRooms': row.get('max_rooms'),
+                'features': row.get('features') or [],
+                'isPopular': bool(row.get('is_popular')),
+                'isActive': bool(row.get('is_active')),
+                'displayOrder': _to_int(row.get('display_order'), 0),
+                'createdAt': _serialize_date(row.get('created_at')),
+                'updatedAt': _serialize_date(row.get('updated_at')),
+            })
+
+        cur.execute(
+            """
+            SELECT
+                s.id,
+                s.hotel_id,
+                s.package_id,
+                s.billing_cycle,
+                s.amount,
+                s.status,
+                s.starts_at,
+                s.renewal_date,
+                s.updated_at,
+                h.hotel_name,
+                h.hotel_code,
+                o.first_name,
+                o.last_name,
+                o.email AS owner_email,
+                p.name AS package_name,
+                p.slug AS package_slug
+            FROM hotel_package_subscriptions s
+            JOIN hotels h ON h.id = s.hotel_id
+            LEFT JOIN owners o ON o.id = h.owner_id
+            JOIN membership_packages p ON p.id = s.package_id
+            ORDER BY COALESCE(s.renewal_date, CURRENT_DATE) ASC, h.hotel_name ASC
+            """
+        )
+        subscription_rows = cur.fetchall() or []
+        subscriptions = []
+        monthly_projection = 0.0
+        active_count = 0
+        pending_count = 0
+        for row in subscription_rows:
+            status = str(row.get('status') or 'PENDING').upper()
+            cycle = str(row.get('billing_cycle') or 'MONTHLY').upper()
+            amount = _to_float(row.get('amount'), 0)
+            if status == 'ACTIVE':
+                active_count += 1
+                monthly_projection += amount if cycle == 'MONTHLY' else round(amount / 12, 2)
+            elif status == 'PENDING':
+                pending_count += 1
+
+            subscriptions.append({
+                'id': row.get('id'),
+                'hotelId': row.get('hotel_id'),
+                'packageId': row.get('package_id'),
+                'hotelName': row.get('hotel_name') or 'Unnamed Hotel',
+                'hotelCode': row.get('hotel_code') or '',
+                'ownerName': f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or 'Unassigned Owner',
+                'ownerEmail': row.get('owner_email') or '',
+                'plan': row.get('package_name') or 'Unassigned',
+                'planSlug': row.get('package_slug') or '',
+                'cycle': cycle,
+                'amount': amount,
+                'status': status,
+                'startsAt': _serialize_date(row.get('starts_at')),
+                'renewal': _serialize_date(row.get('renewal_date')),
+                'updatedAt': _serialize_date(row.get('updated_at')),
+            })
+
+        cur.execute(
+            """
+            SELECT
+                h.id,
+                h.hotel_name,
+                h.hotel_code,
+                o.first_name,
+                o.last_name
+            FROM hotels h
+            LEFT JOIN owners o ON o.id = h.owner_id
+            ORDER BY h.hotel_name ASC
+            """
+        )
+        hotels = []
+        for row in cur.fetchall() or []:
+            hotels.append({
+                'id': row.get('id'),
+                'hotelName': row.get('hotel_name') or 'Unnamed Hotel',
+                'hotelCode': row.get('hotel_code') or '',
+                'ownerName': f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or 'Unassigned Owner',
+            })
+
+        return jsonify({
+            'packages': packages,
+            'subscriptions': subscriptions,
+            'hotels': hotels,
+            'stats': {
+                'totalPackages': len(packages),
+                'activeSubscriptions': active_count,
+                'pendingSubscriptions': pending_count,
+                'totalHotels': len(hotels),
+                'monthlyRecurringRevenue': round(monthly_projection, 2),
+            },
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/packages', methods=['POST'])
+def admin_create_package():
+    return jsonify({'error': 'Membership packages are system-defined and cannot be created manually.'}), 403
+
+
+@app.route('/api/admin/packages/<int:package_id>', methods=['PATCH'])
+def admin_update_package(package_id):
+    return jsonify({'error': 'Membership packages are system-defined and cannot be edited manually.'}), 403
+
+
+@app.route('/api/admin/packages/<int:package_id>', methods=['DELETE'])
+def admin_delete_package(package_id):
+    return jsonify({'error': 'Membership packages are system-defined and cannot be removed.'}), 403
+
+
+@app.route('/api/admin/package-subscriptions', methods=['POST'])
+def admin_upsert_package_subscription():
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        hotel_id = _to_int(data.get('hotelId'), 0)
+        package_id = _to_int(data.get('packageId'), 0)
+        if not hotel_id or not package_id:
+            return jsonify({'error': 'Hotel and package are required.'}), 400
+
+        billing_cycle = str(data.get('billingCycle') or 'MONTHLY').upper()
+        if billing_cycle not in {'MONTHLY', 'ANNUAL'}:
+            return jsonify({'error': 'Invalid billing cycle.'}), 400
+
+        status = str(data.get('status') or 'ACTIVE').upper()
+        if status not in {'ACTIVE', 'PENDING', 'CANCELLED', 'EXPIRED'}:
+            return jsonify({'error': 'Invalid subscription status.'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_membership_packages(cur)
+
+        cur.execute("SELECT id FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
+        hotel_row = cur.fetchone()
+        if not hotel_row:
+            return jsonify({'error': 'Hotel not found.'}), 404
+        cur.execute("SELECT owner_id FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
+        hotel_owner = cur.fetchone() or {}
+
+        cur.execute(
+            """
+            SELECT id, monthly_price, annual_price
+            FROM membership_packages
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (package_id,),
+        )
+        package_row = cur.fetchone()
+        if not package_row:
+            return jsonify({'error': 'Package not found.'}), 404
+
+        amount = _to_float(
+            data.get('amount'),
+            _package_amount_for_cycle(package_row, billing_cycle),
+        )
+        starts_at = _parse_date_input(data.get('startsAt')) or datetime.utcnow().date()
+        renewal_date = _parse_date_input(data.get('renewalDate')) or _default_renewal_date(billing_cycle, starts_at)
+
+        cur.execute(
+            """
+            INSERT INTO hotel_package_subscriptions (
+                hotel_id, package_id, billing_cycle, amount, status, starts_at, renewal_date, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (hotel_id) DO UPDATE SET
+                package_id = EXCLUDED.package_id,
+                billing_cycle = EXCLUDED.billing_cycle,
+                amount = EXCLUDED.amount,
+                status = EXCLUDED.status,
+                starts_at = EXCLUDED.starts_at,
+                renewal_date = EXCLUDED.renewal_date,
+                updated_at = NOW()
+            RETURNING id
+            """,
+            (hotel_id, package_id, billing_cycle, amount, status, starts_at, renewal_date),
+        )
+        updated = cur.fetchone() or {}
+        if hotel_owner.get("owner_id"):
+            cur.execute(
+                """
+                UPDATE hotel_package_subscriptions
+                SET owner_id = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+                (hotel_owner.get("owner_id"), updated.get("id")),
+            )
+        conn.commit()
+        return jsonify({'message': 'Hotel subscription saved successfully.', 'id': updated.get('id')}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/package-subscriptions/<int:subscription_id>/renew', methods=['PATCH'])
+def admin_renew_package_subscription(subscription_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_membership_packages(cur)
+
+        cur.execute(
+            """
+            SELECT id, billing_cycle, renewal_date, status, last_paid_at
+            FROM hotel_package_subscriptions
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (subscription_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'error': 'Subscription not found.'}), 404
+
+        starts_at, next_renewal = _subscription_cycle_dates(row)
+
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET status = 'ACTIVE', payment_status = 'PAID', starts_at = %s, renewal_date = %s, last_paid_at = NOW(), updated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (starts_at, next_renewal, subscription_id),
+        )
+        conn.commit()
+        return jsonify({
+            'message': 'Subscription renewed successfully.',
+            'renewalDate': _serialize_date(next_renewal),
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         _safe_close(conn, cur)
@@ -1266,7 +2167,6 @@ def change_user_password():
 
 @app.route('/api/owner/signup', methods=['POST'])
 def owner_signup():
-    import re as _re
     data = request.get_json(silent=True) or {}
     f_name = (data.get('firstName') or '').strip()
     l_name = (data.get('lastName') or '').strip()
@@ -1305,22 +2205,24 @@ def owner_signup():
             code_format_valid = False
             if _table_has_column(cur, 'hotels', 'hotel_code'):
                 cur.execute(
-                    '''
+                    """
                     SELECT id, hotel_name, owner_id, hotel_code
                     FROM hotels
                     WHERE UPPER(COALESCE(hotel_code, '')) = %s
                     LIMIT 1
-                    ''',
+                    """,
                     (hotel_code,),
                 )
                 hotel = cur.fetchone()
 
             if not hotel:
-                m = _re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
-                if m:
+                match = re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
+                if match:
                     code_format_valid = True
-                    hotel_id = int(m.group(1))
-                    cur.execute('SELECT id, hotel_name, owner_id FROM hotels WHERE id = %s', (hotel_id,))
+                    cur.execute(
+                        'SELECT id, hotel_name, owner_id, hotel_code FROM hotels WHERE id = %s LIMIT 1',
+                        (int(match.group(1)),),
+                    )
                     hotel = cur.fetchone()
 
             if hotel and hotel.get('owner_id'):
@@ -1334,15 +2236,41 @@ def owner_signup():
                 )
                 owner_id = cur2.fetchone()[0]
                 cur2.execute('UPDATE hotels SET owner_id = %s WHERE id = %s', (owner_id, hotel['id']))
+
+                starter_id, starter_amount = _seed_membership_packages(cur)
+                cur.execute(
+                    """
+                INSERT INTO hotel_package_subscriptions (
+                    owner_id, hotel_id, package_id, billing_cycle, amount,
+                    status, payment_status, starts_at, renewal_date, updated_at
+                )
+                VALUES (%s, %s, %s, 'MONTHLY', %s, 'PENDING', 'UNPAID', CURRENT_DATE, NULL, NOW())
+                ON CONFLICT (hotel_id) DO UPDATE SET
+                    owner_id = EXCLUDED.owner_id,
+                    package_id = EXCLUDED.package_id,
+                    billing_cycle = EXCLUDED.billing_cycle,
+                    amount = EXCLUDED.amount,
+                    status = 'PENDING',
+                    payment_status = 'UNPAID',
+                    starts_at = CURRENT_DATE,
+                    renewal_date = NULL,
+                    last_paid_at = NULL,
+                    paymongo_payment_id = NULL,
+                    updated_at = NOW()
+                """,
+                (owner_id, hotel['id'], starter_id, starter_amount),
+            )
+
                 cur2.close()
                 conn.commit()
                 return jsonify({
-                    'message': 'Owner registered and linked to hotel successfully!',
+                    'message': 'Owner and hotel registered successfully. Subscription payment is required to unlock owner functions.',
                     'ownerId': owner_id,
                     'hotelId': hotel['id'],
                     'hotelName': hotel.get('hotel_name') or 'Hotel',
                     'hotelCode': hotel.get('hotel_code') or hotel_code,
                     'createdHotel': False,
+                    'subscriptionRequired': True,
                 }), 201
 
             if not hotel_name:
@@ -1368,11 +2296,9 @@ def owner_signup():
 
         hotel_columns = ['id', 'owner_id', 'hotel_name']
         hotel_values = [hotel_id, owner_id, hotel_name]
-
         if _table_has_column(cur, 'hotels', 'hotel_address'):
             hotel_columns.append('hotel_address')
             hotel_values.append(hotel_address or '')
-
         if _table_has_column(cur, 'hotels', 'hotel_code'):
             hotel_columns.append('hotel_code')
             hotel_values.append(generated_hotel_code)
@@ -1386,15 +2312,40 @@ def owner_signup():
         if created_hotel:
             hotel_id = created_hotel[0]
 
+        starter_id, starter_amount = _seed_membership_packages(cur)
+        cur.execute(
+            """
+            INSERT INTO hotel_package_subscriptions (
+                owner_id, hotel_id, package_id, billing_cycle, amount,
+                status, payment_status, starts_at, renewal_date, updated_at
+            )
+            VALUES (%s, %s, %s, 'MONTHLY', %s, 'PENDING', 'UNPAID', CURRENT_DATE, NULL, NOW())
+            ON CONFLICT (hotel_id) DO UPDATE SET
+                owner_id = EXCLUDED.owner_id,
+                package_id = EXCLUDED.package_id,
+                billing_cycle = EXCLUDED.billing_cycle,
+                amount = EXCLUDED.amount,
+                status = 'PENDING',
+                payment_status = 'UNPAID',
+                starts_at = CURRENT_DATE,
+                renewal_date = NULL,
+                last_paid_at = NULL,
+                paymongo_payment_id = NULL,
+                updated_at = NOW()
+            """,
+            (owner_id, hotel_id, starter_id, starter_amount),
+        )
+
         cur2.close()
         conn.commit()
         return jsonify({
-            'message': 'Owner registered and hotel created successfully!',
+            'message': 'Owner and hotel registered successfully. Subscription payment is required to unlock owner functions.',
             'ownerId': owner_id,
             'hotelId': hotel_id,
             'hotelName': hotel_name or 'Hotel',
             'hotelCode': generated_hotel_code,
             'createdHotel': True,
+            'subscriptionRequired': True,
         }), 201
     except Exception as e:
         if conn: conn.rollback()
@@ -1411,6 +2362,7 @@ def owner_login():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
         cur.execute("""
             SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
             FROM owners o
@@ -1418,21 +2370,439 @@ def owner_login():
             WHERE o.email = %s
         """, (email,))
         owner = cur.fetchone()
-        cur.close()
-        conn.close()
         if owner and check_password_hash(owner['password_hash'], password):
+            owner_payload = _owner_session_payload(cur, owner)
+            conn.commit()
+            cur.close()
+            conn.close()
             return jsonify({
                 "message": "Owner login successful!",
-                "owner": {
-                    "id": owner['id'], "firstName": owner['first_name'], "lastName": owner['last_name'],
-                    "email": owner['email'], "hotelName": owner['hotel_name'], "hotelId": owner['hotel_id'],
-                    "address": owner.get('hotel_address', ''),
-                    "latitude": owner.get('latitude'), "longitude": owner.get('longitude')
-                }
+                "owner": owner_payload
             }), 200
+        cur.close()
+        conn.close()
         return jsonify({"error": "Invalid email or password"}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/owner/subscription/<int:owner_id>', methods=['GET'])
+def owner_subscription(owner_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
+        _seed_membership_packages(cur)
+
+        cur.execute(
+            """
+            SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
+            FROM owners o
+            LEFT JOIN hotels h ON o.id = h.owner_id
+            WHERE o.id = %s
+            LIMIT 1
+            """,
+            (owner_id,),
+        )
+        owner = cur.fetchone()
+        if not owner:
+            return jsonify({"error": "Owner not found."}), 404
+
+        cur.execute(
+            """
+            SELECT
+                id, name, slug, description, monthly_price, annual_price,
+                max_rooms, features, is_popular, is_active, display_order
+            FROM membership_packages
+            WHERE COALESCE(is_active, TRUE) = TRUE
+            ORDER BY display_order ASC, monthly_price ASC, name ASC
+            """
+        )
+        packages = []
+        for row in cur.fetchall() or []:
+            packages.append({
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "slug": row.get("slug"),
+                "description": row.get("description") or "",
+                "monthlyPrice": _to_float(row.get("monthly_price"), 0),
+                "annualPrice": _to_float(row.get("annual_price"), 0),
+                "maxRooms": row.get("max_rooms"),
+                "features": row.get("features") or [],
+                "isPopular": bool(row.get("is_popular")),
+                "isActive": bool(row.get("is_active")),
+                "displayOrder": _to_int(row.get("display_order"), 0),
+            })
+
+        subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_id))
+        conn.commit()
+        return jsonify({
+            "ownerId": owner_id,
+            "packages": packages,
+            "subscription": subscription,
+            "session": _owner_session_payload(cur, owner),
+            "canSetupHotel": subscription.get("isActive") and not subscription.get("hasHotel"),
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/subscription/create-payment-link', methods=['POST'])
+def owner_create_subscription_payment_link():
+    conn = None
+    cur = None
+    try:
+        simulation_mode = _owner_subscription_simulation_enabled()
+        paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
+        if not simulation_mode and (not paymongo_key or 'your_' in paymongo_key):
+            return jsonify({'error': 'PayMongo API key not configured. Please set PAYMONGO_SECRET_KEY in backend/.env file.'}), 503
+
+        data = request.get_json(silent=True) or {}
+        owner_id = _to_int(data.get("ownerId"), 0)
+        package_id = _to_int(data.get("packageId"), 0)
+        billing_cycle = str(data.get("billingCycle") or "MONTHLY").upper()
+        if not owner_id or not package_id:
+            return jsonify({"error": "Owner and package are required."}), 400
+        if billing_cycle not in {"MONTHLY", "ANNUAL"}:
+            return jsonify({"error": "Invalid billing cycle."}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
+        _seed_membership_packages(cur)
+
+        cur.execute("SELECT id, first_name, last_name, email FROM owners WHERE id = %s LIMIT 1", (owner_id,))
+        owner = cur.fetchone()
+        if not owner:
+            return jsonify({"error": "Owner not found."}), 404
+
+        cur.execute(
+            """
+            SELECT id, name, slug, monthly_price, annual_price
+            FROM membership_packages
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (package_id,),
+        )
+        package_row = cur.fetchone()
+        if not package_row:
+            return jsonify({"error": "Package not found."}), 404
+
+        amount = _package_amount_for_cycle(package_row, billing_cycle)
+        amount_cents = int(round(amount * 100))
+        if amount_cents <= 0:
+            return jsonify({"error": "Invalid subscription amount."}), 400
+
+        cur.execute("SELECT id FROM hotels WHERE owner_id = %s ORDER BY id ASC LIMIT 1", (owner_id,))
+        hotel = cur.fetchone() or {}
+        hotel_id = hotel.get("id")
+        current_subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_id))
+        pending_status = 'ACTIVE' if current_subscription.get("isActive") else 'PENDING'
+
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        success_url = _owner_subscription_checkout_url(frontend_url, 'success', simulation_mode)
+        failed_url = _owner_subscription_checkout_url(frontend_url, 'failed', simulation_mode)
+
+        if simulation_mode:
+            link_id = _owner_subscription_simulated_link_id(owner_id, package_id, billing_cycle)
+            checkout_url = success_url
+        else:
+            payload = {
+                'data': {
+                    'attributes': {
+                        'amount': amount_cents,
+                        'currency': 'PHP',
+                        'description': f'Innova HMS {package_row.get("name")} {billing_cycle.title()} Subscription',
+                        'remarks': f'Owner #{owner_id} subscription',
+                        'redirect': {'success': success_url, 'failed': failed_url},
+                    }
+                }
+            }
+            response = requests.post(
+                'https://api.paymongo.com/v1/links',
+                json=payload,
+                headers=_paymongo_headers(),
+                timeout=15,
+            )
+            result = response.json()
+            if not response.ok:
+                errors = result.get('errors', [{}])
+                msg = errors[0].get('detail', 'PayMongo error') if errors else 'PayMongo error'
+                return jsonify({'error': msg}), 400
+
+            link_data = result.get('data', {})
+            attrs = link_data.get('attributes', {})
+            checkout_url = attrs.get('checkout_url', '')
+            link_id = link_data.get('id', '')
+
+        cur.execute(
+            """
+            INSERT INTO hotel_package_subscriptions (
+                owner_id, hotel_id, package_id, billing_cycle, amount, status,
+                payment_status, paymongo_payment_id, starts_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, 'PENDING', %s, CURRENT_DATE, NOW())
+            ON CONFLICT (owner_id) DO UPDATE SET
+                hotel_id = EXCLUDED.hotel_id,
+                package_id = EXCLUDED.package_id,
+                billing_cycle = EXCLUDED.billing_cycle,
+                amount = EXCLUDED.amount,
+                status = %s,
+                payment_status = 'PENDING',
+                paymongo_payment_id = EXCLUDED.paymongo_payment_id,
+                updated_at = NOW()
+            RETURNING id
+            """,
+            (owner_id, hotel_id, package_id, billing_cycle, amount, pending_status, link_id, pending_status),
+        )
+        subscription_row = cur.fetchone() or {}
+        conn.commit()
+        return jsonify({
+            "checkoutUrl": checkout_url,
+            "linkId": link_id,
+            "subscriptionId": subscription_row.get("id"),
+            "amount": amount,
+            "packageName": package_row.get("name"),
+            "billingCycle": billing_cycle,
+            "isSimulated": simulation_mode,
+        }), 200
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'PayMongo request timed out. Try again.'}), 504
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/subscription/verify/<string:link_id>', methods=['GET'])
+def owner_verify_subscription_payment(link_id):
+    conn = None
+    cur = None
+    try:
+        owner_id = request.args.get('owner_id', type=int)
+        if not owner_id:
+            return jsonify({'error': 'owner_id is required.'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
+        _seed_membership_packages(cur)
+
+        cur.execute(
+            """
+            SELECT *
+            FROM hotel_package_subscriptions
+            WHERE owner_id = %s AND paymongo_payment_id = %s
+            LIMIT 1
+            """,
+            (owner_id, link_id),
+        )
+        subscription = cur.fetchone()
+        if not subscription:
+            return jsonify({'error': 'Subscription payment record not found.'}), 404
+
+        simulated_link = str(link_id or "").startswith("simsub_")
+        if str(subscription.get('payment_status') or '').upper() == 'PAID' and subscription.get('last_paid_at'):
+            amount = _to_float(subscription.get('amount'), 0)
+            conn.commit()
+            return _owner_subscription_success_response(cur, owner_id, amount, simulated_link)
+
+        if simulated_link:
+            status = 'paid'
+            amount = _to_float(subscription.get('amount'), 0)
+            is_paid = True
+        else:
+            response = requests.get(
+                f'https://api.paymongo.com/v1/links/{link_id}',
+                headers=_paymongo_headers(),
+                timeout=15,
+            )
+            result = response.json()
+            if not response.ok:
+                return jsonify({'error': 'Failed to verify payment'}), 400
+
+            attrs = result.get('data', {}).get('attributes', {})
+            status = attrs.get('status', 'unpaid')
+            amount = attrs.get('amount', 0) / 100
+            is_paid = status == 'paid'
+
+        if is_paid:
+            starts_at, next_renewal = _subscription_cycle_dates(subscription, carry_requires_payment_proof=True)
+
+            cur.execute(
+                """
+                UPDATE hotel_package_subscriptions
+                SET
+                    status = 'ACTIVE',
+                    payment_status = 'PAID',
+                    starts_at = %s,
+                    last_paid_at = NOW(),
+                    renewal_date = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (starts_at, next_renewal, subscription.get("id")),
+            )
+            cur.fetchone()
+
+            conn.commit()
+            return _owner_subscription_success_response(cur, owner_id, amount, simulated_link)
+
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET payment_status = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (str(status).upper(), subscription.get("id")),
+        )
+        conn.commit()
+        return jsonify({'status': status, 'amount': amount}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/owner/hotel/setup', methods=['POST'])
+def owner_setup_hotel():
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        owner_id = _to_int(data.get("ownerId"), 0)
+        hotel_code = str(data.get("hotelCode") or "").strip().upper()
+        hotel_name = str(data.get("hotelName") or "").strip()
+        hotel_address = str(data.get("hotelAddress") or "").strip()
+        if not owner_id:
+            return jsonify({"error": "Owner is required."}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _backfill_hotel_subscriptions(cur)
+        _seed_membership_packages(cur)
+
+        if not _owner_has_active_subscription(cur, owner_id):
+            return jsonify({"error": "An active subscription is required before setting up a hotel."}), 403
+
+        cur.execute("SELECT id FROM hotels WHERE owner_id = %s LIMIT 1", (owner_id,))
+        existing_hotel = cur.fetchone()
+        if existing_hotel:
+            return jsonify({"error": "This owner already has a hotel configured."}), 409
+
+        resolved_hotel = None
+        if hotel_code:
+            if _table_has_column(cur, 'hotels', 'hotel_code'):
+                cur.execute(
+                    """
+                    SELECT id, hotel_name, owner_id, hotel_code, hotel_address
+                    FROM hotels
+                    WHERE UPPER(COALESCE(hotel_code, '')) = %s
+                    LIMIT 1
+                    """,
+                    (hotel_code,),
+                )
+                resolved_hotel = cur.fetchone()
+            if not resolved_hotel:
+                match = re.match(r'^INNOVAHMS-(\d+)$', hotel_code)
+                if match:
+                    cur.execute(
+                        "SELECT id, hotel_name, owner_id, hotel_code, hotel_address FROM hotels WHERE id = %s LIMIT 1",
+                        (int(match.group(1)),),
+                    )
+                    resolved_hotel = cur.fetchone()
+            if not resolved_hotel:
+                return jsonify({"error": f"Hotel code {hotel_code} does not exist."}), 404
+            if resolved_hotel.get("owner_id"):
+                return jsonify({"error": f"Hotel code {hotel_code} is already claimed by another owner."}), 409
+
+            cur.execute(
+                """
+                UPDATE hotels
+                SET owner_id = %s,
+                    hotel_address = COALESCE(NULLIF(%s, ''), hotel_address),
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING id, hotel_name, hotel_code, hotel_address
+                """,
+                (owner_id, hotel_address, resolved_hotel.get("id")),
+            )
+            resolved_hotel = cur.fetchone()
+        else:
+            if not hotel_name:
+                return jsonify({"error": "Hotel name is required when no hotel code is provided."}), 400
+
+            cur.execute("SELECT nextval(pg_get_serial_sequence('hotels', 'id')) AS hotel_id")
+            next_hotel = cur.fetchone() or {}
+            hotel_id = next_hotel.get("hotel_id")
+            if not hotel_id:
+                return jsonify({"error": "Unable to generate a hotel code right now. Please try again."}), 500
+
+            generated_hotel_code = f"INNOVAHMS-{hotel_id}"
+            columns = ["id", "owner_id", "hotel_name"]
+            values = [hotel_id, owner_id, hotel_name]
+            if _table_has_column(cur, "hotels", "hotel_address"):
+                columns.append("hotel_address")
+                values.append(hotel_address)
+            if _table_has_column(cur, "hotels", "hotel_code"):
+                columns.append("hotel_code")
+                values.append(generated_hotel_code)
+            placeholders = ", ".join(["%s"] * len(values))
+            cur.execute(
+                f"INSERT INTO hotels ({', '.join(columns)}) VALUES ({placeholders}) RETURNING id, hotel_name, hotel_code, hotel_address",
+                tuple(values),
+            )
+            resolved_hotel = cur.fetchone()
+
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET hotel_id = %s, updated_at = NOW()
+            WHERE owner_id = %s
+            """,
+            (resolved_hotel.get("id"), owner_id),
+        )
+
+        cur.execute(
+            """
+            SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
+            FROM owners o
+            LEFT JOIN hotels h ON o.id = h.owner_id
+            WHERE o.id = %s
+            LIMIT 1
+            """,
+            (owner_id,),
+        )
+        owner = cur.fetchone()
+        conn.commit()
+        return jsonify({
+            "message": "Hotel setup completed successfully.",
+            "hotel": {
+                "id": resolved_hotel.get("id"),
+                "hotelName": resolved_hotel.get("hotel_name"),
+                "hotelCode": resolved_hotel.get("hotel_code"),
+                "hotelAddress": resolved_hotel.get("hotel_address"),
+            },
+            "session": _owner_session_payload(cur, owner) if owner else None,
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
 
 
 def _resolve_owner_hotel(cur, owner_id):
@@ -1460,16 +2830,7 @@ def _resolve_owner_hotel(cur, owner_id):
         row = cur.fetchone()
         if row:
             return row
-
-    cur.execute(
-        f"""
-        SELECT {columns_sql}
-        FROM hotels
-        ORDER BY id ASC
-        LIMIT 1
-        """
-    )
-    return cur.fetchone()
+    return None
 
 
 def _build_forecast_payload(reservation_rows, total_rooms, period):
@@ -2344,6 +3705,9 @@ def owner_staff(owner_id):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'staff')
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2362,6 +3726,9 @@ def owner_add_staff(owner_id):
         data = request.json or {}
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'staff', mutation=True)
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2410,6 +3777,9 @@ def owner_promotions(owner_id):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'promotions')
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2456,6 +3826,9 @@ def owner_create_promotion(owner_id):
         data = request.json or {}
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'promotions', mutation=True)
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2503,6 +3876,9 @@ def owner_update_promotion(owner_id, offer_id):
         data = request.json or {}
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'promotions', mutation=True)
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2561,6 +3937,9 @@ def owner_delete_promotion(owner_id, offer_id):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'promotions', mutation=True)
+        if guard:
+            return guard
         hotel = _resolve_owner_hotel(cur, owner_id)
         if not hotel:
             return jsonify({"error": "No hotel found for this owner."}), 404
@@ -2732,7 +4111,7 @@ def add_room():
     conn = None
     cur = None
     try:
-        hotel_id = request.form.get('hotelId')
+        hotel_id = _to_int(request.form.get('hotelId'), 0)
         room_num = request.form.get('roomNumber')
         room_name = request.form.get('roomName', '')
         room_type = request.form.get('roomType', 'Single')
@@ -2751,7 +4130,17 @@ def add_room():
         images_pg = _to_pg_array(image_paths)
 
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        owner_id = _hotel_owner_id(cur, hotel_id)
+        guard, subscription = _owner_feature_guard(cur, owner_id, 'rooms', mutation=True)
+        if guard:
+            return guard
+        room_limit = subscription.get("roomLimit")
+        if room_limit:
+            cur.execute("SELECT COUNT(*) AS total FROM rooms WHERE hotel_id = %s", (hotel_id,))
+            current_count = _to_int((cur.fetchone() or {}).get("total"), 0)
+            if current_count >= room_limit:
+                return _owner_room_limit_response(subscription)
         cur.execute("""
             INSERT INTO rooms (hotel_id, room_number, room_name, room_type, price_per_night,
                                description, amenities, images, max_adults, max_children, status)
@@ -2773,7 +4162,7 @@ def update_room(room_id):
     conn = None
     cur = None
     try:
-        hotel_id = request.form.get('hotelId')
+        hotel_id = _to_int(request.form.get('hotelId'), 0)
         room_num = request.form.get('roomNumber')
         room_name = request.form.get('roomName', '')
         room_type = request.form.get('roomType', 'Single')
@@ -2793,7 +4182,11 @@ def update_room(room_id):
         images_pg = _to_pg_array(all_images)
 
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        owner_id = _room_owner_id(cur, room_id) or _hotel_owner_id(cur, hotel_id)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'rooms', mutation=True)
+        if guard:
+            return guard
         cur.execute("""
             UPDATE rooms
             SET room_number = %s, room_name = %s, room_type = %s, price_per_night = %s,
@@ -2818,7 +4211,11 @@ def delete_room(room_id):
     cur = None
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        owner_id = _room_owner_id(cur, room_id)
+        guard, _subscription = _owner_feature_guard(cur, owner_id, 'rooms', mutation=True)
+        if guard:
+            return guard
         cur.execute("DELETE FROM rooms WHERE id = %s", (room_id,))
         conn.commit()
         return jsonify({"message": "Room deleted successfully!"}), 200
@@ -3275,7 +4672,10 @@ def owner_cancel_reservation(reservation_id):
     cur = None
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        owner_id = _reservation_owner_id(cur, reservation_id)
+        if not _owner_can_mutate(cur, owner_id):
+            return _owner_subscription_required_response()
         cur.execute(
             "UPDATE reservations SET status = 'CANCELLED' WHERE id = %s RETURNING id",
             (reservation_id,)
@@ -3297,7 +4697,10 @@ def owner_delete_reservation(reservation_id):
     cur = None
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        owner_id = _reservation_owner_id(cur, reservation_id)
+        if not _owner_can_mutate(cur, owner_id):
+            return _owner_subscription_required_response()
         cur.execute("DELETE FROM reservations WHERE id = %s RETURNING id", (reservation_id,))
         if not cur.fetchone():
             return jsonify({'error': 'Reservation not found'}), 404
@@ -3780,6 +5183,10 @@ def reports_full_stats():
         owner_id = request.args.get('owner_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        if owner_id:
+            guard, _subscription = _owner_feature_guard(cur, owner_id, 'reports')
+            if guard:
+                return guard
         hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
         hotel_id = hotel.get("id") if hotel else None
 
@@ -3964,6 +5371,10 @@ def reports_transactions():
         owner_id = request.args.get('owner_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        if owner_id:
+            guard, _subscription = _owner_feature_guard(cur, owner_id, 'reports')
+            if guard:
+                return guard
         hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
         hotel_id = hotel.get("id") if hotel else None
 
@@ -4026,6 +5437,10 @@ def reports_simulate():
         baseline_revenue = 0.0
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        if owner_id:
+            guard, _subscription = _owner_feature_guard(cur, owner_id, 'reports', mutation=True)
+            if guard:
+                return guard
         hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
         hotel_id = hotel.get("id") if hotel else None
         if _table_exists(cur, "reservations"):
@@ -4079,6 +5494,10 @@ def inventory_overview():
 
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        if owner_id:
+            guard, _subscription = _owner_feature_guard(cur, owner_id, 'inventory')
+            if guard:
+                return guard
         hotel = _resolve_owner_hotel(cur, owner_id) if owner_id else None
         hotel_id = hotel.get("id") if hotel else None
 
@@ -4157,6 +5576,17 @@ def inventory_forecast():
         payload = request.json or {}
         event_name = payload.get("event") or "High Occupancy Window"
         occupancy = _to_float(payload.get("occupancy"), 85)
+        owner_id = _to_int(payload.get("owner_id"), 0)
+
+        if owner_id:
+            conn = get_db_connection()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            try:
+                guard, _subscription = _owner_feature_guard(cur, owner_id, 'inventory', mutation=True)
+                if guard:
+                    return guard
+            finally:
+                _safe_close(conn, cur)
 
         recommendations = [
             {

@@ -90,6 +90,7 @@ import OwnerInventory from "./pages/owner/Inventory";
 import OwnerStaff from "./pages/owner/Staff";
 import OwnerReports from "./pages/owner/Reports";
 import OwnerReviews from "./pages/owner/Reviews";
+import OwnerSubscription from "./pages/owner/Subscription";
 
 // --- CUSTOMER PAGES ---
 import Home from "./pages/Home";
@@ -201,6 +202,7 @@ function App() {
         {/* GROUP 2: OWNER DASHBOARD */}
         <Route path="/owner" element={<OwnerLayout context={{ isDarkMode, setIsDarkMode }} />}>
           <Route index element={<OwnerDashboard />} />
+          <Route path="subscription" element={<OwnerSubscription />} />
           <Route path="rooms" element={<OwnerRooms />} />
           <Route path="reservations" element={<OwnerReservations />} />
           <Route path="customers" element={<OwnerCustomers />} />

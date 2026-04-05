@@ -78,8 +78,7 @@ const OwnerLogin = () => {
           ...data.owner,
           loginTime: new Date().toISOString()
         }));
-        // Update Header
-        window.dispatchEvent(new Event("userUpdated"));
+        window.dispatchEvent(new Event("ownerSessionUpdated"));
         navigate('/owner');
       } else {
         setFeedback(data.error || 'Authentication Failed');

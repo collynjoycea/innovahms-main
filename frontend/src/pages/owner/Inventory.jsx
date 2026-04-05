@@ -70,7 +70,8 @@ const Inventory = () => {
             await new Promise(resolve => setTimeout(resolve, 2500));
             const res = await axios.post(`/api/inventory/forecast`, {
                 event: "Grand Gala 2024",
-                occupancy: 98
+                occupancy: 98,
+                owner_id: getOwnerId(),
             });
             if (res.data.success) {
                 setSimulationResult({

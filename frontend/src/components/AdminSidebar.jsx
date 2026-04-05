@@ -83,7 +83,7 @@ const AdminSidebar = ({ isDarkMode }) => {
             </div>
             <div className="overflow-hidden text-left">
               <h4 className={`text-[11px] font-black uppercase tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Alex Mendoza</h4>
-              <p className="text-[8px] font-bold text-[#c9a84c] uppercase tracking-widest mt-1.5 opacity-80">Super Admin</p>
+              <p className="text-[8px] font-bold text-[#c9a84c] uppercase tracking-widest mt-1.5 opacity-80">Admin</p>
             </div>
           </div>
         </div>
