@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Star, LogIn } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-export default function GuestReviewsSection({ sessionUser, bookingContext }) {
+export default function GuestReviewsSection({ sessionUser, bookingContext, roomId, hotelId }) {
   const navigate = useNavigate();
 
   const [reviews, setReviews] = useState([]);
@@ -61,6 +61,8 @@ export default function GuestReviewsSection({ sessionUser, bookingContext }) {
           title,
           comment,
           bookingContext,
+          roomId,
+          hotelId,
         }),
       });
 

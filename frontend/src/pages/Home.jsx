@@ -17,6 +17,39 @@ const fallbackHotelCards = [
   },
 ];
 
+const fallbackFeaturedHotels = [
+  {
+    id: 1,
+    name: "Innova Velora Hotel",
+    location: "Metro Manila, PH",
+    image: "/images/signup-img.png",
+    tag: "Flagship",
+    rooms: 24,
+    description: "Signature city property with a polished building presence and guest-focused stay experience.",
+    contactPhone: "",
+  },
+  {
+    id: 12,
+    name: "Sunshine Hotel",
+    location: "Cebu City, PH",
+    image: "/images/hero-bg-img.png",
+    tag: "Premium",
+    rooms: 18,
+    description: "Premium hotel destination designed for fast reservations and modern comfort.",
+    contactPhone: "",
+  },
+  {
+    id: 2,
+    name: "Innova Grand Suites",
+    location: "Davao, PH",
+    image: "/images/herobg.jpg",
+    tag: "Luxury",
+    rooms: 32,
+    description: "Luxury-forward hospitality with elevated rooms, service, and booking convenience.",
+    contactPhone: "",
+  },
+];
+
 const fallbackPromotions = [
   {
     id: "promo-early-bird",
@@ -69,8 +102,8 @@ export default function LandingPage() {
   const [currentImg, setCurrentImg] = useState(() => _heroImgIndex);
   const [isBooted, setIsBooted] = useState(true);
   const [hotelCards, setHotelCards] = useState(fallbackHotelCards);
+  const [featuredHotels, setFeaturedHotels] = useState(fallbackFeaturedHotels);
   const [promotionCards, setPromotionCards] = useState(fallbackPromotions);
-  const [suiteTourRoomId, setSuiteTourRoomId] = useState(null);
   const [sessionUser, setSessionUser] = useState(null);
   const [heroCheckIn, setHeroCheckIn] = useState(() => toInputDate(new Date()));
   const [heroCheckOut, setHeroCheckOut] = useState(() => {
@@ -119,9 +152,10 @@ export default function LandingPage() {
 
     const loadHomeData = async () => {
       try {
-        const [roomsRes, offersRes] = await Promise.all([
+        const [roomsRes, offersRes, hotelsRes] = await Promise.all([
           fetch("/api/rooms"),
           fetch("/api/guest-offers"),
+          fetch("/api/home/hotels"),
         ]);
 
         if (roomsRes.ok) {
@@ -131,14 +165,6 @@ export default function LandingPage() {
             : Array.isArray(roomsPayload)
               ? roomsPayload
               : [];
-
-          const firstSuiteRoom = rooms.find((room) => {
-            const type = String(room.type || room.room_type || room.roomType || "").toLowerCase();
-            return type.includes("suite");
-          });
-          if (isMounted) {
-            setSuiteTourRoomId(firstSuiteRoom?.id || null);
-          }
 
           const mappedHotels = rooms.slice(0, 4).map((room) => {
             const capacity = Number(room.maxAdults || 0) + Number(room.maxChildren || 0);
@@ -193,6 +219,14 @@ export default function LandingPage() {
 
           if (isMounted && mappedOffers.length > 0) {
             setPromotionCards(mappedOffers);
+          }
+        }
+
+        if (hotelsRes.ok) {
+          const hotelsPayload = await hotelsRes.json().catch(() => ({}));
+          const hotels = Array.isArray(hotelsPayload?.hotels) ? hotelsPayload.hotels.slice(0, 3) : [];
+          if (isMounted && hotels.length > 0) {
+            setFeaturedHotels(hotels);
           }
         }
       } catch (error) {
@@ -263,41 +297,6 @@ export default function LandingPage() {
   const roomTypeOptions = Array.from(
     new Set(hotelCards.map((room) => room.roomType).filter(Boolean))
   );
-  const buildTourTarget = ({ id, roomName, previewImage, backToPath, backToLabel, bookingPath = "" }) => ({
-    pathname: `/virtual-tour/${id}`,
-    state: {
-      roomName,
-      previewImage,
-      backToPath,
-      backToLabel,
-      bookingPath,
-    },
-  });
-  const suitesSectionPreview = buildTourTarget({
-    id: suiteTourRoomId || "imperial-sanctum-preview",
-    roomName: "The Imperial Sanctum",
-    previewImage: "/images/signup-img.png",
-    backToPath: "/#suites",
-    backToLabel: "Back to Suites",
-    bookingPath: suiteTourRoomId ? `/booking?roomId=${suiteTourRoomId}` : "",
-  });
-  const featuredAmenities = [
-    {
-      id: "wellness-gym-preview",
-      title: "Wellness Gym",
-      desc: "AI-integrated health equipment.",
-      img: "/images/hero-bg-img.png",
-      label: "Fitness",
-    },
-    {
-      id: "dining-hall-preview",
-      title: "Dining Hall",
-      desc: "Futuristic culinary experience.",
-      img: "/images/signup-img.png",
-      label: "Culinary",
-    },
-  ];
-
   return (
     <main className={`relative min-h-screen w-full ${isDark ? "dark" : ""} bg-white dark:bg-[#0d0c0a] font-sans selection:bg-[#bf9b30]/30 overflow-x-hidden text-[#1a160d] dark:text-[#e5e1d8] transition-colors duration-300`}>
       
@@ -479,45 +478,18 @@ export default function LandingPage() {
   </div>
 
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    {[
-      {
-        name: "Innova Velora Hotel",
-        location: "Metro Manila, PH",
-        img: "/images/signup-img.png",
-        tag: "Flagship",
-        rooms: 24,
-        rating: "4.9",
-        hotelId: 1,
-      },
-      {
-        name: "Sunshine Hotel",
-        location: "Cebu City, PH",
-        img: "/images/hero-bg-img.png",
-        tag: "Premium",
-        rooms: 18,
-        rating: "4.7",
-        hotelId: 12,
-      },
-      {
-        name: "Innova Grand Suites",
-        location: "Davao, PH",
-        img: "/images/herobg.jpg",
-        tag: "Luxury",
-        rooms: 32,
-        rating: "4.8",
-        hotelId: 2,
-      },
-    ].map((hotel, idx) => (
+    {featuredHotels.slice(0, 3).map((hotel, idx) => (
       <motion.article
-        key={idx}
+        key={hotel.id || idx}
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.1 }}
         viewport={{ once: true }}
-       className="group overflow-hidden rounded-[2rem] border border-[#e7dcc4] bg-white shadow-[0_24px_50px_rgba(69,40,10,0.12)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_32px_62px_rgba(191,155,48,0.18)] dark:border-[#3a2b18] dark:bg-[#11100c] dark:shadow-[0_24px_46px_rgba(0,0,0,0.34)]"  >
+        onClick={() => navigate(`/vision-suites?hotel_id=${hotel.id}`)}
+        className="group overflow-hidden rounded-[2rem] border border-[#e7dcc4] bg-white shadow-[0_24px_50px_rgba(69,40,10,0.12)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_32px_62px_rgba(191,155,48,0.18)] dark:border-[#3a2b18] dark:bg-[#11100c] dark:shadow-[0_24px_46px_rgba(0,0,0,0.34)] cursor-pointer">
         <div className="relative h-48 overflow-hidden">
           <img
-            src={hotel.img}
+            src={hotel.image}
             alt={hotel.name}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           />
@@ -533,6 +505,9 @@ export default function LandingPage() {
           <p className="text-[11px] text-[#766b59] dark:text-gray-400 flex items-center gap-1 mb-4">
             <MapPin size={11} className="text-[#bf9b30]" /> {hotel.location}
           </p>
+          <p className="text-[#766b59] dark:text-gray-400 text-xs leading-relaxed min-h-[36px]">
+            {hotel.description}
+          </p>
           <div className="flex items-center justify-between pt-3 border-t border-[#bf9b30]/15">
             <div className="flex gap-4">
               <div>
@@ -540,13 +515,13 @@ export default function LandingPage() {
                 <p className="text-[8px] font-bold uppercase tracking-widest text-[#857a67] dark:text-gray-500">Rooms</p>
               </div>
               <div>
-                <p className="text-base font-black text-[#bf9b30]">{hotel.rating}</p>
-                <p className="text-[8px] font-bold uppercase tracking-widest text-[#857a67] dark:text-gray-500">Rating</p>
+                <p className="text-base font-black text-[#bf9b30]">{hotel.contactPhone || 'Live'}</p>
+                <p className="text-[8px] font-bold uppercase tracking-widest text-[#857a67] dark:text-gray-500">Contact</p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => navigate(`/vision-suites?hotel_id=${hotel.hotelId}`)}
+              onClick={(e) => { e.stopPropagation(); navigate(`/vision-suites?hotel_id=${hotel.id}`); }}
               className="px-4 py-1.5 rounded-lg bg-[#bf9b30] text-[#0d0c0a] text-[9px] font-black uppercase tracking-widest hover:bg-[#d8b454] transition-all"
             >
               View Hotel
@@ -629,20 +604,7 @@ export default function LandingPage() {
                 to={`/hoteldetail/${hotel.id}`}
                 className="flex-1 text-center py-1.5 rounded-lg border border-[#bf9b30]/50 text-[#bf9b30] text-[9px] font-black uppercase tracking-widest hover:bg-[#bf9b30]/10 transition-all"
               >
-                Details
-              </Link>
-              <Link
-                to={buildTourTarget({
-                  id: hotel.id,
-                  roomName: hotel.name,
-                  previewImage: hotel.image,
-                  backToPath: "/#rooms",
-                  backToLabel: "Back to Rooms",
-                  bookingPath: `/booking?roomId=${hotel.id}`,
-                })}
-                className="flex-1 text-center py-1.5 rounded-lg border border-[#cdb88a] dark:border-white/20 text-[#8a6f2a] dark:text-white hover:bg-[#f2e8cf] dark:hover:bg-white/10 text-[9px] font-black uppercase tracking-widest transition-all"
-              >
-                360 Tour
+                Details & 360
               </Link>
               <button
                 type="button"

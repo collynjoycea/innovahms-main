@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Marzipano from "marzipano";
 import resolveImg from "../../utils/resolveImg";
 import NeighborhoodMap from "../../components/NeighborhoodMap";
@@ -94,7 +94,8 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
         <button
           type="button"
           onClick={onClose}
-          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 flex items-center justify-center transition-all"
+          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-[#bf9b30] hover:text-[#0d0c0a] flex items-center justify-center transition-all"
+          aria-label="Close tour"
         >
           <X size={24} />
         </button>
@@ -810,13 +811,21 @@ export default function VisionSuites() {
                     </div>
 
                     <div className="mt-5 flex flex-col gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => openTour(room)}
-                        className="flex-1 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
-                      >
-                        {room.hasVirtualTour ? "Explore in 360" : "Open Preview"}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openTour(room)}
+                          className="flex-1 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                        >
+                          {room.hasVirtualTour ? "Explore in 360" : "Open Preview"}
+                        </button>
+                        <Link
+                          to={`/hoteldetail/${room.id}`}
+                          className="flex-1 text-center rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                        >
+                          View Details
+                        </Link>
+                      </div>
                       <button
                         type="button"
                         onClick={() => navigate(`/booking?roomId=${room.id}`)}

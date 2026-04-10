@@ -7,6 +7,8 @@ export default function CustomerReviews() {
   const location = useLocation();
   const [sessionUser, setSessionUser] = useState(null);
   const [bookingContext, setBookingContext] = useState(null);
+  const [roomId, setRoomId] = useState(null);
+  const [hotelId, setHotelId] = useState(null);
 
   useEffect(() => {
     setSessionUser(extractCustomerSession());
@@ -14,11 +16,16 @@ export default function CustomerReviews() {
     const roomName = params.get("roomName");
     const hotelName = params.get("hotelName");
     const bookingId = params.get("bookingId");
+    const roomIdParam = params.get("roomId");
+    const hotelIdParam = params.get("hotelId");
 
     if (bookingId || roomName || hotelName) {
       const title = [hotelName, roomName].filter(Boolean).join(" — ");
       setBookingContext(title || `Booking #${bookingId}`);
     }
+    
+    setRoomId(roomIdParam ? parseInt(roomIdParam) : null);
+    setHotelId(hotelIdParam ? parseInt(hotelIdParam) : null);
   }, [location.search]);
 
   return (
@@ -31,7 +38,7 @@ export default function CustomerReviews() {
             Leave feedback about your completed booking and help future guests choose the perfect room.
           </p>
         </div>
-        <GuestReviewsSection sessionUser={sessionUser} bookingContext={bookingContext} />
+        <GuestReviewsSection sessionUser={sessionUser} bookingContext={bookingContext} roomId={roomId} hotelId={hotelId} />
       </div>
     </div>
   );

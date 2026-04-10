@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, MessageCircle, X, Search, Sparkles, Send } from "lucide-react";
 import Marzipano from "marzipano";
@@ -54,7 +54,8 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
         <button
           type="button"
           onClick={onClose}
-          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 flex items-center justify-center transition-all"
+          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-[#bf9b30] hover:text-[#0d0c0a] flex items-center justify-center transition-all"
+          aria-label="Close tour"
         >
           <X size={24} />
         </button>
@@ -173,12 +174,24 @@ export default function InnovaSuites() {
     fetchRooms({ view: category, from: checkIn, to: checkOut });
   }, [category]);
 
-  const openTour = (room) => {
-    const panoramaUrl = resolveImg(room.imageUrl || room.images?.[0], '/images/my-room-360.jpg');
+  const openTour = async (room) => {
     setTourRoom(room);
-    setTourData({ panoramaUrl, initialYaw: 0, initialPitch: 0, initialFov: Math.PI / 2 });
+    setTourData(null);
     setTourOpen(true);
-    setTourLoading(false);
+    setTourLoading(true);
+    const fallback = {
+      panoramaUrl: resolveImg(room.imageUrl || room.images?.[0], '/images/my-room-360.jpg'),
+      initialYaw: 0, initialPitch: 0, initialFov: Math.PI / 2,
+    };
+    try {
+      const res = await fetch(`/api/rooms/${room.id}/tour`);
+      const payload = await res.json().catch(() => ({}));
+      setTourData(res.ok && payload?.tour ? payload.tour : fallback);
+    } catch {
+      setTourData(fallback);
+    } finally {
+      setTourLoading(false);
+    }
   };
 
   const reserveNow = (room) => {
@@ -544,13 +557,21 @@ export default function InnovaSuites() {
                        <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60">{room.capacity || 0} Guests</span>
                        {room.viewPreference && <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60">{room.viewPreference}</span>}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => reserveNow(room)}
-                      className="text-xs font-black uppercase tracking-widest text-[#bf9b30] hover:text-white transition-colors"
-                    >
-                      Book Now
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        to={`/hoteldetail/${room.id}`}
+                        className="text-xs font-black uppercase tracking-widest text-white/50 hover:text-white transition-colors"
+                      >
+                        Details
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => reserveNow(room)}
+                        className="text-xs font-black uppercase tracking-widest text-[#bf9b30] hover:text-white transition-colors"
+                      >
+                        Book Now
+                      </button>
+                    </div>
                   </div>
                 </div>
               </motion.div>

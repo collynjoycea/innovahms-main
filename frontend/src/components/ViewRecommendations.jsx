@@ -74,11 +74,10 @@ const RoomCard = ({ room, onAskAI }) => {
 
         <div className="grid grid-cols-2 gap-3">
           <button
-            disabled={!room.has_virtual_tour}
-            onClick={() => navigate(`/virtual-tour/${room.id}`)}
-            className={`flex items-center justify-center gap-2 py-3.5 border-2 ${room.has_virtual_tour ? 'border-gray-900 text-gray-900 hover:bg-gray-50' : 'border-gray-200 text-gray-300 cursor-not-allowed'} font-black rounded-xl transition-all active:scale-95 uppercase tracking-widest text-[9px]`}
+            onClick={() => navigate(`/hoteldetail/${room.id}`)}
+            className="flex items-center justify-center gap-2 py-3.5 border-2 border-gray-900 text-gray-900 hover:bg-gray-50 font-black rounded-xl transition-all active:scale-95 uppercase tracking-widest text-[9px]"
           >
-            <Search size={14} /> Virtual Tour
+            <Search size={14} /> View & 360
           </button>
           <button
             type="button"

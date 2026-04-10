@@ -11,18 +11,20 @@ const OwnerHeader = () => {
     hotelName: 'Subscription Required',
     subscriptionActive: false,
     hasHotel: false,
+    profileImage: '',
   });
 
   useEffect(() => {
     const syncOwner = () => {
       const sessionData = localStorage.getItem('ownerSession'); 
       if (!sessionData) {
-        setOwnerInfo({
-          fullName: 'Hotel Owner',
-          hotelName: 'Subscription Required',
-          subscriptionActive: false,
-          hasHotel: false,
-        });
+          setOwnerInfo({
+            fullName: 'Hotel Owner',
+            hotelName: 'Subscription Required',
+            subscriptionActive: false,
+            hasHotel: false,
+            profileImage: '',
+          });
         return;
       }
       try {
@@ -33,6 +35,7 @@ const OwnerHeader = () => {
             hotelName: parsedData.hotelName || (parsedData.subscriptionActive ? 'Hotel Setup Required' : 'Subscription Required'),
             subscriptionActive: Boolean(parsedData.subscriptionActive),
             hasHotel: Boolean(parsedData.hasHotel),
+            profileImage: parsedData.profileImage || '',
           });
         }
       } catch (error) {
@@ -115,10 +118,14 @@ const OwnerHeader = () => {
             </p>
           </div>
           <div className="w-10 h-10 rounded-full border border-[#bf9b30]/20 p-0.5 bg-gradient-to-tr from-[#bf9b30]/10 to-transparent">
-            <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[#bf9b30] shadow-sm">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-              </svg>
+            <div className="w-full h-full overflow-hidden rounded-full bg-white flex items-center justify-center text-[#bf9b30] shadow-sm">
+              {ownerInfo.profileImage ? (
+                <img src={ownerInfo.profileImage} alt={ownerInfo.fullName} className="h-full w-full object-cover" />
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+              )}
             </div>
           </div>
           <ChevronDown size={14} className={`text-black/40 transition-transform duration-200 ${showMenu ? 'rotate-180' : ''}`} />
@@ -130,6 +137,12 @@ const OwnerHeader = () => {
               <p className="text-xs font-bold text-slate-800 capitalize">{ownerInfo.fullName}</p>
               <p className="text-[10px] text-[#bf9b30] font-bold uppercase tracking-widest">{ownerInfo.hotelName}</p>
             </div>
+            <button
+              onClick={() => { setShowMenu(false); navigate('/owner/profile'); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"
+            >
+              <Building2 size={15} /> My Profile
+            </button>
             <button
               onClick={() => { setShowMenu(false); navigate('/owner/subscription'); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] text-xs text-slate-700 transition-all"

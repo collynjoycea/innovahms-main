@@ -414,7 +414,7 @@ export default function CustomerBookings() {
                               onClick={() => navigate(
                                 `/customer/reviews?bookingId=${booking.bookingId}&roomName=${encodeURIComponent(
                                   booking.roomType || ""
-                                )}&hotelName=${encodeURIComponent(booking.hotelName || "")}`
+                                )}&hotelName=${encodeURIComponent(booking.hotelName || "")}&roomId=${booking.roomId}&hotelId=${booking.hotelId || ""}`
                               )}
                               className="w-full rounded-[1.1rem] border border-[#cdb88a] bg-[#f7f2de] px-4 py-3 text-sm font-black text-[#8a6d27] transition-all hover:bg-[#f2e8cf]"
                             >

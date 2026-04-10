@@ -1,261 +1,336 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Crown, Lock, Pencil, Save, ShieldCheck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const Profile = () => {
-  const [showToast, setShowToast] = useState(false);
-  const [toastMsg, setToastMsg] = useState("");
-  const [toastType, setToastType] = useState("success");
+const parseStoredSession = () => {
+  try {
+    const raw = localStorage.getItem('user') || localStorage.getItem('customerSession');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.user && typeof parsed.user === 'object' ? parsed.user : parsed;
+  } catch { return null; }
+};
+
+const persistCustomerUser = (nextUser) => {
+  ['user', 'customerSession'].forEach((key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.user && typeof parsed.user === 'object') {
+        localStorage.setItem(key, JSON.stringify({ ...parsed, user: { ...parsed.user, ...nextUser } }));
+      } else {
+        localStorage.setItem(key, JSON.stringify({ ...parsed, ...nextUser }));
+      }
+    } catch { localStorage.setItem(key, JSON.stringify(nextUser)); }
+  });
+  window.dispatchEvent(new Event('userUpdated'));
+};
+
+const emptyState = {
+  user: { id: '', firstName: '', lastName: '', email: '', contactNumber: '', profileImage: '' },
+  points: 0, tier: 'STANDARD', pointsThisMonth: 0, privilege: {},
+};
+
+export default function Profile() {
   const navigate = useNavigate();
-
-  const [userInfo, setUserInfo] = useState({
-    id: "",
-    firstName: "",
-    lastName: "",
-    email: "",
-    contactNumber: ""
+  const fileRef = useRef(null);
+  const [sessionUser, setSessionUser] = useState(parseStoredSession());
+  const [profile, setProfile] = useState(emptyState);
+  const [draft, setDraft] = useState(emptyState.user);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
-
-  const [passwords, setPasswords] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: ""
-  });
-
-  const [passwordError, setPasswordError] = useState("");
-
-  const triggerToast = (message, type = "success") => {
-    setToastMsg(message);
-    setToastType(type);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user") || localStorage.getItem("customerSession");
-    if (savedUser) {
-      setUserInfo(JSON.parse(savedUser));
-    } else {
-      navigate("/login");
-    }
-  }, [navigate]);
+    const sync = () => setSessionUser(parseStoredSession());
+    window.addEventListener('userUpdated', sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener('userUpdated', sync); window.removeEventListener('storage', sync); };
+  }, []);
 
-  const handleUpdateInfo = async () => {
+  useEffect(() => {
+    const syncTheme = () => {
+      const saved = localStorage.getItem('theme');
+      setIsDark(saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+    };
+    window.addEventListener('themeChanged', syncTheme);
+    window.addEventListener('storage', syncTheme);
+    return () => { window.removeEventListener('themeChanged', syncTheme); window.removeEventListener('storage', syncTheme); };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionUser?.id) { navigate('/login', { replace: true }); return; }
+    let dead = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/user/profile/${sessionUser.id}`);
+        const data = await res.json().catch(() => ({}));
+        if (!dead && res.ok) {
+          const normalized = { ...emptyState, ...data, user: { ...emptyState.user, ...(data.user || {}) } };
+          setProfile(normalized);
+          setDraft(normalized.user);
+          setAvatarPreview(normalized.user.profileImage || '');
+          persistCustomerUser(normalized.user);
+        }
+      } finally { if (!dead) setLoading(false); }
+    };
+    load();
+    return () => { dead = true; };
+  }, [sessionUser?.id, navigate]);
+
+  const initials = useMemo(() =>
+    `${profile.user.firstName?.[0] || ''}${profile.user.lastName?.[0] || ''}`.trim() || 'G',
+    [profile.user.firstName, profile.user.lastName]
+  );
+
+  const onFieldChange = (key, value) => setDraft((p) => ({ ...p, [key]: value }));
+
+  const handleAvatarFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setAvatarPreview(dataUrl);
+      setDraft((p) => ({ ...p, profileImage: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const cancelEdit = () => {
+    setDraft(profile.user);
+    setAvatarPreview(profile.user.profileImage || '');
+    setEditing(false);
+    setMessage('');
+  };
+
+  const saveChanges = async () => {
+    setSaving(true); setMessage('');
     try {
-      const response = await fetch("/api/user/update", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userInfo),
+      const res = await fetch('/api/user/update', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft),
       });
-
-      if (response.ok) {
-        localStorage.setItem("user", JSON.stringify(userInfo));
-        localStorage.setItem("customerSession", JSON.stringify(userInfo));
-        window.dispatchEvent(new Event("userUpdated"));
-        triggerToast("Profile information updated!");
-      } else {
-        triggerToast("Update failed. Please try again.", "error");
-      }
-    } catch (err) {
-      triggerToast("Failed to connect to server.", "error");
-    }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update profile.');
+      const nextUser = { ...profile.user, ...(data.user || {}) };
+      setProfile((p) => ({ ...p, user: nextUser }));
+      setDraft(nextUser);
+      setAvatarPreview(nextUser.profileImage || '');
+      setEditing(false);
+      persistCustomerUser(nextUser);
+      setMessage('Profile updated successfully.');
+    } catch (err) { setMessage(err.message || 'Failed to update profile.'); }
+    finally { setSaving(false); }
   };
 
-  const handleChangePassword = async () => {
-    setPasswordError("");
-    
-    if (!passwords.newPassword || !passwords.confirmPassword) {
-      setPasswordError("New password fields are required.");
-      return;
-    }
-
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setPasswordError("New passwords do not match.");
-      return;
-    }
-    
-    if (passwords.newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters.");
-      return;
-    }
-
+  const changePassword = async () => {
+    setPasswordError('');
+    if (!passwords.newPassword || !passwords.confirmPassword) { setPasswordError('New password fields are required.'); return; }
+    if (passwords.newPassword !== passwords.confirmPassword) { setPasswordError('New passwords do not match.'); return; }
+    if (passwords.newPassword.length < 8) { setPasswordError('Password must be at least 8 characters.'); return; }
+    setPasswordBusy(true);
     try {
-      const response = await fetch("/api/user/change-password", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: userInfo.id,
-          currentPassword: passwords.currentPassword, 
-          newPassword: passwords.newPassword,
-        }),
+      const res = await fetch('/api/user/change-password', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: profile.user.id, currentPassword: passwords.currentPassword, newPassword: passwords.newPassword }),
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        triggerToast(data.message || "Password updated!");
-        setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      } else {
-        setPasswordError(data.error || "Failed to change password.");
-      }
-    } catch (err) {
-      triggerToast("Failed to connect to server.", "error");
-    }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to change password.');
+      setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setMessage(data.message || 'Password changed successfully.');
+    } catch (err) { setPasswordError(err.message || 'Failed to change password.'); }
+    finally { setPasswordBusy(false); }
   };
 
-  const handleChange = (e) => {
-    setUserInfo({ ...userInfo, [e.target.name]: e.target.value });
-  };
+  // theme-aware classes
+  const bg = isDark ? 'bg-[#0d0c0a] text-white' : 'bg-[#f6f7fb] text-slate-900';
+  const card = isDark ? 'bg-[#14130f] border-white/5' : 'bg-white border-slate-200';
+  const subtext = isDark ? 'text-white/30' : 'text-slate-400';
+  const mutedText = isDark ? 'text-white/50' : 'text-slate-500';
+  const inputCls = `w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all ${
+    !editing
+      ? isDark
+        ? 'cursor-default bg-[#1a1812] border-white/5 text-white/40'
+        : 'cursor-default bg-slate-50 border-slate-200 text-slate-400'
+      : isDark
+        ? 'bg-[#1a1812] border-white/10 text-white focus:border-[#bf9b30] focus:ring-2 focus:ring-[#bf9b30]/20'
+        : 'bg-white border-slate-300 text-slate-900 focus:border-[#bf9b30] focus:ring-2 focus:ring-[#bf9b30]/20'
+  }`;
+  const pwInputCls = isDark
+    ? 'w-full rounded-xl border border-white/10 bg-[#1a1812] px-4 py-3 text-sm text-white outline-none focus:border-[#bf9b30] focus:ring-2 focus:ring-[#bf9b30]/20 transition-all'
+    : 'w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#bf9b30] focus:ring-2 focus:ring-[#bf9b30]/20 transition-all';
+  const cancelBtnCls = isDark
+    ? 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-white/70 hover:bg-white/10 transition-all'
+    : 'inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all';
+  const lockBadgeCls = isDark
+    ? 'inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white/50'
+    : 'inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500';
 
-  const handlePasswordChange = (e) => {
-    setPasswords({ ...passwords, [e.target.name]: e.target.value });
-    setPasswordError(""); 
-  };
-
-  if (!userInfo.email) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950 transition-colors duration-300">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-innova-gold"></div>
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#0d0c0a]' : 'bg-[#f6f7fb]'}`}>
+        <div className="w-10 h-10 border-2 border-[#bf9b30] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex-grow bg-slate-50 dark:bg-zinc-950 font-sans pb-20 relative overflow-hidden transition-colors duration-300">
+    <div className={`min-h-screen px-4 py-8 font-sans transition-colors duration-300 ${bg}`}>
+      <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* Toast Notification */}
-      <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-50 transition-all duration-500 transform ${
-        showToast ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0'
-      }`}>
-        <div className={`${toastType === "error" ? "bg-red-900 border-red-500/50" : "bg-slate-900 border-innova-gold/50"} text-white px-6 py-3 rounded-full shadow-2xl border flex items-center gap-3`}>
-          <div className={`${toastType === "error" ? "bg-red-500" : "bg-innova-gold"} rounded-full p-1`}>
-            {toastType === "error" ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        {/* HEADER */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30]">Customer Profile</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight">My Account</h1>
+          </div>
+          <div className="flex gap-3">
+            {editing ? (
+              <>
+                <button onClick={cancelEdit} className={cancelBtnCls}>
+                  <X size={13} /> Cancel
+                </button>
+                <button onClick={saveChanges} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#bf9b30] px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-[#0d0c0a] hover:bg-[#d4ac37] transition-all disabled:opacity-60">
+                  <Save size={13} /> {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </>
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <button onClick={() => setEditing(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#bf9b30] px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-[#0d0c0a] hover:bg-[#d4ac37] transition-all">
+                <Pencil size={13} /> Edit Profile
+              </button>
             )}
           </div>
-          <span className="text-sm font-medium tracking-wide">{toastMsg}</span>
         </div>
-      </div>
 
-      <div className="bg-innova-gold/90 dark:bg-zinc-900 h-48 w-full absolute top-0 z-0 transition-colors duration-300"></div>
+        {/* FEEDBACK */}
+        {message && (
+          <div className={`rounded-xl border px-5 py-3 text-sm font-semibold ${message.toLowerCase().includes('fail') ? 'border-red-500/30 bg-red-500/10 text-red-400' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'}`}>
+            {message}
+          </div>
+        )}
 
-      <div className="max-w-4xl mx-auto px-6 relative z-10 pt-10">
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl overflow-hidden mb-8 border border-slate-100 dark:border-zinc-700">
-          <div className="p-8 md:p-10 flex flex-col md:flex-row items-center gap-6">
-            <div className="w-24 h-24 bg-innova-gold/10 rounded-full flex items-center justify-center border-2 border-innova-gold">
-              <span className="text-3xl font-bold text-innova-gold">
-                {userInfo.firstName[0]}{userInfo.lastName[0]}
-              </span>
-            </div>
-            <div className="text-center md:text-left">
-              <h1 className="text-3xl font-bold text-slate-800 dark:text-zinc-100">
-                {userInfo.firstName} {userInfo.lastName}
-              </h1>
-              <p className="text-slate-500 dark:text-zinc-400 font-medium">{userInfo.email}</p>
-              <div className="mt-2 inline-block px-3 py-1 bg-innova-gold/10 text-innova-gold text-xs font-bold rounded-full uppercase tracking-widest">
-                Gold Member
+        {/* HERO CARD */}
+        <div className={`relative overflow-hidden rounded-3xl border ${card}`}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(191,155,48,0.12),transparent_55%)]" />
+          <div className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-5">
+              <div className="relative">
+                <div className={`h-24 w-24 overflow-hidden rounded-2xl border-2 border-[#bf9b30]/40 flex items-center justify-center ${isDark ? 'bg-[#1a1812]' : 'bg-slate-100'}`}>
+                  {avatarPreview
+                    ? <img src={avatarPreview} alt="avatar" className="h-full w-full object-cover" />
+                    : <span className="text-3xl font-black text-[#bf9b30]">{initials}</span>
+                  }
+                </div>
+                {editing && (
+                  <>
+                    <button type="button" onClick={() => fileRef.current?.click()}
+                      className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-[#bf9b30] text-[#0d0c0a] flex items-center justify-center shadow-lg hover:bg-[#d4ac37] transition-colors">
+                      <Camera size={14} />
+                    </button>
+                    <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} />
+                  </>
+                )}
               </div>
+              <div>
+                <h2 className="text-2xl font-black">{profile.user.firstName} {profile.user.lastName}</h2>
+                <p className={`text-sm mt-0.5 ${mutedText}`}>{profile.user.email}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bf9b30]/30 bg-[#bf9b30]/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#bf9b30]">
+                    <Crown size={10} /> {profile.tier || 'STANDARD'}
+                  </span>
+                  <span className={lockBadgeCls}>
+                    <Lock size={10} /> {editing ? 'Edit mode' : 'Locked'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              {[
+                { label: 'Points', value: Number(profile.points || 0).toLocaleString() },
+                { label: 'This Month', value: Number(profile.pointsThisMonth || 0).toLocaleString() },
+                { label: 'Plan', value: profile.privilege?.packageName || 'No plan' },
+              ].map(({ label, value }) => (
+                <div key={label} className={`rounded-2xl border px-5 py-3 text-center min-w-[90px] ${isDark ? 'border-white/5 bg-white/5' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-widest ${subtext}`}>{label}</p>
+                  <p className="mt-1 text-lg font-black text-[#bf9b30]">{value}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Personal Info */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg border border-slate-100 dark:border-zinc-700 p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-slate-50 dark:bg-zinc-800 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bf9b30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-zinc-100 tracking-tight">Personal Info</h2>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">First Name</label>
-                <input name="firstName" type="text" value={userInfo.firstName} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">Last Name</label>
-                <input name="lastName" type="text" value={userInfo.lastName} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">Contact Number</label>
-                <input name="contactNumber" type="text" value={userInfo.contactNumber} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100" />
-              </div>
-              <button onClick={handleUpdateInfo} className="w-full mt-4 bg-innova-gold text-white font-bold py-3 rounded-lg hover:shadow-lg transition-all text-sm uppercase tracking-widest">
-                Update Info
-              </button>
+        {/* PERSONAL INFO */}
+        <div className={`rounded-3xl border p-6 ${card}`}>
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#bf9b30]/10 text-[#bf9b30]">
+              <ShieldCheck size={17} />
+            </span>
+            <div>
+              <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${subtext}`}>Account</p>
+              <h3 className="text-lg font-black">Personal Information</h3>
             </div>
           </div>
-
-          {/* Security / Change Password */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg border border-slate-100 dark:border-zinc-700 p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-slate-50 dark:bg-zinc-800 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bf9b30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-zinc-100 tracking-tight">Security</h2>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">Current Password</label>
-                <input
-                  name="currentPassword"
-                  type="password"
-                  value={passwords.currentPassword}
-                  onChange={handlePasswordChange}
-                  placeholder="Leave blank if first time" 
-                  className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">New Password</label>
-                <input
-                  name="newPassword"
-                  type="password"
-                  value={passwords.newPassword}
-                  onChange={handlePasswordChange}
-                  placeholder="********"
-                  className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-widest mb-1">Confirm New Password</label>
-                <input
-                  name="confirmPassword"
-                  type="password"
-                  value={passwords.confirmPassword}
-                  onChange={handlePasswordChange}
-                  placeholder="********"
-                  className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg p-3 focus:ring-1 focus:ring-innova-gold focus:border-innova-gold outline-none transition-all text-sm text-slate-800 dark:text-zinc-100"
-                />
-              </div>
-
-              {/* Inline validation error */}
-              {passwordError && (
-                <p className="text-red-500 text-xs font-medium flex items-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  {passwordError}
-                </p>
-              )}
-
-              <button
-                onClick={handleChangePassword}
-                className="w-full mt-4 border-2 border-innova-gold text-innova-gold font-bold py-3 rounded-lg hover:bg-innova-gold hover:text-white transition-all text-sm uppercase tracking-widest"
-              >
-                Change Password
-              </button>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="First Name" isDark={isDark}><input value={draft.firstName} onChange={(e) => onFieldChange('firstName', e.target.value)} readOnly={!editing} className={inputCls} /></Field>
+            <Field label="Last Name" isDark={isDark}><input value={draft.lastName} onChange={(e) => onFieldChange('lastName', e.target.value)} readOnly={!editing} className={inputCls} /></Field>
+            <Field label="Email" isDark={isDark}><input value={draft.email} onChange={(e) => onFieldChange('email', e.target.value)} readOnly={!editing} className={inputCls} /></Field>
+            <Field label="Contact Number" isDark={isDark}><input value={draft.contactNumber} onChange={(e) => onFieldChange('contactNumber', e.target.value)} readOnly={!editing} className={inputCls} /></Field>
           </div>
         </div>
+
+        {/* CHANGE PASSWORD */}
+        <div className={`rounded-3xl border p-6 ${card}`}>
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#bf9b30]/10 text-[#bf9b30]">
+              <Lock size={17} />
+            </span>
+            <div>
+              <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${subtext}`}>Security</p>
+              <h3 className="text-lg font-black">Change Password</h3>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              { label: 'Current Password', key: 'currentPassword' },
+              { label: 'New Password', key: 'newPassword' },
+              { label: 'Confirm Password', key: 'confirmPassword' },
+            ].map(({ label, key }) => (
+              <Field key={key} label={label} isDark={isDark}>
+                <input type="password" value={passwords[key]}
+                  onChange={(e) => { setPasswords((p) => ({ ...p, [key]: e.target.value })); setPasswordError(''); }}
+                  className={pwInputCls} />
+              </Field>
+            ))}
+          </div>
+          {passwordError && <p className="mt-3 text-sm font-semibold text-red-400">{passwordError}</p>}
+          <button type="button" onClick={changePassword} disabled={passwordBusy}
+            className="mt-5 rounded-xl border border-[#bf9b30]/50 px-6 py-2.5 text-[11px] font-black uppercase tracking-widest text-[#bf9b30] hover:bg-[#bf9b30]/10 transition-all disabled:opacity-50">
+            {passwordBusy ? 'Updating...' : 'Update Password'}
+          </button>
+        </div>
+
       </div>
     </div>
   );
-};
+}
 
-export default Profile;
-
+function Field({ label, children, isDark }) {
+  return (
+    <div>
+      <label className={`mb-1.5 block text-[10px] font-black uppercase tracking-[0.22em] ${isDark ? 'text-white/30' : 'text-slate-400'}`}>{label}</label>
+      {children}
+    </div>
+  );
+}

@@ -226,16 +226,8 @@ export default function Facilities() {
   }));
 
   const allFacilities = [...dbFacilities, ...STATIC_FACILITIES];
-  const buildTourTarget = (item) => ({
-    pathname: `/virtual-tour/${item.roomId || item.id}`,
-    state: {
-      roomName: item.title,
-      previewImage: item.img,
-      backToPath: "/facilities",
-      backToLabel: "Back to Facilities",
-      bookingPath: item.roomId ? `/booking?roomId=${item.roomId}` : "",
-    },
-  });
+  const buildTourTarget = (item) =>
+    item.roomId ? `/hoteldetail/${item.roomId}` : "/facilities";
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#0d0c0a] dark:text-[#e5e1d8] font-sans selection:bg-[#bf9b30]/30 transition-colors duration-300">
@@ -346,7 +338,7 @@ export default function Facilities() {
                       onClick={(e) => e.stopPropagation()}
                       className="flex-1 text-center py-3 rounded-xl border border-[#bf9b30]/40 text-[#8a6f2a] dark:text-[#e5e1d8] text-[10px] font-black uppercase tracking-widest hover:bg-[#bf9b30]/10 transition-all"
                     >
-                      360 Tour
+                      {item.roomId ? "View & 360" : "360 Tour"}
                     </Link>
                     <button
                       type="button"

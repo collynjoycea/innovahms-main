@@ -299,8 +299,11 @@ export default function Header() {
                       : "bg-[#171717] text-white hover:bg-[#272727] dark:bg-[#f3e3b4] dark:text-[#3c2a06] dark:hover:bg-[#ebd393]"
                   }`}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/15">
-                    {user.isStaff ? <Briefcase size={13} /> : <User size={13} />}
+                  <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/15 shrink-0">
+                    {user.profileImage
+                      ? <img src={user.profileImage} alt={user.displayName} className="h-full w-full object-cover" />
+                      : user.isStaff ? <Briefcase size={13} /> : <User size={13} />
+                    }
                   </span>
                   <span className="hidden max-w-[140px] truncate sm:inline">
                     {user.displayName}

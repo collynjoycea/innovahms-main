@@ -92,6 +92,7 @@ import OwnerStaff from "./pages/owner/Staff";
 import OwnerReports from "./pages/owner/Reports";
 import OwnerReviews from "./pages/owner/Reviews";
 import OwnerSubscription from "./pages/owner/Subscription";
+import OwnerProfile from "./pages/owner/Profile";
 
 // --- CUSTOMER PAGES ---
 import Home from "./pages/Home";
@@ -106,7 +107,6 @@ import Booking from "./pages/Booking";
 import BookingSuccess from "./pages/BookingSuccess";
 import Profile from "./pages/Profile";
 import ViewRecommendations from "./components/ViewRecommendations";
-import VirtualTour from "./components/VirtualTour";
 import GuestsOffer from "./components/GuestsOffer";
 import CustomerDashboard from "./customer/CustomerDashboard";
 import CustomerBookings from "./customer/CustomerBookings";
@@ -161,7 +161,6 @@ function App() {
           <Route path="/hoteldetail/:id" element={<HotelDetail />} />
 
           <Route path="/recommendations" element={<ViewRecommendations isLoggedIn={isCustomerLoggedIn} userType={customerUserType} />} />
-          <Route path="/virtual-tour/:roomId" element={<VirtualTour />} />
           <Route path="/offers" element={<GuestsOffer isLoggedIn={isCustomerLoggedIn} />} />
 
           <Route path="/customer" element={<Navigate to="/customer/dashboard" replace />} />
@@ -223,6 +222,7 @@ function App() {
         {/* GROUP 2: OWNER DASHBOARD */}
         <Route path="/owner" element={<OwnerLayout context={{ isDarkMode, setIsDarkMode }} />}>
           <Route index element={<OwnerDashboard />} />
+          <Route path="profile" element={<OwnerProfile />} />
           <Route path="subscription" element={<OwnerSubscription />} />
           <Route path="rooms" element={<OwnerRooms />} />
           <Route path="reservations" element={<OwnerReservations />} />
