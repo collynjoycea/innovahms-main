@@ -40,7 +40,7 @@ def get_db_connection():
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "innovahmsdb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "lily1245"),
+        password=os.getenv("DB_PASSWORD", "12345"),
         port=os.getenv("DB_PORT", "5432"),
     )
 
@@ -213,7 +213,409 @@ def _to_int_or_none(value):
         return None
 
 
+API_INTEGRATION_DEFAULTS = [
+    {
+        "slug": "paymongo",
+        "name": "PayMongo",
+        "category": "Payment",
+        "description": "Guest bookings and subscription payments.",
+        "tier": "All",
+    },
+    {
+        "slug": "sendgrid",
+        "name": "SendGrid",
+        "category": "Email",
+        "description": "Transactional email delivery for notifications and onboarding.",
+        "tier": "All",
+    },
+    {
+        "slug": "twilio",
+        "name": "Twilio",
+        "category": "SMS",
+        "description": "SMS delivery for alerts and guest-facing notifications.",
+        "tier": "Pro+",
+    },
+    {
+        "slug": "rasa",
+        "name": "RASA AI",
+        "category": "AI / NLP",
+        "description": "Chat assistant used across booking and concierge flows.",
+        "tier": "Pro+",
+    },
+    {
+        "slug": "openstreetmap",
+        "name": "OpenStreetMap",
+        "category": "Maps",
+        "description": "Map tiles, search, and hotel geocoding support.",
+        "tier": "Enterprise",
+    },
+]
+
+API_INTEGRATION_INDEX = {
+    item["slug"]: item
+    for item in API_INTEGRATION_DEFAULTS
+}
+
+
+def _ensure_api_integrations_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_integrations (
+            id SERIAL PRIMARY KEY,
+            slug VARCHAR(80) NOT NULL UNIQUE,
+            name VARCHAR(120) NOT NULL,
+            category VARCHAR(80) NOT NULL,
+            description TEXT,
+            service_tier VARCHAR(40) DEFAULT 'All',
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            last_disabled_reason TEXT,
+            updated_by VARCHAR(160),
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    alter_statements = [
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS service_tier VARCHAR(40) DEFAULT 'All'",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS last_disabled_reason TEXT",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS updated_by VARCHAR(160)",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ]
+    for statement in alter_statements:
+        cur.execute(statement)
+
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_integrations_slug ON api_integrations(slug)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_api_integrations_order ON api_integrations(display_order, id)")
+
+
+def _seed_api_integrations(cur):
+    _ensure_api_integrations_table(cur)
+
+    for display_order, item in enumerate(API_INTEGRATION_DEFAULTS, start=1):
+        cur.execute(
+            """
+            INSERT INTO api_integrations (
+                slug, name, category, description, service_tier, is_enabled, display_order
+            )
+            VALUES (%s, %s, %s, %s, %s, TRUE, %s)
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                category = EXCLUDED.category,
+                description = EXCLUDED.description,
+                service_tier = EXCLUDED.service_tier,
+                display_order = EXCLUDED.display_order
+            """,
+            (
+                item["slug"],
+                item["name"],
+                item["category"],
+                item["description"],
+                item["tier"],
+                display_order,
+            ),
+        )
+
+    # Firebase is not part of the live system and should not appear in admin controls.
+    cur.execute("DELETE FROM api_integrations WHERE slug = %s", ("firebase",))
+
+
+def _mask_secret(raw_value, prefix=4, suffix=4):
+    value = str(raw_value or "").strip()
+    if not value:
+        return "Not configured"
+    if len(value) <= prefix + suffix:
+        if len(value) <= 2:
+            return "Configured"
+        return f"{value[:1]}...{value[-1:]}"
+    return f"{value[:prefix]}...{value[-suffix:]}"
+
+
+def _integration_runtime_details(slug):
+    normalized_slug = str(slug or "").strip().lower()
+
+    if normalized_slug == "paymongo":
+        secret_key = str(os.getenv("PAYMONGO_SECRET_KEY", "") or "").strip()
+        configured = bool(secret_key and "your_" not in secret_key)
+        return {
+            "isConfigured": configured,
+            "providerValue": _mask_secret(secret_key, prefix=8, suffix=4),
+            "runtimeMode": "Live key configured" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "sendgrid":
+        secret_key = str(os.getenv("SENDGRID_API_KEY", "") or "").strip()
+        configured = bool(secret_key)
+        return {
+            "isConfigured": configured,
+            "providerValue": _mask_secret(secret_key, prefix=6, suffix=2),
+            "runtimeMode": "Transactional email" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "twilio":
+        sid = str(os.getenv("TWILIO_ACCOUNT_SID", "") or "").strip()
+        token = str(os.getenv("TWILIO_AUTH_TOKEN", "") or "").strip()
+        phone = str(os.getenv("TWILIO_PHONE_NUMBER", "") or "").strip()
+        configured = bool(sid and token and phone)
+        provider_value = _mask_secret(sid, prefix=4, suffix=4)
+        if phone:
+            provider_value = f"{provider_value} | {phone}"
+        return {
+            "isConfigured": configured,
+            "providerValue": provider_value if configured else "Not configured",
+            "runtimeMode": "SMS delivery" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "rasa":
+        webhook_url = str(os.getenv("RASA_WEBHOOK_URL", "") or "").strip()
+        return {
+            "isConfigured": True,
+            "providerValue": webhook_url or "Built-in concierge fallback",
+            "runtimeMode": "External webhook" if webhook_url else "Fallback replies",
+        }
+
+    if normalized_slug == "openstreetmap":
+        return {
+            "isConfigured": True,
+            "providerValue": "Public API (OSM / Nominatim)",
+            "runtimeMode": "Public map service",
+        }
+
+    return {
+        "isConfigured": False,
+        "providerValue": "Unknown",
+        "runtimeMode": "Unavailable",
+    }
+
+
+def _serialize_api_integration_row(row):
+    if not row:
+        return None
+
+    slug = str(row.get("slug") or "").strip().lower()
+    runtime = _integration_runtime_details(slug)
+    is_enabled = bool(row.get("is_enabled", True))
+    status = "DISABLED" if not is_enabled else ("LIVE" if runtime.get("isConfigured") else "NOT CONFIGURED")
+    if slug == "rasa" and is_enabled and runtime.get("runtimeMode") == "Fallback replies":
+        status = "FALLBACK"
+
+    return {
+        "id": row.get("id"),
+        "slug": slug,
+        "name": row.get("name") or API_INTEGRATION_INDEX.get(slug, {}).get("name") or slug,
+        "category": row.get("category") or API_INTEGRATION_INDEX.get(slug, {}).get("category") or "Integration",
+        "description": row.get("description") or API_INTEGRATION_INDEX.get(slug, {}).get("description") or "",
+        "tier": row.get("service_tier") or API_INTEGRATION_INDEX.get(slug, {}).get("tier") or "All",
+        "isEnabled": is_enabled,
+        "isConfigured": bool(runtime.get("isConfigured")),
+        "providerValue": runtime.get("providerValue"),
+        "runtimeMode": runtime.get("runtimeMode"),
+        "status": status,
+        "disabledReason": row.get("last_disabled_reason"),
+        "updatedBy": row.get("updated_by"),
+        "updatedAt": _serialize_date(row.get("updated_at")),
+    }
+
+
+def _get_api_integrations(cur):
+    _seed_api_integrations(cur)
+    cur.execute(
+        """
+        SELECT
+            id,
+            slug,
+            name,
+            category,
+            description,
+            service_tier,
+            is_enabled,
+            last_disabled_reason,
+            updated_by,
+            updated_at
+        FROM api_integrations
+        ORDER BY display_order ASC, id ASC
+        """
+    )
+    return [_serialize_api_integration_row(row) for row in (cur.fetchall() or [])]
+
+
+def _get_api_integration(cur, slug):
+    normalized_slug = str(slug or "").strip().lower()
+    _seed_api_integrations(cur)
+    cur.execute(
+        """
+        SELECT
+            id,
+            slug,
+            name,
+            category,
+            description,
+            service_tier,
+            is_enabled,
+            last_disabled_reason,
+            updated_by,
+            updated_at
+        FROM api_integrations
+        WHERE slug = %s
+        LIMIT 1
+        """,
+        (normalized_slug,),
+    )
+    return _serialize_api_integration_row(cur.fetchone())
+
+
+def _is_integration_enabled(slug, default=True):
+    conn = None
+    cur = None
+    normalized_slug = str(slug or "").strip().lower()
+    if not normalized_slug:
+        return bool(default)
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_api_integrations(cur)
+        cur.execute("SELECT is_enabled FROM api_integrations WHERE slug = %s LIMIT 1", (normalized_slug,))
+        row = cur.fetchone()
+        if row is None:
+            return bool(default)
+        return bool(row.get("is_enabled", default))
+    except Exception as exc:
+        print(f"Integration toggle check failed for {normalized_slug}: {exc}")
+        return bool(default)
+    finally:
+        _safe_close(conn, cur)
+
+
+def _integration_disabled_error(slug, message=None, status_code=503):
+    meta = API_INTEGRATION_INDEX.get(str(slug or "").strip().lower(), {})
+    integration_name = meta.get("name") or "This integration"
+    return (
+        jsonify(
+            {
+                "error": message or f"{integration_name} is temporarily disabled by the superadmin.",
+                "disabled": True,
+                "integration": str(slug or "").strip().lower(),
+            }
+        ),
+        status_code,
+    )
+
+
+INTEGRATION_OWNER_IMPACT = {
+    "paymongo": "guest and subscription payment flows",
+    "sendgrid": "email-based notices and delivery confirmations",
+    "twilio": "SMS-based notices and alerts",
+    "rasa": "AI assistant and concierge features",
+    "openstreetmap": "map, location, and nearby hotel tools",
+}
+
+
+def _notify_owners_of_integration_change(integration):
+    conn = None
+    cur = None
+    try:
+        if not integration:
+            return 0
+
+        integration_name = str(integration.get("name") or "This service").strip()
+        integration_slug = str(integration.get("slug") or "").strip().lower()
+        is_enabled = bool(integration.get("isEnabled"))
+        impact = INTEGRATION_OWNER_IMPACT.get(integration_slug, "some platform features")
+        updated_by = str(integration.get("updatedBy") or "the superadmin").strip() or "the superadmin"
+        disabled_reason = str(integration.get("disabledReason") or "").strip()
+        notification_type = "owner_api_restored" if is_enabled else "owner_api_disabled"
+        title = (
+            f"{integration_name} is available again"
+            if is_enabled
+            else f"{integration_name} temporarily unavailable"
+        )
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_notification_types(cur)
+
+        if not _table_exists(cur, "owners"):
+            return 0
+
+        if _table_exists(cur, "hotels"):
+            cur.execute(
+                """
+                SELECT DISTINCT ON (o.id)
+                    o.id,
+                    o.first_name,
+                    h.hotel_name
+                FROM owners o
+                LEFT JOIN hotels h ON h.owner_id = o.id
+                ORDER BY o.id ASC, h.id ASC
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, first_name, '' AS hotel_name
+                FROM owners
+                ORDER BY id ASC
+                """
+            )
+
+        owners = cur.fetchall() or []
+    except Exception as exc:
+        print(f"Owner integration notification lookup failed: {exc}")
+        return 0
+    finally:
+        _safe_close(conn, cur)
+
+    sent_count = 0
+    for owner in owners:
+        owner_id = owner.get("id")
+        if not owner_id:
+            continue
+
+        hotel_label = str(owner.get("hotel_name") or "").strip() or "your property"
+        if is_enabled:
+            message = (
+                f"{integration_name} has been re-enabled by {updated_by}. "
+                f"{impact.capitalize()} are available again for {hotel_label}."
+            )
+        else:
+            message = (
+                f"{integration_name} has been temporarily disabled by {updated_by}. "
+                f"{impact.capitalize()} are temporarily unavailable for {hotel_label} until the service is restored."
+            )
+            if disabled_reason:
+                message += f" Reason: {disabled_reason}"
+
+        notification_id = _create_notification(
+            owner_id,
+            "owner",
+            notification_type,
+            title,
+            message,
+            data={
+                "integrationSlug": integration_slug,
+                "integrationName": integration_name,
+                "isEnabled": is_enabled,
+                "impact": impact,
+                "disabledReason": disabled_reason,
+                "updatedBy": updated_by,
+                "updatedAt": integration.get("updatedAt"),
+            },
+        )
+        if notification_id:
+            sent_count += 1
+
+    return sent_count
+
+
 def _hotel_geocoding_enabled():
+    if not _is_integration_enabled("openstreetmap", default=True):
+        return False
     raw = str(os.getenv("HOTEL_GEOCODING_ENABLED", "true")).strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
@@ -2043,6 +2445,8 @@ def _seed_notification_types(cur):
         ('owner_new_booking', 'New Booking', 'New booking notifications for owners', 'BOOKING', 'NORMAL'),
         ('owner_staff_task_completed', 'Staff Task Completed', 'Task completion notifications for owners', 'STAFF', 'NORMAL'),
         ('owner_low_inventory', 'Low Inventory Alert', 'Low inventory alerts for owners', 'INVENTORY', 'HIGH'),
+        ('owner_api_disabled', 'Service Unavailable', 'Integration outage alerts for owners', 'SYSTEM', 'HIGH'),
+        ('owner_api_restored', 'Service Restored', 'Integration restoration alerts for owners', 'SYSTEM', 'NORMAL'),
 
         # Customer notifications
         ('customer_booking_confirmed', 'Booking Confirmed', 'Booking confirmation for customers', 'BOOKING', 'HIGH'),
@@ -2073,7 +2477,7 @@ def _create_notification(user_id, user_type, notification_type_key, title, messa
         conn = get_db_connection()
         cur = conn.cursor()
 
-        _ensure_notification_tables(cur)
+        _seed_notification_types(cur)
 
         # Get notification type ID
         cur.execute("SELECT id FROM notification_types WHERE type_key = %s AND is_active = TRUE", (notification_type_key,))
@@ -2163,6 +2567,15 @@ def _send_email_notification(notification):
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("sendgrid", default=True):
+            _log_notification_delivery(
+                notification['id'],
+                'email',
+                'skipped',
+                {'reason': 'disabled_by_superadmin'},
+            )
+            return
+
         sendgrid_key = os.getenv('SENDGRID_API_KEY')
         if not sendgrid_key:
             return
@@ -2220,6 +2633,9 @@ def _send_email_notification(notification):
 
 
 def _send_sendgrid_email(recipient_email, subject, html_content, plain_text=None):
+    if not _is_integration_enabled("sendgrid", default=True):
+        return False
+
     sendgrid_key = os.getenv('SENDGRID_API_KEY')
     if not sendgrid_key or not recipient_email:
         return False
@@ -2296,7 +2712,18 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
 
 def _send_sms_notification(notification):
     """Send SMS notification using Twilio"""
+    conn = None
+    cur = None
     try:
+        if not _is_integration_enabled("twilio", default=True):
+            _log_notification_delivery(
+                notification['id'],
+                'sms',
+                'skipped',
+                {'reason': 'disabled_by_superadmin'},
+            )
+            return
+
         twilio_sid = os.getenv('TWILIO_ACCOUNT_SID')
         twilio_token = os.getenv('TWILIO_AUTH_TOKEN')
         twilio_phone = os.getenv('TWILIO_PHONE_NUMBER')
@@ -2348,6 +2775,29 @@ def _send_push_notification(notification):
     _log_notification_delivery(notification['id'], 'push', 'sent', {'note': 'Push notification placeholder'})
 
 
+def _serialize_notification_row(notification):
+    if not notification:
+        return notification
+
+    serialized = dict(notification)
+    for field in ("created_at", "updated_at", "sent_at", "read_at", "expires_at"):
+        serialized[field] = _serialize_date(serialized.get(field))
+
+    data_value = serialized.get("data")
+    if data_value:
+        if isinstance(data_value, dict):
+            serialized["data"] = data_value
+        else:
+            try:
+                serialized["data"] = json.loads(data_value)
+            except Exception:
+                serialized["data"] = {}
+    else:
+        serialized["data"] = {}
+
+    return serialized
+
+
 def _log_notification_delivery(notification_id, channel, status, response_data=None):
     """Log notification delivery attempt"""
     try:
@@ -2395,15 +2845,7 @@ def _get_user_notifications(user_id, user_type, limit=50, unread_only=False):
         cur.execute(query, params)
         notifications = cur.fetchall()
 
-        # Convert data JSON back to dict
-        for notification in notifications:
-            if notification['data']:
-                try:
-                    notification['data'] = json.loads(notification['data'])
-                except:
-                    notification['data'] = {}
-
-        return notifications
+        return [_serialize_notification_row(notification) for notification in notifications]
 
     except Exception as e:
         print(f"Error getting notifications: {e}")
@@ -2432,6 +2874,39 @@ def _mark_notification_read(notification_id, user_id, user_type):
     except Exception as e:
         print(f"Error marking notification read: {e}")
         return False
+    finally:
+        _safe_close(conn, cur)
+
+
+def _mark_all_notifications_read(user_id, user_type):
+    """Mark all notifications as read for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            UPDATE notifications
+            SET is_read = TRUE,
+                read_at = COALESCE(read_at, NOW())
+            WHERE user_id = %s
+              AND user_type = %s
+              AND is_read = FALSE
+            """,
+            (user_id, user_type),
+        )
+
+        updated_count = cur.rowcount or 0
+        conn.commit()
+        return updated_count
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error marking all notifications read: {e}")
+        return None
     finally:
         _safe_close(conn, cur)
 
@@ -3288,15 +3763,7 @@ def admin_get_notifications():
                 LIMIT %s
             """, (limit,))
 
-            notifications = cur.fetchall()
-
-            # Convert data JSON back to dict
-            for notification in notifications:
-                if notification['data']:
-                    try:
-                        notification['data'] = json.loads(notification['data'])
-                    except:
-                        notification['data'] = {}
+            notifications = [_serialize_notification_row(notification) for notification in (cur.fetchall() or [])]
 
         except Exception as e:
             print(f"Error getting all notifications: {e}")
@@ -3730,16 +4197,104 @@ def admin_system_logs():
         return jsonify({'error': str(e)}), 500
     finally:
         _safe_close(conn, cur)
-    
-    @app.route('/api/google-login', methods=['POST'])
-    def google_login():
-      data = request.json
+
+
+@app.route('/api/admin/integrations', methods=['GET'])
+def admin_get_integrations():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        integrations = _get_api_integrations(cur)
+        return jsonify({'integrations': integrations}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/integrations/<string:slug>', methods=['PATCH'])
+def admin_update_integration(slug):
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        if 'isEnabled' not in data:
+            return jsonify({'error': 'isEnabled is required.'}), 400
+
+        normalized_slug = str(slug or '').strip().lower()
+        if normalized_slug not in API_INTEGRATION_INDEX:
+            return jsonify({'error': 'Integration not found.'}), 404
+
+        is_enabled = bool(data.get('isEnabled'))
+        updated_by = str(data.get('updatedBy') or 'SuperAdmin').strip() or 'SuperAdmin'
+        reason = str(data.get('reason') or '').strip()
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_api_integrations(cur)
+        cur.execute(
+            """
+            UPDATE api_integrations
+            SET
+                is_enabled = %s,
+                last_disabled_reason = %s,
+                updated_by = %s,
+                updated_at = NOW()
+            WHERE slug = %s
+            RETURNING
+                id,
+                slug,
+                name,
+                category,
+                description,
+                service_tier,
+                is_enabled,
+                last_disabled_reason,
+                updated_by,
+                updated_at
+            """,
+            (
+                is_enabled,
+                None if is_enabled else (reason or 'Temporarily disabled by superadmin.'),
+                updated_by,
+                normalized_slug,
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            conn.rollback()
+            return jsonify({'error': 'Integration not found.'}), 404
+
+        conn.commit()
+        integration = _serialize_api_integration_row(row)
+        owner_notification_count = _notify_owners_of_integration_change(integration)
+        action = 'enabled' if integration.get('isEnabled') else 'disabled'
+        return jsonify({
+            'message': (
+                f"{integration.get('name')} {action} successfully. "
+                f"{owner_notification_count} owner notification(s) queued."
+            ),
+            'integration': integration,
+            'ownerNotificationCount': owner_notification_count,
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+ 
+@app.route('/api/google-login', methods=['POST'])
+def google_login():
+    data = request.json
     token = data.get('token')
 
     try:
         idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo['email']
-        
+
         conn = get_db_connection()
         cur = conn.cursor()
 
@@ -3755,7 +4310,7 @@ def admin_system_logs():
             )
             user_id = cur.fetchone()[0]
             conn.commit()
-            
+
             final_first_name = first_name
             final_last_name = last_name
             final_contact = ""
@@ -3769,7 +4324,7 @@ def admin_system_logs():
             "message": "Login successful!",
             "user": {
                 "id": user_id,
-                "firstName": final_first_name, 
+                "firstName": final_first_name,
                 "lastName": final_last_name,
                 "email": email,
                 "contactNumber": final_contact
@@ -4481,6 +5036,12 @@ def owner_create_subscription_payment_link():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("paymongo", default=True):
+            return _integration_disabled_error(
+                "paymongo",
+                "PayMongo payments are temporarily disabled by the superadmin.",
+            )
+
         simulation_mode = _owner_subscription_simulation_enabled()
         paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
         if not simulation_mode and (not paymongo_key or 'your_' in paymongo_key):
@@ -5740,6 +6301,15 @@ def owner_mark_notification_read(owner_id, notification_id):
         return jsonify({'error': 'Failed to mark notification as read'}), 500
 
 
+@app.route('/api/owner/notifications/<int:owner_id>/read-all', methods=['PATCH'])
+def owner_mark_all_notifications_read(owner_id):
+    """Owner: Mark all notifications as read"""
+    updated_count = _mark_all_notifications_read(owner_id, 'owner')
+    if updated_count is None:
+        return jsonify({'error': 'Failed to mark notifications as read'}), 500
+    return jsonify({'message': 'Notifications marked as read', 'updated_count': updated_count}), 200
+
+
 @app.route('/api/owner/notifications/preferences/<int:owner_id>', methods=['GET'])
 def owner_get_notification_preferences(owner_id):
     """Owner: Get notification preferences"""
@@ -6439,6 +7009,12 @@ def create_payment_link():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("paymongo", default=True):
+            return _integration_disabled_error(
+                "paymongo",
+                "PayMongo payments are temporarily disabled by the superadmin.",
+            )
+
         paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
         if not paymongo_key or 'your_' in paymongo_key:
             return jsonify({'error': 'PayMongo API key not configured. Please set PAYMONGO_SECRET_KEY in backend/.env file. Get your key at https://dashboard.paymongo.com/developers'}), 503
@@ -7828,34 +8404,26 @@ def inventory_forecast():
 
 @app.route('/api/integrations/status', methods=['GET'])
 def integrations_status():
-    sendgrid_key = os.getenv("SENDGRID_API_KEY")
-    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
-    paymongo_key = os.getenv("PAYMONGO_SECRET_KEY")
-    currency_key = os.getenv("CURRENCY_API_KEY")
-    rasa_url = os.getenv("RASA_WEBHOOK_URL")
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        integrations = _get_api_integrations(cur)
+        integration_map = {item.get("slug"): item for item in integrations}
 
-    integrations = [
-        {"name": "SendGrid", "module": "Email Notifications", "connected": bool(sendgrid_key)},
-        {"name": "Twilio", "module": "SMS Notifications", "connected": bool(twilio_sid and twilio_token)},
-        {"name": "OpenStreetMap + Leaflet", "module": "Maps & Location", "connected": True},
-        {"name": "Currency API", "module": "Currency Conversion", "connected": bool(currency_key)},
-        {"name": "Plotly + Prophet", "module": "Analytics & Forecasting", "connected": True},
-        {"name": "Rasa", "module": "AI Chatbot", "connected": bool(rasa_url) or True},
-        {"name": "Marzipano", "module": "360 Room Viewer", "connected": True},
-        {"name": "QR Code", "module": "QR Generation", "connected": True},
-        {"name": "JWT", "module": "Authentication & Security", "connected": False},
-        {"name": "PayMongo", "module": "Payment Integration", "connected": bool(paymongo_key)},
-    ]
-
-    return jsonify({
-        "integrations": integrations,
-        "mainApis": {
-            "maps": True,
-            "analytics": True,
-            "chatbot": True,
-        },
-    }), 200
+        return jsonify({
+            "integrations": integrations,
+            "mainApis": {
+                "maps": bool(integration_map.get("openstreetmap", {}).get("isEnabled", True)),
+                "chatbot": bool(integration_map.get("rasa", {}).get("isEnabled", True)),
+                "payments": bool(integration_map.get("paymongo", {}).get("isEnabled", True)),
+            },
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
 
 
 @app.route('/api/customers/resolve', methods=['GET'])
@@ -8135,6 +8703,12 @@ def customer_privileges_create_payment_link():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("paymongo", default=True):
+            return _integration_disabled_error(
+                "paymongo",
+                "PayMongo payments are temporarily disabled by the superadmin.",
+            )
+
         data = request.get_json(silent=True) or {}
         customer_id = _to_int(data.get("customerId"), 0)
         package_id = _to_int(data.get("packageId"), 0)
@@ -8479,6 +9053,14 @@ def chatbot_rasa_fallback():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("rasa", default=True):
+            return jsonify({
+                "error": "AI assistant is temporarily disabled by the superadmin.",
+                "messages": ["AI assistant is temporarily unavailable while maintenance is in progress."],
+                "source": "disabled",
+                "disabled": True,
+            }), 503
+
         payload = request.json or {}
         sender = (payload.get("sender") or "website-guest").strip()
         message = (payload.get("message") or "").strip()
@@ -8739,6 +9321,13 @@ def vision_nearby_hotels():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("openstreetmap", default=True):
+            return jsonify({
+                "hotels": [],
+                "disabled": True,
+                "message": "Map services are temporarily disabled by the superadmin.",
+            }), 200
+
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -8782,6 +9371,13 @@ def vision_landmarks():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("openstreetmap", default=True):
+            return jsonify({
+                "landmarks": [],
+                "disabled": True,
+                "message": "Map services are temporarily disabled by the superadmin.",
+            }), 200
+
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 

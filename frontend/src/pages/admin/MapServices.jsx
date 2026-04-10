@@ -7,19 +7,23 @@ const MapServices = () => {
   const [hotels, setHotels] = useState([]);
   const [landmarks, setLandmarks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [mapEnabled, setMapEnabled] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const [hotelsRes, lmRes] = await Promise.all([
+        const [statusRes, hotelsRes, lmRes] = await Promise.all([
+          fetch('/api/integrations/status'),
           fetch('/api/vision/nearby-hotels'),
           fetch('/api/vision/landmarks'),
         ]);
+        const statusPayload = await statusRes.json().catch(() => ({}));
         const hotelsPayload = await hotelsRes.json().catch(() => ({}));
         const lmPayload = await lmRes.json().catch(() => ({}));
 
         if (!mounted) return;
+        setMapEnabled(statusPayload?.mainApis?.maps !== false);
 
         const hotelsData = hotelsPayload.hotels || [];
         const allHotels = hotelsData.map(hotel => ({
@@ -77,9 +81,9 @@ const MapServices = () => {
             Geospatial tracking · Hotel distribution · Place search
           </p>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${theme.border} ${theme.textSub}`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-          OSM Live
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${theme.border} ${mapEnabled ? theme.textSub : 'text-red-500'}`}>
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${mapEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+          {mapEnabled ? 'OSM Live' : 'OSM Off'}
         </div>
       </div>
 
