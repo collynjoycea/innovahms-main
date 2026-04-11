@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { Locate, Search, X, MapPin, Navigation } from "lucide-react";
+import { AlertTriangle, Locate, Search, X, MapPin, Navigation } from "lucide-react";
 
 // ─── Fix Leaflet default icon paths broken by bundlers ───────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -83,6 +83,7 @@ export default function NeighborhoodMap({
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [nearestHotel, setNearestHotel] = useState(null);
+  const [mapsEnabled, setMapsEnabled] = useState(true);
   const debounceRef = useRef(null);
   const markerRefs = useRef({});
 
@@ -91,8 +92,35 @@ export default function NeighborhoodMap({
     [hotels, hotelCenter]
   );
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadIntegrationState = async () => {
+      try {
+        const response = await fetch("/api/integrations/status");
+        const payload = await response.json().catch(() => ({}));
+        if (!mounted) return;
+        setMapsEnabled(payload?.mainApis?.maps !== false);
+      } catch {
+        if (mounted) setMapsEnabled(true);
+      }
+    };
+
+    loadIntegrationState();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // ── Debounced search ──────────────────────────────────────────────────────
   const handleSearchChange = (e) => {
+    if (!mapsEnabled) {
+      setSearchQuery("");
+      setSearchResults([]);
+      setSearchError("Map services are temporarily disabled.");
+      return;
+    }
+
     const val = e.target.value;
     setSearchQuery(val);
     setSearchError("");
@@ -185,6 +213,30 @@ export default function NeighborhoodMap({
   }, [focusedHotelId, hotels]);
 
   const th = isDarkMode;
+
+  if (!mapsEnabled) {
+    return (
+      <div className={`flex flex-col gap-3 ${className}`}>
+        <div
+          className={`rounded-2xl border px-5 py-6 shadow-xl ${
+            th ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" />
+            <div>
+              <p className={`text-[11px] font-black uppercase tracking-[0.2em] ${th ? "text-white" : "text-gray-900"}`}>
+                Map services offline
+              </p>
+              <p className={`mt-2 text-sm leading-relaxed ${th ? "text-gray-400" : "text-gray-500"}`}>
+                OpenStreetMap access has been temporarily disabled by the superadmin. Live map tiles, place search, and map-based navigation are unavailable until it is turned back on.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
