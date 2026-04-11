@@ -1,5 +1,3 @@
--- INNOVA HMS - Features Schema
--- Run this in the innovahmsdb database after schema.sql
 
 -- Customer loyalty and preferences
 CREATE TABLE IF NOT EXISTS customer_loyalty (

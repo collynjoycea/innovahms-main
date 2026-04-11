@@ -1,6 +1,3 @@
--- INNOVA HMS - Notification Types Seed Data
--- Run this in the innovahmsdb database after notifications.sql
-
 -- Insert notification types
 INSERT INTO notification_types (type_key, name, description, category, priority, email_template, sms_template, push_template) VALUES
 -- System/Admin notifications

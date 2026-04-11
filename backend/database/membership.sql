@@ -1,6 +1,3 @@
--- INNOVA HMS - Membership Schema
--- Run this in the innovahmsdb database after schema.sql
-
 -- Membership packages
 CREATE TABLE IF NOT EXISTS membership_packages (
     id SERIAL PRIMARY KEY,

@@ -1,6 +1,3 @@
--- INNOVA HMS - Notification System Schema
--- Run this in the innovahmsdb database after features.sql
-
 -- Notification types and templates
 CREATE TABLE IF NOT EXISTS notification_types (
     id SERIAL PRIMARY KEY,
