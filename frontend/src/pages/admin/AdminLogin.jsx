@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, ArrowRight, Globe, AlertCircle, ShieldCheck, Cpu } from 'lucide-react';
+import ForgotPasswordModal from '../../components/ForgotPasswordModal';
+import { isValidEmail, normalizeEmail } from '../../utils/authValidation';
 
 const InputField = ({ label, type, icon, placeholder, value, onChange, isFocused, onFocus, onBlur, children }) => (
   <div className="group relative">
@@ -38,6 +40,7 @@ const AdminLogin = () => {
   const [focused, setFocused] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,7 +57,12 @@ const AdminLogin = () => {
     if (isSubmitting) return;
     setFeedback('');
 
-    if (!formData.email || !formData.password) {
+    const normalizedEmail = normalizeEmail(formData.email);
+    if (!isValidEmail(normalizedEmail)) {
+      setFeedback('Enter a valid admin email address');
+      return;
+    }
+    if (!formData.password) {
       setFeedback('Invalid Entry: Credentials Required');
       return;
     }
@@ -65,7 +73,7 @@ const AdminLogin = () => {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, email: normalizedEmail }),
       });
 
       const data = await response.json();
@@ -172,6 +180,16 @@ const AdminLogin = () => {
               </button>
             </InputField>
 
+            <div className="flex justify-end -mt-4">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-[10px] font-black uppercase tracking-[0.24em] text-black/35 transition hover:text-[#c9a84c]"
+              >
+                Forgot Password
+              </button>
+            </div>
+
             {feedback && (
               <div className="flex items-center gap-3 text-red-600 font-bold text-[11px] uppercase tracking-wider bg-red-50 p-4 rounded-2xl border border-red-100 animate-bounce">
                 <AlertCircle size={18} />
@@ -205,6 +223,13 @@ const AdminLogin = () => {
           </div>
         </div>
       </div>
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        userType="admin"
+        title="Admin Password Reset"
+        initialEmail={formData.email}
+      />
     </div>
   );
 };

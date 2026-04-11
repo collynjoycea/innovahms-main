@@ -53,6 +53,8 @@ export default function Rewards() {
   }, [customer?.id, navigate]);
 
   const subscription = summary?.privilege || {};
+  const pointsBalance = summary?.pointsBalance || {};
+  const pointSources = summary?.pointSources || [];
   const stats = useMemo(() => ([
     {
       label: "Current Tier",
@@ -152,6 +154,61 @@ export default function Rewards() {
               <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-[#c5b79d]">{card.desc}</p>
             </div>
           ))}
+        </section>
+
+        <section className="mt-10 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-[#14120e]">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400 dark:text-[#bcaf95]">Points Balance</p>
+            <h2 className="mt-3 text-2xl font-black text-slate-900 dark:text-white">How your balance is built</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-[#bcaf95]">
+              {pointsBalance?.explanation || "Your balance combines stay spend points and privilege bonus points."}
+            </p>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-[#bcaf95]">Total Balance</p>
+                <p className="mt-2 text-3xl font-black text-[#bf9b30]">{Number(pointsBalance?.total || summary?.points || 0).toLocaleString()} pts</p>
+                <p className="mt-2 text-xs text-slate-500 dark:text-[#bcaf95]">{Number(pointsBalance?.thisMonth || summary?.pointsThisMonth || 0).toLocaleString()} points added this month</p>
+              </div>
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-[#bcaf95]">Earn Rate</p>
+                <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">
+                  {Number(pointsBalance?.earnRatePoints || 1).toLocaleString()} point / PHP {Number(pointsBalance?.earnRatePhp || 100).toLocaleString()}
+                </p>
+                <p className="mt-2 text-xs text-slate-500 dark:text-[#bcaf95]">Eligible booking spend converts automatically into stay points.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-lg dark:border-white/10 dark:bg-[#14120e]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400 dark:text-[#bcaf95]">Point Sources</p>
+                <h2 className="mt-3 text-2xl font-black text-slate-900 dark:text-white">What points you have</h2>
+              </div>
+              <span className="rounded-full bg-[#bf9b30]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">
+                Live breakdown
+              </span>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {pointSources.map((source) => (
+                <div key={source.key} className="rounded-[18px] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-900 dark:text-white">{source.label}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-[#bcaf95]">{source.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black text-[#bf9b30]">{Number(source.points || 0).toLocaleString()} pts</p>
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-[#bcaf95]">+{Number(source.pointsThisMonth || 0).toLocaleString()} this month</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!pointSources.length ? <p className="text-sm text-slate-500 dark:text-[#bcaf95]">Point source details will appear after your rewards summary loads.</p> : null}
+            </div>
+          </div>
         </section>
 
         <section className="mt-16 grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">

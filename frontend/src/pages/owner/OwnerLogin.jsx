@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, ArrowRight, Globe, AlertCircle, Landmark, Sparkles } from 'lucide-react';
+import ForgotPasswordModal from '../../components/ForgotPasswordModal';
+import { isValidEmail, normalizeEmail } from '../../utils/authValidation';
 
 const InputField = ({ label, type, icon, placeholder, value, onChange, isFocused, onFocus, onBlur, children }) => (
   <div className="group relative">
@@ -39,6 +41,7 @@ const OwnerLogin = () => {
   const [focused, setFocused] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +62,12 @@ const OwnerLogin = () => {
     if (isSubmitting) return;
     setFeedback('');
 
-    if (!formData.email || !formData.password) {
+    const normalizedEmail = normalizeEmail(formData.email);
+    if (!isValidEmail(normalizedEmail)) {
+      setFeedback('Enter a valid owner email address');
+      return;
+    }
+    if (!formData.password) {
       setFeedback('Entry Denied: Credentials Required');
       return;
     }
@@ -69,7 +77,7 @@ const OwnerLogin = () => {
       const response = await fetch('/api/owner/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, email: normalizedEmail }),
       });
       const data = await response.json();
 
@@ -172,6 +180,16 @@ const OwnerLogin = () => {
               </button>
             </InputField>
 
+            <div className="flex justify-end -mt-3">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-[10px] font-black uppercase tracking-[0.24em] text-black/35 transition hover:text-[#bf9b30]"
+              >
+                Forgot Password
+              </button>
+            </div>
+
             {feedback && (
               <div className="flex items-center gap-2 text-red-600 font-bold text-[10px] uppercase tracking-wider bg-red-50 p-4 rounded-xl border border-red-100 italic">
                 <AlertCircle size={16} />
@@ -205,6 +223,13 @@ const OwnerLogin = () => {
           </div>
         </div>
       </div>
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        userType="owner"
+        title="Owner Password Reset"
+        initialEmail={formData.email}
+      />
     </div>
   );
 };

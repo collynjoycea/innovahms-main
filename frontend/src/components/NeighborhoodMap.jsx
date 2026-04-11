@@ -229,7 +229,7 @@ export default function NeighborhoodMap({
                 Map services offline
               </p>
               <p className={`mt-2 text-sm leading-relaxed ${th ? "text-gray-400" : "text-gray-500"}`}>
-                OpenStreetMap access has been temporarily disabled by the superadmin. Live map tiles, place search, and map-based navigation are unavailable until it is turned back on.
+                OpenStreetMap access has been temporarily disabled by the admin. Live map tiles, place search, and map-based navigation are unavailable until it is turned back on.
               </p>
             </div>
           </div>

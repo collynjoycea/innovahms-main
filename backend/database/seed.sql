@@ -1,10 +1,7 @@
--- INNOVA HMS - Seed Data
--- Run this in the innovahmsdb database after all schema files
-
 -- Admin user
 INSERT INTO admins (name, email, password_hash)
 VALUES (
-    'Super Admin',
+    'Admin',
     'admin@gmail.com',
     'scrypt:32768:8:1$8kvkgaKL4ZsT4rK1$5715ae3f7af53642f92e7fdf71466a5e7a13f0943fbcbc30fc0ec82122a714ad342ae637f3e66906d8351ac956c09d578a5f9a951d001cb1abb05b32814214a4'
 )
@@ -127,5 +124,4 @@ SET
     initial_yaw = EXCLUDED.initial_yaw,
     initial_pitch = EXCLUDED.initial_pitch,
     initial_fov = EXCLUDED.initial_fov;
-
 

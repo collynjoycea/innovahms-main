@@ -418,7 +418,7 @@ export default function Header() {
                         { to: "/login", label: "Login as Customer", icon: <Users size={16} className="text-[#c79f3c]" /> },
                         { to: "/owner/login", label: "Login as Hotel Owner", icon: <Building2 size={16} className="text-[#c79f3c]" /> },
                         { to: "/staff/login", label: "Login as Hotel Staff", icon: <Briefcase size={16} className="text-[#c79f3c]" /> },
-                        { to: "/admin/login", label: "Super Admin", icon: <ShieldCheck size={16} className="text-[#c79f3c]" /> },
+                        { to: "/admin/login", label: "Admin", icon: <ShieldCheck size={16} className="text-[#c79f3c]" /> },
                       ].map((item) => (
                         <Link
                           key={item.to}

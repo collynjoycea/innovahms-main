@@ -42,7 +42,7 @@ export default function OwnerSubscription() {
   const [hotelForm, setHotelForm] = useState({ hotelCode: '', hotelName: '', hotelAddress: '' });
 
   const ownerId = session?.id;
-  const accessUnlocked = Boolean(session?.subscriptionActive && session?.hasHotel);
+  const accessUnlocked = Boolean(session?.subscriptionActive && session?.hasHotel && session?.isApproved);
 
   const persistSession = (nextSession) => {
     localStorage.setItem(OWNER_SESSION_KEY, JSON.stringify({
@@ -190,14 +190,17 @@ export default function OwnerSubscription() {
                 {accessUnlocked ? 'Subscription Active' : 'Portal Locked Until Payment'}
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/70">
-                Your owner account and hotel are already registered. Choose a package and complete payment to unlock the owner tools and actions across the portal.
+                Your owner account and hotel are already registered. Payment and admin approval both need to clear before the owner tools and actions unlock across the portal.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-white/70">
                   {session?.subscriptionPlan || 'No active plan'}
                 </div>
+                <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${session?.isApproved ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                  {session?.isApproved ? 'Admin Approved' : 'Admin Review Pending'}
+                </div>
                 <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${accessUnlocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {accessUnlocked ? 'Features Unlocked' : session?.subscriptionActive ? 'Hotel Setup Required' : 'Payment Required'}
+                  {accessUnlocked ? 'Features Unlocked' : !session?.subscriptionActive ? 'Payment Required' : !session?.isApproved ? 'Approval Required' : 'Hotel Setup Required'}
                 </div>
               </div>
             </div>
@@ -293,14 +296,14 @@ export default function OwnerSubscription() {
               <div className="rounded-2xl bg-slate-900 p-3 text-white"><CreditCard size={20} /></div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Portal Access Rules</p>
-                <h2 className="mt-1 text-2xl font-black text-slate-900">Everything stays locked until payment clears</h2>
+                <h2 className="mt-1 text-2xl font-black text-slate-900">Payment and approval both unlock access</h2>
               </div>
             </div>
             <div className="mt-6 grid gap-3">
               {[
-                'Owners can register their account and hotel first, but operational actions stay disabled until a subscription is paid.',
+                'Owners can register their account and hotel first, but operational actions stay disabled until a subscription is paid and the admin review is approved.',
                 'You can browse the owner pages before payment, but forms and action buttons remain read-only.',
-                'Renewing a package keeps the owner portal available and updates the renewal date.',
+                'Renewing a package keeps the owner portal available, while approval status controls whether hotel tools can actually be used.',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <Lock size={16} className="mt-0.5 text-[#bf9b30]" />
@@ -317,7 +320,7 @@ export default function OwnerSubscription() {
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
               {session?.hasHotel
-                ? 'Your hotel was created during owner signup. Subscription payment is the only step left before owner actions unlock.'
+                ? 'Your hotel was created during owner signup. Subscription payment and admin approval are the last steps before owner actions unlock.'
                 : 'If this owner account has no linked hotel yet, you can still attach one here after payment.'}
             </p>
 
@@ -334,13 +337,13 @@ export default function OwnerSubscription() {
                   </div>
                   <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Portal Status</p>
-                    <p className={`mt-2 text-sm font-black ${session?.subscriptionActive ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {session?.subscriptionActive ? 'Unlocked after payment' : 'Waiting for payment'}
+                    <p className={`mt-2 text-sm font-black ${accessUnlocked ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {accessUnlocked ? 'Unlocked after payment and admin approval' : !session?.subscriptionActive ? 'Waiting for payment' : !session?.isApproved ? 'Waiting for admin approval' : 'Hotel setup required'}
                     </p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-dashed border-[#bf9b30]/35 bg-[#bf9b30]/[0.06] px-4 py-4 text-sm font-medium leading-relaxed text-slate-700">
-                  Rooms, reservations, staff tools, reports, and all other owner actions stay read-only until a subscription payment is confirmed.
+                  Rooms, reservations, staff tools, reports, and all other owner actions stay read-only until both the subscription payment and admin review are confirmed.
                 </div>
               </div>
             ) : (

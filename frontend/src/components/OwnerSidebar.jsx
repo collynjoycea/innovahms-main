@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const OwnerSidebar = () => {
+const OwnerSidebar = ({ isDarkMode = false }) => {
   const location = useLocation();
   const planFeatures = {
     starter: ['dashboard', 'rooms', 'reservations', 'customers', 'reviews'],
@@ -29,8 +29,9 @@ const OwnerSidebar = () => {
   }, []);
   
   const navItems = [
-    { name: 'Subscription', path: '/owner/subscription', feature: 'subscription', requiredPlan: null, icon: <><rect x="3" y="5" width="18" height="14" rx="2" ry="2"/><path d="M7 9h10"/><path d="M7 13h6"/></> },
+    
     { name: 'Dashboard', path: '/owner', feature: 'dashboard', requiredPlan: 'Starter', icon: <><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22" /></> },
+    { name: 'Subscription', path: '/owner/subscription', feature: 'subscription', requiredPlan: null, icon: <><rect x="3" y="5" width="18" height="14" rx="2" ry="2"/><path d="M7 9h10"/><path d="M7 13h6"/></> },
     { name: 'Rooms', path: '/owner/rooms', feature: 'rooms', requiredPlan: 'Starter', icon: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></> },
     { name: 'Reservations', path: '/owner/reservations', feature: 'reservations', requiredPlan: 'Starter', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
     { name: 'Customers', path: '/owner/customers', feature: 'customers', requiredPlan: 'Starter', icon: <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></> },
@@ -47,7 +48,7 @@ const OwnerSidebar = () => {
   );
 
   return (
-    <aside className="w-72 bg-[#faf9f6] border-r border-black/5 flex flex-col h-screen sticky top-0 overflow-hidden">
+    <aside className={`w-72 border-r flex flex-col h-screen sticky top-0 overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-[#0b0d12] border-white/10' : 'bg-[#faf9f6] border-black/5'}`}>
       {/* Brand Header */}
       <div className="px-8 pt-8 pb-4">
         <img src="/images/logo.png" alt="Innova Logo" className="w-full max-w-[160px] drop-shadow-sm" />
@@ -56,7 +57,7 @@ const OwnerSidebar = () => {
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-6 space-y-1.5 overflow-hidden">
-        <p className="text-[10px] font-bold tracking-[0.2em] text-black/60 uppercase mb-2 px-2">Owner Portal</p>
+        <p className={`mb-2 px-2 text-[10px] font-bold tracking-[0.2em] uppercase ${isDarkMode ? 'text-white/45' : 'text-black/60'}`}>Owner Portal</p>
         
         {navItems.map((item) => {
           const active = location.pathname === item.path;
@@ -67,16 +68,22 @@ const OwnerSidebar = () => {
           );
           const classes = `group flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 relative ${
             active 
-              ? "bg-white text-[#9a7a20] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/15" 
+              ? isDarkMode
+                ? "bg-[#141923] text-[#e6c36a] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/20"
+                : "bg-white text-[#9a7a20] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/15" 
               : lockedByPlan
-                ? "text-black/45 hover:bg-amber-50/80 hover:text-amber-700"
-                : "text-black/70 hover:text-[#bf9b30] hover:bg-white/60"
+                ? isDarkMode
+                  ? "text-white/40 hover:bg-amber-500/10 hover:text-amber-300"
+                  : "text-black/45 hover:bg-amber-50/80 hover:text-amber-700"
+                : isDarkMode
+                  ? "text-white/70 hover:text-[#f5d37e] hover:bg-white/5"
+                  : "text-black/70 hover:text-[#bf9b30] hover:bg-white/60"
           }`;
 
           const content = (
             <>
               <svg 
-                className={`w-5 h-5 transition-colors ${active ? "text-[#bf9b30]" : "text-black/80 group-hover:text-[#bf9b30]"}`} 
+                className={`w-5 h-5 transition-colors ${active ? "text-[#bf9b30]" : isDarkMode ? "text-white/60 group-hover:text-[#bf9b30]" : "text-black/80 group-hover:text-[#bf9b30]"}`} 
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               >
                 {item.icon}

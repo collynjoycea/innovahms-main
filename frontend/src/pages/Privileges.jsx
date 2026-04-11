@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   CreditCard,
@@ -133,6 +134,8 @@ export default function Privileges() {
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentLoading, setPaymentLoading] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -279,8 +282,74 @@ export default function Privileges() {
     }
   };
 
+  const handleCancelPrivilege = async () => {
+    if (!customerId || cancelLoading) return;
+    setCancelLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/customer/privileges/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to cancel privilege tier.");
+      if (data.summary) {
+        setSummary(data.summary);
+        setSubscription(data.subscription || data.summary?.privilege || null);
+        persistCustomerSummary(data.summary);
+      }
+      setMessage(data.message || "Privilege tier cancelled successfully.");
+      setCancelModalOpen(false);
+      await load();
+    } catch (err) {
+      setError(err.message || "Unable to cancel privilege tier.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen text-[#1a160d] dark:bg-[#0d0c0a] dark:text-[#ebe3d1]">
+      {cancelModalOpen ? (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-[#ead9b4] bg-white p-6 shadow-[0_28px_90px_rgba(0,0,0,0.25)] dark:border-white/10 dark:bg-[#14120e]">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl bg-red-100 p-3 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Cancel Privilege Tier</p>
+                <h3 className="mt-2 text-2xl font-black text-[#1a160d] dark:text-white">
+                  Stop {subscription?.packageName || "current"} privilege access?
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-[#6e624f] dark:text-[#baad91]">
+                  This will cancel the active privilege tier in your profile and remove its booking discount from future reservations.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="flex-1 rounded-full border border-[#d8c79d] px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-[#8f732d] dark:border-white/10 dark:text-[#eadcbf]"
+              >
+                Keep Tier
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelPrivilege}
+                disabled={cancelLoading}
+                className="flex-1 rounded-full bg-red-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-60"
+              >
+                {cancelLoading ? "Cancelling..." : "Confirm Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="relative flex min-h-[56vh] items-center overflow-hidden border-b border-[#eadfc9] bg-[#1a160d] px-6 py-16 dark:border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(191,155,48,0.28),transparent_30%),linear-gradient(135deg,rgba(13,12,10,0.82),rgba(30,25,17,0.68),rgba(13,12,10,0.88))]" />
         <div className="relative mx-auto grid w-full max-w-7xl gap-10 lg:grid-cols-[1.06fr_0.94fr] lg:items-center">
@@ -407,25 +476,38 @@ export default function Privileges() {
                   <div className="mt-8 grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => handleCheckout(pkg, "MONTHLY")}
-                      disabled={Boolean(paymentLoading)}
+                      onClick={() => handleCheckout(pkg, isCurrent ? "MONTHLY" : "ANNUAL")}
+                      disabled={Boolean(paymentLoading) || cancelLoading}
                       className="rounded-full bg-[#1a160d] px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition-all hover:bg-[#2b2417] disabled:opacity-60 dark:bg-white dark:text-[#1a160d]"
                     >
-                      {paymentLoading === `${pkg.id}-MONTHLY`
+                      {paymentLoading === `${pkg.id}-${isCurrent ? "MONTHLY" : "ANNUAL"}`
                         ? "Processing..."
-                        : `${isCurrent ? "Renew" : "Pay"} ${formatPhp(pkg.monthlyPrice)}`}
+                        : isCurrent
+                          ? `Renew ${formatPhp(pkg.monthlyPrice)}`
+                          : `Pay ${formatPhp(pkg.annualPrice)}`}
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleCheckout(pkg, "ANNUAL")}
-                      disabled={Boolean(paymentLoading)}
-                      className="rounded-full border border-[#d8c79d] bg-[#f7f0df] px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-[#8f732d] transition-all hover:bg-[#efe3c3] disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-[#eadcbf] dark:hover:bg-white/10"
+                      onClick={() => (isCurrent ? setCancelModalOpen(true) : handleCheckout(pkg, "MONTHLY"))}
+                      disabled={Boolean(paymentLoading) || cancelLoading}
+                      className={`rounded-full border px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all disabled:opacity-60 ${
+                        isCurrent
+                          ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/15"
+                          : "border-[#d8c79d] bg-[#f7f0df] text-[#8f732d] hover:bg-[#efe3c3] dark:border-white/10 dark:bg-white/5 dark:text-[#eadcbf] dark:hover:bg-white/10"
+                      }`}
                     >
-                      {paymentLoading === `${pkg.id}-ANNUAL`
-                        ? "Processing..."
-                        : `${isCurrent ? "Renew" : "Pay"} ${formatPhp(pkg.annualPrice)}`}
+                      {isCurrent
+                        ? "Cancel Privilege Tier"
+                        : paymentLoading === `${pkg.id}-MONTHLY`
+                          ? "Processing..."
+                          : `Pay ${formatPhp(pkg.monthlyPrice)}`}
                     </button>
                   </div>
+                  {!isCurrent ? (
+                    <p className="mt-3 text-[11px] font-semibold text-[#7b694a] dark:text-[#d0c2a7]">
+                      Monthly: {formatPhp(pkg.monthlyPrice)} • Annual: {formatPhp(pkg.annualPrice)}
+                    </p>
+                  ) : null}
                 </motion.article>
               );
             })
@@ -491,6 +573,15 @@ export default function Privileges() {
               >
                 {customerId ? "Open Rewards Center" : "Sign In To Activate"}
               </button>
+              {privilegeActive ? (
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(true)}
+                  className="w-full rounded-full border border-red-200 px-6 py-3 text-[11px] font-black uppercase tracking-[0.22em] text-red-600 transition-all hover:bg-red-50 dark:border-red-500/20 dark:text-red-300 dark:hover:bg-red-500/10"
+                >
+                  Cancel Privilege Tier
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => navigate("/customer/bookings")}

@@ -57,7 +57,7 @@ const AiConfig = () => {
 
   const adminIdentity = useMemo(() => {
     const admin = parseStoredAdmin();
-    return admin?.name || admin?.email || 'SuperAdmin';
+    return admin?.name || admin?.email || 'Admin';
   }, []);
 
   const loadIntegrations = async ({ silent = false } = {}) => {
@@ -138,7 +138,7 @@ const AiConfig = () => {
       label: 'Disabled',
       value: summary.disabled,
       accent: 'text-red-500',
-      helper: 'Blocked by superadmin',
+      helper: 'Blocked by admin',
     },
     {
       label: 'Needs Setup',
@@ -172,7 +172,7 @@ const AiConfig = () => {
               AI & API <span className="text-[#c9a84c]">Configuration</span>
             </h1>
             <p className={`mt-1 text-[9px] font-bold uppercase tracking-[0.22em] ${theme.textSub}`}>
-              Superadmin kill switch for unstable or degraded external services
+              Admin kill switch for unstable or degraded external services
             </p>
           </div>
 
@@ -294,7 +294,7 @@ const AiConfig = () => {
 
                 {!integration.isEnabled ? (
                   <p className="text-[11px] font-bold text-red-500">
-                    {integration.disabledReason || 'Temporarily disabled by superadmin.'}
+                    {integration.disabledReason || 'Temporarily disabled by admin.'}
                   </p>
                 ) : null}
 

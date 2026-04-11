@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Building2, CheckSquare, Search, Download, Mail, Phone } from 'lucide-react';
+import { Building2, CheckSquare, Search, Download, Mail, Phone, Eye, BadgeCheck, X } from 'lucide-react';
 import Pagination, { usePagination } from '../../components/Pagination';
 
 export default function HotelOwners() {
@@ -9,6 +9,8 @@ export default function HotelOwners() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedOwner, setSelectedOwner] = useState(null);
+  const [actionLoading, setActionLoading] = useState('');
 
   const theme = {
     bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#f0f0f3]',
@@ -20,7 +22,8 @@ export default function HotelOwners() {
     shadow: isDarkMode ? 'shadow-2xl shadow-black/40' : 'shadow-[0_15px_40px_rgba(0,0,0,0.08)]',
   };
 
-  useEffect(() => {
+  const loadOwners = () => {
+    setLoading(true);
     fetch('/api/admin/owners')
       .then((r) => r.json())
       .then((d) => {
@@ -29,14 +32,46 @@ export default function HotelOwners() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadOwners();
   }, []);
 
   const filtered = owners.filter((o) =>
-    `${o.firstName} ${o.lastName} ${o.email} ${o.hotelName} ${o.hotelCode || ''}`
+    `${o.firstName} ${o.lastName} ${o.email} ${o.hotelName} ${o.hotelCode || ''} ${o.approvalStatus || ''}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
   const { paged, page, totalPages, setPage } = usePagination(filtered);
+
+  const approveOwner = async (ownerId) => {
+    setActionLoading(String(ownerId));
+    try {
+      const response = await fetch(`/api/admin/owners/${ownerId}/approval`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'APPROVED' }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to approve owner.');
+      loadOwners();
+      if (selectedOwner?.id === ownerId) {
+        setSelectedOwner((current) => current ? { ...current, approvalStatus: 'APPROVED' } : current);
+      }
+    } catch (error) {
+      window.alert(error.message || 'Unable to approve owner.');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const statusBadge = (status) => {
+    const normalized = String(status || 'APPROVED').toUpperCase();
+    if (normalized === 'APPROVED') return 'bg-emerald-100 text-emerald-700';
+    if (normalized === 'REJECTED') return 'bg-rose-100 text-rose-700';
+    return 'bg-amber-100 text-amber-700';
+  };
 
   return (
     <div className={`p-6 space-y-8 min-h-screen transition-all duration-500 ${theme.bg}`}>
@@ -57,9 +92,10 @@ export default function HotelOwners() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Total Partners', value: total, icon: <Building2 size={20} /> },
-          { label: 'Active Hotels', value: owners.filter((o) => o.hotelId).length, icon: <CheckSquare size={20} />, color: 'text-green-500' },
+          { label: 'Approved Owners', value: owners.filter((o) => o.approvalStatus === 'APPROVED').length, icon: <CheckSquare size={20} />, color: 'text-green-500' },
+          { label: 'Pending Review', value: owners.filter((o) => o.approvalStatus === 'PENDING').length, icon: <CheckSquare size={20} />, color: 'text-orange-500' },
           { label: 'Total Rooms', value: owners.reduce((s, o) => s + (o.totalRooms || 0), 0), icon: <Building2 size={20} />, color: 'text-[#c9a84c]' },
-          { label: 'No Hotel Yet', value: owners.filter((o) => !o.hotelId).length, icon: <Building2 size={20} />, color: 'text-orange-500' },
+          { label: 'No Hotel Yet', value: owners.filter((o) => !o.hotelId).length, icon: <Building2 size={20} />, color: 'text-slate-500' },
         ].map((kpi, i) => (
           <div key={i} className={`p-6 rounded-2xl border ${theme.border} ${theme.card} ${theme.shadow}`}>
             <div className={`p-2.5 rounded-xl ${isDarkMode ? 'bg-white/5' : 'bg-gray-50'} border ${theme.border} text-[#c9a84c] inline-block mb-4`}>{kpi.icon}</div>
@@ -96,7 +132,7 @@ export default function HotelOwners() {
             <table className="w-full text-left">
               <thead className={`${isDarkMode ? 'bg-white/[0.02]' : 'bg-gray-50'} border-b ${theme.border}`}>
                 <tr>
-                  {['Owner', 'Contact', 'Hotel', 'Hotel Code', 'Address', 'Rooms', 'Joined'].map((h) => (
+                  {['Owner', 'Contact', 'Hotel', 'Hotel Code', 'Status', 'Rooms', 'Actions'].map((h) => (
                     <th key={h} className={`px-6 py-4 text-[9px] font-black uppercase tracking-widest ${theme.textSub}`}>{h}</th>
                   ))}
                 </tr>
@@ -124,10 +160,23 @@ export default function HotelOwners() {
                     </td>
                     <td className="px-6 py-4 text-[11px] font-black text-[#c9a84c]">{o.hotelName}</td>
                     <td className={`px-6 py-4 text-[10px] font-black ${theme.textMain}`}>{o.hotelCode || 'No Code Yet'}</td>
-                    <td className={`px-6 py-4 text-[10px] ${theme.textSub}`}>{o.hotelAddress || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${statusBadge(o.approvalStatus)}`}>
+                        {o.approvalStatus || 'APPROVED'}
+                      </span>
+                    </td>
                     <td className={`px-6 py-4 text-[11px] font-black ${theme.textMain}`}>{o.totalRooms}</td>
-                    <td className={`px-6 py-4 text-[10px] font-bold ${theme.textSub} uppercase`}>
-                      {o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '-'}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setSelectedOwner(o)} className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] ${theme.border} ${theme.card} ${theme.textMain}`}>
+                          <Eye size={12} /> Review
+                        </button>
+                        {o.approvalStatus !== 'APPROVED' ? (
+                          <button type="button" onClick={() => approveOwner(o.id)} disabled={actionLoading === String(o.id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white disabled:opacity-60">
+                            <BadgeCheck size={12} /> {actionLoading === String(o.id) ? 'Approving...' : 'Approve'}
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -142,6 +191,90 @@ export default function HotelOwners() {
         )}
         <Pagination page={page} totalPages={totalPages} setPage={setPage} total={filtered.length} isDarkMode={isDarkMode} />
       </div>
+
+      {selectedOwner ? (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+          <div className={`w-full max-w-4xl rounded-3xl border ${theme.border} ${theme.card} ${theme.shadow} max-h-[88vh] overflow-y-auto`}>
+            <div className={`sticky top-0 flex items-center justify-between border-b px-6 py-5 ${theme.border} ${theme.card}`}>
+              <div>
+                <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${theme.textSub}`}>Owner Review</p>
+                <h3 className={`mt-2 text-2xl font-black ${theme.textMain}`}>{selectedOwner.firstName} {selectedOwner.lastName}</h3>
+              </div>
+              <button type="button" onClick={() => setSelectedOwner(null)} className={`rounded-full border p-2 ${theme.border} ${theme.textMain}`}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid gap-6 p-6 lg:grid-cols-[0.95fr_1.05fr]">
+              <div className="space-y-4">
+                <section className={`rounded-2xl border p-5 ${theme.border} ${theme.inputBg}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${theme.textSub}`}>Review Status</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${statusBadge(selectedOwner.approvalStatus)}`}>{selectedOwner.approvalStatus || 'APPROVED'}</span>
+                    <span className={`text-[11px] font-bold ${theme.textSub}`}>Joined {selectedOwner.createdAt ? new Date(selectedOwner.createdAt).toLocaleDateString() : '-'}</span>
+                  </div>
+                  {selectedOwner.reviewNotes ? <p className={`mt-3 text-sm ${theme.textSub}`}>{selectedOwner.reviewNotes}</p> : null}
+                  {selectedOwner.approvalStatus !== 'APPROVED' ? (
+                    <button type="button" onClick={() => approveOwner(selectedOwner.id)} disabled={actionLoading === String(selectedOwner.id)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-60">
+                      <BadgeCheck size={14} /> {actionLoading === String(selectedOwner.id) ? 'Approving...' : 'Approve Owner'}
+                    </button>
+                  ) : null}
+                </section>
+
+                <section className={`rounded-2xl border p-5 ${theme.border} ${theme.inputBg}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${theme.textSub}`}>Bank Details</p>
+                  <div className="mt-4 space-y-2 text-sm">
+                    <p className={theme.textMain}><span className={theme.textSub}>Bank:</span> {selectedOwner.bankName || '--'}</p>
+                    <p className={theme.textMain}><span className={theme.textSub}>Account Name:</span> {selectedOwner.bankAccountName || '--'}</p>
+                    <p className={theme.textMain}><span className={theme.textSub}>Account Number:</span> {selectedOwner.bankAccountNumber || '--'}</p>
+                  </div>
+                </section>
+
+                <section className={`rounded-2xl border p-5 ${theme.border} ${theme.inputBg}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${theme.textSub}`}>Uploaded Documents</p>
+                  <div className="mt-4 space-y-3">
+                    {[
+                      ['Business Permit', selectedOwner.businessPermitPath],
+                      ['BIR Certificate', selectedOwner.birCertificatePath],
+                      ['Fire Safety Certificate', selectedOwner.fireSafetyCertificatePath],
+                      ['Valid ID', selectedOwner.validIdPath],
+                    ].map(([label, href]) => (
+                      <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <span className="text-sm font-bold text-slate-700">{label}</span>
+                        {href ? <a href={href} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9b7a2a] underline">Open File</a> : <span className="text-xs text-slate-400">Missing</span>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-4">
+                <section className={`rounded-2xl border p-5 ${theme.border} ${theme.inputBg}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${theme.textSub}`}>Hotel Profile</p>
+                  {selectedOwner.hotelBuildingImage || selectedOwner.hotelLogo ? (
+                    <img src={selectedOwner.hotelBuildingImage || selectedOwner.hotelLogo} alt={selectedOwner.hotelName} className="mt-4 h-52 w-full rounded-2xl object-cover" />
+                  ) : null}
+                  <div className="mt-4 space-y-2 text-sm">
+                    <p className={theme.textMain}><span className={theme.textSub}>Hotel:</span> {selectedOwner.hotelName || '--'}</p>
+                    <p className={theme.textMain}><span className={theme.textSub}>Code:</span> {selectedOwner.hotelCode || '--'}</p>
+                    <p className={theme.textMain}><span className={theme.textSub}>Address:</span> {selectedOwner.hotelAddress || '--'}</p>
+                    <p className={theme.textMain}><span className={theme.textSub}>Description:</span> {selectedOwner.hotelDescription || '--'}</p>
+                  </div>
+                </section>
+
+                <section className={`rounded-2xl border p-5 ${theme.border} ${theme.inputBg}`}>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${theme.textSub}`}>Policies</p>
+                  <div className="mt-4 space-y-3 text-sm">
+                    <div><p className={`text-[10px] font-black uppercase tracking-[0.18em] ${theme.textSub}`}>Check-in</p><p className={`mt-1 ${theme.textMain}`}>{selectedOwner.checkInPolicy || '--'}</p></div>
+                    <div><p className={`text-[10px] font-black uppercase tracking-[0.18em] ${theme.textSub}`}>Check-out</p><p className={`mt-1 ${theme.textMain}`}>{selectedOwner.checkOutPolicy || '--'}</p></div>
+                    <div><p className={`text-[10px] font-black uppercase tracking-[0.18em] ${theme.textSub}`}>Cancellation</p><p className={`mt-1 ${theme.textMain}`}>{selectedOwner.cancellationPolicy || '--'}</p></div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

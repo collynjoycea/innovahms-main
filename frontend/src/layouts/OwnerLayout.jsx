@@ -51,6 +51,13 @@ const PLAN_FEATURES = {
 const OwnerLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ownerDarkMode') || 'false');
+    } catch {
+      return false;
+    }
+  });
   const [session, setSession] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('ownerSession') || '{}');
@@ -75,6 +82,15 @@ const OwnerLayout = () => {
       setSession(nextSession);
     }
   };
+
+  useEffect(() => {
+    localStorage.setItem('ownerDarkMode', JSON.stringify(isDarkMode));
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     const session = localStorage.getItem('ownerSession'); 
@@ -166,15 +182,16 @@ const OwnerLayout = () => {
     currentRouteFeature.feature !== 'subscription' &&
     !allowedFeatures.has(currentRouteFeature.feature)
   );
+  const toggleTheme = () => setIsDarkMode((current) => !current);
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <OwnerSidebar />
+    <div className={`flex h-screen transition-colors duration-300 ${isDarkMode ? 'bg-[#090b10] text-white' : 'bg-gray-50 text-slate-900'}`}>
+      <OwnerSidebar isDarkMode={isDarkMode} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <OwnerHeader />
+        <OwnerHeader isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
 
-        <main className="flex-1 overflow-y-auto bg-slate-50">
+        <main className={`flex-1 overflow-y-auto transition-colors duration-300 ${isDarkMode ? 'bg-[#0f1117]' : 'bg-slate-50'}`}>
           {showExpiryReminder && (
             <div className={`sticky top-0 z-30 border-b px-8 py-4 shadow-sm ${subscriptionDaysRemaining <= 2 ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -244,13 +261,13 @@ const OwnerLayout = () => {
 
           <div className="p-8" data-owner-locked={subscriptionLocked ? 'true' : 'false'}>
             {planLocked ? (
-              <div className="mx-auto max-w-3xl rounded-[32px] border border-amber-200 bg-white p-10 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.35)]">
+              <div className={`mx-auto max-w-3xl rounded-[32px] border p-10 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.35)] ${isDarkMode ? 'border-amber-500/20 bg-[#11151d]' : 'border-amber-200 bg-white'}`}>
                 <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-700">Plan Upgrade Required</p>
-                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900">
+                <h2 className={`mt-4 text-3xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                   {currentRouteFeature?.label} is not included in your current plan
                 </h2>
-                <p className="mt-4 text-sm leading-relaxed text-slate-600">
-                  Your active plan is <span className="font-black text-slate-900">{session?.subscriptionPlan || 'Unassigned'}</span>.
+                <p className={`mt-4 text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Your active plan is <span className={`font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{session?.subscriptionPlan || 'Unassigned'}</span>.
                   {' '}
                   Upgrade to <span className="font-black text-amber-700">{currentRouteFeature?.requiredPlan}</span> or higher to unlock this module.
                 </p>
@@ -265,14 +282,14 @@ const OwnerLayout = () => {
                   <button
                     type="button"
                     onClick={() => navigate('/owner')}
-                    className="rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-700"
+                    className={`rounded-2xl border px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] ${isDarkMode ? 'border-white/10 text-slate-200' : 'border-slate-200 text-slate-700'}`}
                   >
                     Back to Dashboard
                   </button>
                 </div>
               </div>
             ) : (
-              <Outlet />
+              <Outlet context={{ isDarkMode, toggleTheme }} />
             )}
           </div>
         </main>

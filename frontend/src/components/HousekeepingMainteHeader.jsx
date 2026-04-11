@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, User, LogOut, Moon, Sun, Hammer, ChevronDown, UserCircle, ClipboardList } from 'lucide-react';
+import { Search, User, LogOut, Moon, Sun, Hammer, ChevronDown, ClipboardList } from 'lucide-react';
 import ShiftClockWidget from './ShiftClockWidget';
 import useStaffSession from '../hooks/useStaffSession';
+import StaffNotificationBell from './StaffNotificationBell';
 
 const HousekeepingMainteHeader = ({ isDarkMode, toggleTheme }) => {
   const { firstName, lastName, role } = useStaffSession();
@@ -71,10 +72,7 @@ const HousekeepingMainteHeader = ({ isDarkMode, toggleTheme }) => {
           <button onClick={toggleTheme} className={`p-2.5 rounded-xl border transition-all hover:scale-105 active:scale-95 ${theme.border} ${theme.input}`}>
             {isDarkMode ? <Sun size={18} color={theme.gold} /> : <Moon size={18} color={theme.gold} />}
           </button>
-          <button className={`p-2.5 rounded-xl border relative transition-all hover:bg-[#b3903c]/5 ${theme.border} ${theme.input}`}>
-            <Bell size={18} color={theme.gold} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full border-2 border-black animate-pulse" />
-          </button>
+          <StaffNotificationBell isDarkMode={isDarkMode} />
           <div className={`h-8 w-[1px] mx-1 ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-200'}`} />
 
           <ShiftClockWidget isDarkMode={isDarkMode} />

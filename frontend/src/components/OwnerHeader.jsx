@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Building2, ChevronDown, CreditCard, LogOut, MapPin, X } from 'lucide-react';
+import { Bell, Building2, ChevronDown, CreditCard, LogOut, MapPin, Moon, Sun, X } from 'lucide-react';
 
 const emptyOwnerState = {
   id: null,
@@ -127,7 +127,7 @@ const formatTimeAgo = (dateString, nowValue = Date.now()) => {
   });
 };
 
-const OwnerHeader = () => {
+const OwnerHeader = ({ isDarkMode = false, toggleTheme }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -273,7 +273,7 @@ const OwnerHeader = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-black/5 bg-white/80 px-10 backdrop-blur-md">
+    <header className={`sticky top-0 z-40 flex h-20 items-center justify-between border-b px-10 backdrop-blur-md transition-colors duration-300 ${isDarkMode ? 'border-white/10 bg-[#0b0f16]/85' : 'border-black/5 bg-white/80'}`}>
       <div className="flex min-w-0 flex-1 items-center gap-4">
         <div className="h-10 w-1 shrink-0 rounded-full bg-gradient-to-b from-[#bf9b30] to-[#8e7223] opacity-80" />
 
@@ -285,7 +285,7 @@ const OwnerHeader = () => {
           </div>
 
           <h2 className="mt-0.5 truncate font-serif text-xl font-bold tracking-tight md:text-2xl" title={ownerInfo.hotelName}>
-            <span className="bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-clip-text text-transparent">
+            <span className={`bg-clip-text text-transparent ${isDarkMode ? 'bg-gradient-to-r from-white via-slate-300 to-white' : 'bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900'}`}>
               {ownerInfo.hotelName}
             </span>
           </h2>
@@ -293,11 +293,20 @@ const OwnerHeader = () => {
       </div>
 
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className={`rounded-2xl border px-3 py-3 transition-all ${isDarkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:text-[#f5d37e]' : 'border-black/5 bg-white text-slate-600 hover:text-[#bf9b30]'}`}
+          title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
         <div className="relative" ref={notificationRef}>
           <button
             type="button"
             onClick={handleNotificationToggle}
-            className="relative rounded-2xl border border-black/5 bg-white px-3 py-3 text-slate-600 shadow-sm transition-all hover:border-[#bf9b30]/30 hover:text-[#bf9b30]"
+            className={`relative rounded-2xl border px-3 py-3 shadow-sm transition-all ${isDarkMode ? 'border-white/10 bg-white/5 text-slate-300 hover:border-[#bf9b30]/30 hover:text-[#f5d37e]' : 'border-black/5 bg-white text-slate-600 hover:border-[#bf9b30]/30 hover:text-[#bf9b30]'}`}
             title="Owner notifications"
           >
             <Bell size={18} />
@@ -309,13 +318,13 @@ const OwnerHeader = () => {
           </button>
 
           {showNotifications ? (
-            <div className="absolute right-0 mt-3 w-[28rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-black/5 bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
-                <p className="text-sm font-bold text-slate-800">Notifications</p>
+            <div className={`absolute right-0 mt-3 w-[28rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border shadow-2xl ${isDarkMode ? 'border-white/10 bg-[#121824]' : 'border-black/5 bg-white'}`}>
+              <div className={`flex items-center justify-between border-b px-4 py-3 ${isDarkMode ? 'border-white/10' : 'border-black/5'}`}>
+                <p className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Notifications</p>
                 <button
                   type="button"
                   onClick={() => setShowNotifications(false)}
-                  className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100"
+                  className={`rounded-lg p-1 transition-colors ${isDarkMode ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                   <X size={16} />
                 </button>
@@ -324,8 +333,8 @@ const OwnerHeader = () => {
               <div className="max-h-96 overflow-y-auto">
                 {notifications.length === 0 ? (
                   <div className="px-4 py-8 text-center">
-                    <Bell size={30} className="mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-medium text-slate-500">No notifications yet</p>
+                    <Bell size={30} className={`mx-auto mb-2 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                    <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>No notifications yet</p>
                   </div>
                 ) : (
                   notifications.map((notification) => (
@@ -333,8 +342,10 @@ const OwnerHeader = () => {
                       key={notification.id}
                       type="button"
                       onClick={() => markAsRead(notification.id)}
-                      className={`w-full border-b border-black/5 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${
-                        notification.is_read ? 'bg-white' : 'bg-amber-50/60'
+                      className={`w-full border-b px-4 py-3 text-left transition-colors ${
+                        isDarkMode ? 'border-white/5 hover:bg-white/5' : 'border-black/5 hover:bg-slate-50'
+                      } ${
+                        notification.is_read ? (isDarkMode ? 'bg-[#121824]' : 'bg-white') : (isDarkMode ? 'bg-[#191405]' : 'bg-amber-50/60')
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -348,13 +359,13 @@ const OwnerHeader = () => {
                           }`}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold leading-snug text-slate-900 break-words">
+                          <p className={`text-sm font-bold leading-snug break-words ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                             {notification.title}
                           </p>
-                          <p className="mt-1 whitespace-normal break-words text-xs leading-relaxed text-slate-600">
+                          <p className={`mt-1 whitespace-normal break-words text-xs leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
                             {notification.message}
                           </p>
-                          <p className="mt-1 text-[11px] font-medium text-slate-400">
+                          <p className={`mt-1 text-[11px] font-medium ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
                             {formatTimeAgo(notification.created_at, clockTick)}
                           </p>
                         </div>
@@ -371,16 +382,16 @@ const OwnerHeader = () => {
           <button
             type="button"
             onClick={() => setShowMenu((prev) => !prev)}
-            className="flex items-center gap-3 border-l border-black/10 pl-6 transition-opacity hover:opacity-80"
+            className={`flex items-center gap-3 border-l pl-6 transition-opacity hover:opacity-80 ${isDarkMode ? 'border-white/10' : 'border-black/10'}`}
           >
             <div className="hidden text-right sm:block">
-              <p className="text-xs font-bold capitalize tracking-tight text-slate-800">{ownerInfo.fullName}</p>
+              <p className={`text-xs font-bold capitalize tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{ownerInfo.fullName}</p>
               <p className="text-[9px] font-bold uppercase tracking-widest text-[#bf9b30] opacity-80">
                 {ownerInfo.subscriptionActive ? 'Verified Owner' : 'Subscription Required'}
               </p>
             </div>
             <div className="h-10 w-10 rounded-full border border-[#bf9b30]/20 bg-gradient-to-tr from-[#bf9b30]/10 to-transparent p-0.5">
-              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white text-[#bf9b30] shadow-sm">
+              <div className={`flex h-full w-full items-center justify-center overflow-hidden rounded-full text-[#bf9b30] shadow-sm ${isDarkMode ? 'bg-[#11151d]' : 'bg-white'}`}>
                 {ownerInfo.profileImage ? (
                   <img src={ownerInfo.profileImage} alt={ownerInfo.fullName} className="h-full w-full object-cover" />
                 ) : (
@@ -390,13 +401,13 @@ const OwnerHeader = () => {
                 )}
               </div>
             </div>
-            <ChevronDown size={14} className={`text-black/40 transition-transform duration-200 ${showMenu ? 'rotate-180' : ''}`} />
+            <ChevronDown size={14} className={`transition-transform duration-200 ${isDarkMode ? 'text-white/40' : 'text-black/40'} ${showMenu ? 'rotate-180' : ''}`} />
           </button>
 
           {showMenu ? (
-            <div className="absolute right-0 z-50 mt-3 w-64 rounded-2xl border border-black/5 bg-white p-2 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <div className="mb-1 border-b border-black/5 px-3 py-2.5">
-                <p className="text-xs font-bold capitalize text-slate-800">{ownerInfo.fullName}</p>
+            <div className={`absolute right-0 z-50 mt-3 w-64 rounded-2xl border p-2 shadow-2xl animate-in fade-in zoom-in duration-200 ${isDarkMode ? 'border-white/10 bg-[#121824]' : 'border-black/5 bg-white'}`}>
+              <div className={`mb-1 border-b px-3 py-2.5 ${isDarkMode ? 'border-white/10' : 'border-black/5'}`}>
+                <p className={`text-xs font-bold capitalize ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{ownerInfo.fullName}</p>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#bf9b30]">{ownerInfo.hotelName}</p>
               </div>
 
@@ -406,7 +417,7 @@ const OwnerHeader = () => {
                   setShowMenu(false);
                   navigate('/owner/profile');
                 }}
-                className="w-full rounded-xl px-3 py-2.5 text-left text-xs text-slate-700 transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30]"
+                className={`w-full rounded-xl px-3 py-2.5 text-left text-xs transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}
               >
                 <span className="flex items-center gap-3">
                   <Building2 size={15} /> My Profile
@@ -419,7 +430,7 @@ const OwnerHeader = () => {
                   setShowMenu(false);
                   navigate('/owner/subscription');
                 }}
-                className="w-full rounded-xl px-3 py-2.5 text-left text-xs text-slate-700 transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30]"
+                className={`w-full rounded-xl px-3 py-2.5 text-left text-xs transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}
               >
                 <span className="flex items-center gap-3">
                   <CreditCard size={15} /> Manage Subscription
@@ -432,7 +443,7 @@ const OwnerHeader = () => {
                   setShowMenu(false);
                   navigate('/owner/rooms');
                 }}
-                className="w-full rounded-xl px-3 py-2.5 text-left text-xs text-slate-700 transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30]"
+                className={`w-full rounded-xl px-3 py-2.5 text-left text-xs transition-all hover:bg-[#bf9b30]/10 hover:text-[#bf9b30] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}
               >
                 <span className="flex items-center gap-3">
                   {ownerInfo.hasHotel ? <Building2 size={15} /> : <MapPin size={15} />}
@@ -440,7 +451,7 @@ const OwnerHeader = () => {
                 </span>
               </button>
 
-              <div className="mt-1 border-t border-black/5 pt-1">
+              <div className={`mt-1 border-t pt-1 ${isDarkMode ? 'border-white/10' : 'border-black/5'}`}>
                 <button
                   type="button"
                   onClick={handleLogout}

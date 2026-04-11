@@ -10,6 +10,7 @@ import {
   Phone,
   User,
 } from 'lucide-react';
+import { normalizeEmail, validateStaffSignup } from '../../utils/authValidation';
 
 const STAFF_ROLES = [
   'Hotel Manager',
@@ -25,6 +26,7 @@ const INITIAL_FORM = {
   email: '',
   contactNumber: '',
   password: '',
+  confirmPassword: '',
   role: '',
   hotelCode: '',
 };
@@ -46,6 +48,22 @@ export default function StaffSignUp() {
     event.preventDefault();
     setErrorMessage('');
     setIsSubmitting(true);
+    const normalizedForm = {
+      ...formData,
+      email: normalizeEmail(formData.email),
+      hotelCode: formData.hotelCode.trim().toUpperCase(),
+    };
+    const validationError = validateStaffSignup(normalizedForm);
+    if (validationError) {
+      setErrorMessage(validationError);
+      setIsSubmitting(false);
+      return;
+    }
+    if (normalizedForm.password !== normalizedForm.confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/staff/register', {
@@ -54,10 +72,7 @@ export default function StaffSignUp() {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          hotelCode: formData.hotelCode.trim().toUpperCase(),
-        }),
+        body: JSON.stringify(normalizedForm),
       });
 
       const result = await response.json();
@@ -211,17 +226,31 @@ export default function StaffSignUp() {
               />
             </label>
 
-            <label className="relative block">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
-              <input
-                required
-                type="password"
-                placeholder="Password"
-                value={formData.password}
-                className={INPUT_CLASS}
-                onChange={(event) => updateField('password', event.target.value)}
-              />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="relative block">
+                <Lock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+                <input
+                  required
+                  type="password"
+                  placeholder="Password"
+                  value={formData.password}
+                  className={INPUT_CLASS}
+                  onChange={(event) => updateField('password', event.target.value)}
+                />
+              </label>
+
+              <label className="relative block">
+                <Lock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+                <input
+                  required
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={formData.confirmPassword}
+                  className={INPUT_CLASS}
+                  onChange={(event) => updateField('confirmPassword', event.target.value)}
+                />
+              </label>
+            </div>
 
             {errorMessage ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">

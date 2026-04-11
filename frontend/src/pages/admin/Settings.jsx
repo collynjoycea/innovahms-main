@@ -123,7 +123,7 @@ const Settings = () => {
           <div className="space-y-0 divide-y divide-white/5">
             {renderToggle("Two-Factor Authentication (2FA)", "twoFactor")}
             {renderToggle("Session Timeout (30 min)", "sessionTimeout")}
-            {renderToggle("IP Whitelisting for SuperAdmin", "ipWhitelisting")}
+            {renderToggle("IP Whitelisting for Admin", "ipWhitelisting")}
             {renderToggle("Maintenance Mode", "maintenanceMode")}
           </div>
         </div>

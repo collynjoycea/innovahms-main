@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Facebook } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import FacebookLogin from "react-facebook-login/dist/facebook-login-render-props";
+import ForgotPasswordModal from "../components/ForgotPasswordModal";
+import { isValidEmail } from "../utils/authValidation";
 
 const getPostLoginRedirect = () => {
   const returnTo = sessionStorage.getItem("returnTo");
@@ -19,6 +21,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -31,12 +34,21 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    if (!password) {
+      setError("Password is required.");
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -151,9 +163,13 @@ export default function Login() {
                   <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">
                     Password
                   </label>
-                  <Link to="#" className="text-[9px] font-bold text-white/40 hover:text-[#bf9b30] transition-colors uppercase tracking-widest">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-[9px] font-bold text-white/40 hover:text-[#bf9b30] transition-colors uppercase tracking-widest"
+                  >
                     Forgot?
-                  </Link>
+                  </button>
                 </div>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
@@ -251,6 +267,13 @@ export default function Login() {
           background-size: cover;
         }
       `}</style>
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        userType="customer"
+        title="Customer Password Reset"
+        initialEmail={email}
+      />
     </div>
   );
 }

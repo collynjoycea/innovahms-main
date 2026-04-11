@@ -1,5 +1,4 @@
--- INNOVA HMS - Core Schema
--- Run this in the innovahmsdb database after setup.sql
+
 
 -- Core user tables
 CREATE TABLE IF NOT EXISTS admins (
@@ -27,6 +26,17 @@ CREATE TABLE IF NOT EXISTS owners (
     email VARCHAR(100) UNIQUE NOT NULL,
     contact_number VARCHAR(20) NOT NULL,
     password_hash TEXT NOT NULL,
+    business_permit_path TEXT,
+    bir_certificate_path TEXT,
+    fire_safety_certificate_path TEXT,
+    valid_id_path TEXT,
+    bank_name TEXT,
+    bank_account_name TEXT,
+    bank_account_number TEXT,
+    approval_status VARCHAR(20) DEFAULT 'PENDING',
+    review_notes TEXT,
+    reviewed_at TIMESTAMP,
+    approved_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -40,6 +50,11 @@ CREATE TABLE IF NOT EXISTS hotels (
     hotel_email VARCHAR(100),
     contact_number VARCHAR(20),
     hotel_logo TEXT,
+    hotel_building_image TEXT,
+    hotel_description TEXT,
+    check_in_policy TEXT,
+    check_out_policy TEXT,
+    cancellation_policy TEXT,
     total_rooms INTEGER DEFAULT 0,
     status VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Maintenance')),
     latitude DOUBLE PRECISION DEFAULT 0,
@@ -138,4 +153,3 @@ CREATE INDEX IF NOT EXISTS idx_reservations_hotel_id ON reservations(hotel_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_created_at ON reservations(created_at);
 CREATE INDEX IF NOT EXISTS idx_staff_hotel_id ON staff(hotel_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_hotel_id ON reviews(hotel_id);
-

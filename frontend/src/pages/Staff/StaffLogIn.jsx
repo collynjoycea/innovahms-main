@@ -5,12 +5,15 @@ import {
   Mail, Lock, Key, Eye, EyeOff, ArrowRight, 
   ShieldCheck, Globe, Briefcase, Quote, AlertCircle 
 } from "lucide-react";
+import ForgotPasswordModal from "../../components/ForgotPasswordModal";
+import { isValidEmail, isValidHotelCode, normalizeEmail } from "../../utils/authValidation";
 
 const StaffLogin = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [error, setError] = useState("");
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,11 +39,11 @@ const StaffLogin = () => {
 
   // --- LOGIC HANDLERS ---
   const handleVerifyCode = () => {
-    if (formData.hotelCode === "INNOVAHMS-1") {
+    if (isValidHotelCode(formData.hotelCode)) {
       setIsVerified(true);
       setError("");
     } else {
-      setError("Invalid Hotel Access Code.");
+      setError("Hotel code must follow the INNOVAHMS-123 format.");
       setIsVerified(false);
     }
   };
@@ -53,14 +56,22 @@ const StaffLogin = () => {
       setError("Please verify your Hotel Owner Code first.");
       return;
     }
+    if (!isValidEmail(formData.email)) {
+      setError("Enter a valid staff email address.");
+      return;
+    }
+    if (!formData.password) {
+      setError("Password is required.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/staff/login", {
+      const response = await fetch("/api/staff/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.email,
+          email: normalizeEmail(formData.email),
           password: formData.password,
           hotelCode: formData.hotelCode
         }),
@@ -89,7 +100,7 @@ const StaffLogin = () => {
           navigate("/staff/dashboard");
         }
       } else {
-        setError(result.message || "Login failed");
+        setError(result.error || "Login failed");
       }
     } catch (error) {
       setError("Server connection error. Ensure Flask is running.");
@@ -237,7 +248,14 @@ const StaffLogin = () => {
               </button>
             </form>
 
-            <div className="mt-6 flex flex-col gap-2">
+              <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="flex items-center justify-center gap-2 text-[8px] font-bold uppercase tracking-[0.3em] text-slate-500 transition-colors hover:text-[#bf9b30]"
+              >
+                <Key size={12} /> Forgot Password
+              </button>
               <button onClick={() => navigate('/')} className="flex items-center justify-center gap-2 text-[8px] font-bold text-slate-400 uppercase tracking-[0.3em] hover:text-[#bf9b30] transition-colors">
                 <Globe size={12} /> Public Terminal
               </button>
@@ -248,6 +266,14 @@ const StaffLogin = () => {
           </div>
         </div>
       </motion.div>
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        userType="staff"
+        title="Staff Password Reset"
+        initialEmail={formData.email}
+        initialHotelCode={formData.hotelCode}
+      />
     </div>
   );
 };

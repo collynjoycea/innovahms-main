@@ -4,6 +4,7 @@ import { Mail, Lock, Phone, Eye, EyeOff, UserPlus } from "lucide-react";
 import { GoogleLogin } from '@react-oauth/google';
 import FacebookLogin from 'react-facebook-login';
 import { Facebook } from "lucide-react"; 
+import { normalizeEmail, validateCustomerSignup } from "../utils/authValidation";
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -17,6 +18,7 @@ export default function SignUp() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -26,18 +28,22 @@ export default function SignUp() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match!");
+    const normalizedForm = {
+      ...formData,
+      email: normalizeEmail(formData.email),
+    };
+    const validationError = validateCustomerSignup(normalizedForm);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      // Step 1: Create the account
       const signupResponse = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(normalizedForm),
       });
 
       const signupResult = await signupResponse.json();
@@ -47,30 +53,29 @@ export default function SignUp() {
         return;
       }
 
-      // Step 2: Auto-login with the same credentials
       const loginResponse = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
+          email: normalizedForm.email,
+          password: normalizedForm.password,
         }),
       });
 
       const loginResult = await loginResponse.json();
 
       if (loginResponse.ok) {
-        // Step 3: Save user and redirect to homepage
         localStorage.setItem("user", JSON.stringify(loginResult.user));
         localStorage.setItem("customerSession", JSON.stringify(loginResult.user));
         window.dispatchEvent(new Event("userUpdated"));
         navigate("/");
       } else {
-        // Account was created but auto-login failed - fall back to login page
         navigate("/login");
       }
     } catch (err) {
       setError("Cannot connect to the server. Is Flask running?");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -252,9 +257,10 @@ export default function SignUp() {
 
             <button
               type="submit"
-              className="group w-full flex items-center justify-center gap-2 rounded-xl bg-[#bf9b30] py-3 text-sm font-black text-white shadow-xl transition-all hover:bg-[#a6882d] hover:shadow-yellow-700/20 active:scale-[0.98] mt-4"
+              disabled={isSubmitting}
+              className="group mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#bf9b30] py-3 text-sm font-black text-white shadow-xl transition-all hover:bg-[#a6882d] hover:shadow-yellow-700/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Create Account
+              {isSubmitting ? "Creating Account..." : "Create Account"}
               <UserPlus size={16} className="transition-transform group-hover:scale-110" />
             </button>
           </form>

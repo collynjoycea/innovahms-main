@@ -1,360 +1,352 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Package, AlertCircle, TrendingDown, Truck, Filter, Calendar, Cpu, Play, FileText, X, ChevronRight, BarChart3, History, Download, RefreshCcw, ArrowLeft, Info } from 'lucide-react';
-import axios from 'axios';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import React, { useEffect, useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { AlertTriangle, Boxes, BrainCircuit, ClipboardList, RefreshCcw, TrendingUp, Truck } from "lucide-react";
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(Number(value || 0));
+
+const formatDate = (value) => {
+  if (!value) return "No schedule";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const getOwnerSession = () => {
+  try {
+    return JSON.parse(localStorage.getItem("ownerSession") || "{}");
+  } catch {
+    return {};
+  }
+};
 
 const Inventory = () => {
-    // Core Data States
-    const [inventoryData, setInventoryData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [summary, setSummary] = useState({ totalSkus: 0, lowStock: 0, consumRate: 0, pending: 0 });
-    
-    // UI Navigation State (The "Switch" for Table Views)
-    // Values: 'MAIN', 'SKUS', 'LOW_STOCK', 'CONSUMPTION', 'PENDING'
-    const [activeView, setActiveView] = useState('MAIN');
+  const { isDarkMode } = useOutletContext() || { isDarkMode: false };
+  const ownerSession = useMemo(() => getOwnerSession(), []);
+  const ownerId = ownerSession?.id || 0;
+  const hotelId = ownerSession?.hotelId || ownerSession?.hotel_id || 0;
 
-    // Filter States
-    const [filterCategory, setFilterCategory] = useState('All Items');
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(true);
+  const [inventoryData, setInventoryData] = useState([]);
+  const [overview, setOverview] = useState({ totalSkus: 0, lowStock: 0, consumRate: 0, pending: 0 });
+  const [dashboard, setDashboard] = useState({ stats: {}, recentMovements: [] });
+  const [lowStockItems, setLowStockItems] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [forecastInput, setForecastInput] = useState({ event: "Weekend peak", occupancy: "92" });
+  const [forecastResult, setForecastResult] = useState(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
 
-    // UI & Modal States
-    const [isSimulating, setIsSimulating] = useState(false);
-    const [simulationResult, setSimulationResult] = useState(null); 
-    const [showReportsModal, setShowReportsModal] = useState(false);
+  const refreshInventory = async () => {
+    if (!hotelId && !ownerId) {
+      setLoading(false);
+      return;
+    }
 
-    const getOwnerId = () => {
-        const ownerData = JSON.parse(localStorage.getItem('ownerSession'));
-        return ownerData?.id || 1;
-    };
+    setLoading(true);
+    try {
+      const [overviewRes, dashboardRes, lowStockRes, poRes] = await Promise.all([
+        fetch(`/api/inventory?owner_id=${ownerId}`),
+        fetch(`/api/inventory/dashboard?hotel_id=${hotelId}`),
+        fetch(`/api/inventory/low-stock?hotel_id=${hotelId}`),
+        fetch(`/api/inventory/purchase-orders?hotel_id=${hotelId}`),
+      ]);
 
-    const fetchInventory = async () => {
-        try {
-            const ownerId = getOwnerId();
-            const res = await axios.get(`/api/inventory`, {
-                params: { owner_id: ownerId, category: filterCategory, date: selectedDate }
-            });
-            setInventoryData(res.data.items || []);
-            setSummary(res.data.summary || { totalSkus: 0, lowStock: 0, consumRate: 0, pending: 0 });
-            setLoading(false);
-        } catch (err) {
-            console.error("Error fetching inventory", err);
-            setLoading(false);
-        }
-    };
+      const overviewData = await overviewRes.json().catch(() => ({}));
+      const dashboardData = await dashboardRes.json().catch(() => ({}));
+      const lowStockData = await lowStockRes.json().catch(() => ({}));
+      const poData = await poRes.json().catch(() => ({}));
 
-    useEffect(() => {
-        fetchInventory();
-        const interval = setInterval(fetchInventory, 15000); 
-        return () => clearInterval(interval);
-    }, [filterCategory, selectedDate]);
+      setInventoryData(Array.isArray(overviewData.items) ? overviewData.items : []);
+      setOverview(overviewData.summary || { totalSkus: 0, lowStock: 0, consumRate: 0, pending: 0 });
+      setDashboard(dashboardData || { stats: {}, recentMovements: [] });
+      setLowStockItems(Array.isArray(lowStockData.items) ? lowStockData.items : []);
+      setPurchaseOrders(Array.isArray(poData.orders) ? poData.orders : []);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const healthTrends = useMemo(() => {
-        const categories = ['Consumables', 'Linens', 'Maintenance'];
-        return categories.map(cat => {
-            const items = inventoryData.filter(item => item.category === cat);
-            if (items.length === 0) return { label: cat, val: 0, color: 'bg-slate-300' };
-            const avg = items.reduce((acc, curr) => acc + (curr.stock_level / curr.max_stock), 0) / items.length;
-            const percentage = Math.round(avg * 100);
-            let color = 'bg-green-500';
-            if (percentage < 30) color = 'bg-red-500';
-            else if (percentage < 60) color = 'bg-orange-400';
-            return { label: cat, val: percentage, color };
-        });
-    }, [inventoryData]);
+  useEffect(() => {
+    refreshInventory();
+    const timer = window.setInterval(refreshInventory, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-    const runForecastModel = async () => {
-        setIsSimulating(true);
-        setSimulationResult(null);
-        try {
-            await new Promise(resolve => setTimeout(resolve, 2500));
-            const res = await axios.post(`/api/inventory/forecast`, {
-                event: "Grand Gala 2024",
-                occupancy: 98,
-                owner_id: getOwnerId(),
-            });
-            if (res.data.success) {
-                setSimulationResult({
-                    success: true,
-                    title: res.data.title,
-                    message: res.data.message,
-                    recommendations: res.data.recommendations 
-                });
-            }
-        } catch (err) {
-            setSimulationResult({ success: false, title: "Simulation Failed", message: "AI Engine Offline." });
-        } finally { setIsSimulating(false); }
-    };
+  const runForecast = async () => {
+    setForecastLoading(true);
+    setForecastResult(null);
+    try {
+      const response = await fetch("/api/inventory/forecast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner_id: ownerId,
+          event: forecastInput.event,
+          occupancy: Number(forecastInput.occupancy || 0),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to run forecast.");
+      }
+      setForecastResult(data);
+    } catch (error) {
+      setForecastResult({ success: false, message: error.message || "Unable to run forecast." });
+    } finally {
+      setForecastLoading(false);
+    }
+  };
 
-    // --- RENDER TABLE COMPONENT BASED ON VIEW ---
-    const RenderDynamicTable = () => {
-        switch (activeView) {
-            case 'SKUS':
-                return (
-                    <table className="w-full text-left">
-                        <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                            <tr>
-                                <th className="p-8">SKU ID</th>
-                                <th>Item Name</th>
-                                <th>Description</th>
-                                <th>Category</th>
-                                <th>Unit</th>
-                                <th className="p-8 text-right">Supplier</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 font-bold text-sm">
-                            {inventoryData.map(item => (
-                                <tr key={item.id} className="hover:bg-slate-50">
-                                    <td className="p-8 text-[#bf9b30] font-black">{item.sku_id || `SKU-${item.id}`}</td>
-                                    <td>
-                                        <div className="font-black text-slate-800">{item.item_name}</div>
-                                        <div className="text-[10px] text-slate-400 uppercase">{item.description || 'Standard Supply Item'}</div>
-                                    </td>
-                                    <td><span className="bg-slate-100 px-3 py-1 rounded-lg text-[10px] uppercase">{item.category}</span></td>
-                                    <td>{item.unit || 'pcs'}</td>
-                                    <td className="p-8 text-right text-slate-500">{item.supplier || 'Global Luxe Supplies'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
+  const metricCards = [
+    { label: "Tracked SKUs", value: overview.totalSkus, icon: Boxes },
+    { label: "Low Stock", value: overview.lowStock, icon: AlertTriangle },
+    { label: "Items Out Today", value: dashboard?.stats?.itemsOutToday || 0, icon: TrendingUp },
+    { label: "Pending POs", value: dashboard?.stats?.pendingPos || 0, icon: Truck },
+  ];
 
-            case 'LOW_STOCK':
-                return (
-                    <table className="w-full text-left">
-                        <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                            <tr>
-                                <th className="p-8">Item Name</th>
-                                <th>Current Stock</th>
-                                <th>Reorder Level</th>
-                                <th>Status Alert</th>
-                                <th className="p-8 text-right">Suggested Order</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 font-bold text-sm">
-                            {inventoryData.filter(i => i.stock_level <= (i.reorder_point || 20)).map(item => (
-                                <tr key={item.id} className="hover:bg-red-50/30">
-                                    <td className="p-8 font-black text-slate-800">{item.item_name}</td>
-                                    <td className="text-red-600 font-black">{item.stock_level} units</td>
-                                    <td className="text-slate-400">{item.reorder_point || 20}</td>
-                                    <td>
-                                        <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black ${item.stock_level < 10 ? 'bg-red-500 text-white' : 'bg-orange-400 text-white'}`}>
-                                            {item.stock_level < 10 ? 'CRITICAL' : 'WARNING'}
-                                        </span>
-                                    </td>
-                                    <td className="p-8 text-right font-black text-[#bf9b30]">+{item.max_stock - item.stock_level} units</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
+  return (
+    <div className={`min-h-screen transition-colors duration-300 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+      <div className="mx-auto max-w-7xl space-y-8">
+        <section className={`overflow-hidden rounded-[32px] border p-8 ${isDarkMode ? "border-white/10 bg-[radial-gradient(circle_at_top_left,#1d1528_0%,#11151d_55%,#0c1018_100%)]" : "border-[#eadfc8] bg-[radial-gradient(circle_at_top_left,#fffaf0_0%,#ffffff_60%,#f8f1e1_100%)]"}`}>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#bf9b30]">Inventory Control</p>
+              <h1 className="mt-3 text-4xl font-black tracking-tight">Live Stock Intelligence</h1>
+              <p className={`mt-3 max-w-2xl text-sm leading-relaxed ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                Tinanggal ko na yung filler simulation rows at placeholder hotel copy. This page now uses live inventory, dashboard, low-stock, purchase-order, and forecast endpoints.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={refreshInventory}
+              className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] ${isDarkMode ? "bg-white/5 text-slate-100 hover:bg-white/10" : "bg-slate-900 text-white hover:bg-slate-800"}`}
+            >
+              <RefreshCcw size={15} /> Refresh
+            </button>
+          </div>
+        </section>
 
-            case 'CONSUMPTION':
-                return (
-                    <table className="w-full text-left">
-                        <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                            <tr>
-                                <th className="p-8">Item Name</th>
-                                <th>Avg Weekly Usage</th>
-                                <th>Occupancy Correlation</th>
-                                <th>Wastage (%)</th>
-                                <th className="p-8 text-right">Forecasted Depletion</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 font-bold text-sm">
-                            {inventoryData.map(item => (
-                                <tr key={item.id} className="hover:bg-slate-50">
-                                    <td className="p-8 font-black text-slate-800">{item.item_name}</td>
-                                    <td>{Math.floor(Math.random() * 50) + 10} units/wk</td>
-                                    <td className="text-[10px] font-black">
-                                        <span className="text-green-600">↑ High Demand</span> (90% Occ.)
-                                    </td>
-                                    <td className="text-slate-400">{(Math.random() * 2).toFixed(1)}%</td>
-                                    <td className="p-8 text-right font-black text-orange-500">March 25, 2026</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map(({ label, value, icon: Icon }) => (
+            <article key={label} className={`rounded-[28px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-center justify-between">
+                <div className="rounded-2xl bg-[#bf9b30]/12 p-3 text-[#bf9b30]">
+                  <Icon size={20} />
+                </div>
+                <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{label}</p>
+              </div>
+              <p className="mt-5 text-3xl font-black tracking-tight">{value}</p>
+            </article>
+          ))}
+        </section>
 
-            case 'PENDING':
-                return (
-                    <table className="w-full text-left">
-                        <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                            <tr>
-                                <th className="p-8">PO Number</th>
-                                <th>Supplier</th>
-                                <th>Expected Delivery</th>
-                                <th>Order Qty</th>
-                                <th>Status</th>
-                                <th className="p-8 text-right">Partial Logs</th>
-                            </tr>
-                        </thead>
-                        
-                    </table>
-                );
+        <section className="grid gap-8 xl:grid-cols-[1.15fr,0.85fr]">
+          <div className={`rounded-[32px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Inventory Ledger</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight">Current item status</h2>
+              </div>
+              <p className={`text-xs font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Consumption rate: {overview.consumRate}%</p>
+            </div>
 
-            default: // MAIN VIEW
-                return (
-                    <table className="w-full text-left">
-                        <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                            <tr>
-                                <th className="p-8">Inventory Item</th>
-                                <th>Category</th>
-                                <th>Availability</th>
-                                <th>Status</th>
-                                <th className="p-8 text-right">Last Audit</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {inventoryData.map((item) => (
-                                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                                    <td className="p-8 font-black text-slate-800 flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-[#bf9b30]/10 rounded-xl flex items-center justify-center text-[#bf9b30]"><Package size={18}/></div>
-                                        {item.item_name}
-                                    </td>
-                                    <td><span className="bg-slate-50 px-3 py-1 rounded-lg text-[10px] font-black uppercase">{item.category}</span></td>
-                                    <td>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-32 h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5">
-                                                <div className="h-full bg-[#bf9b30] rounded-full" style={{ width: `${(item.stock_level/item.max_stock)*100}%` }}></div>
-                                            </div>
-                                            <span className="text-xs font-black">{item.stock_level}/{item.max_stock}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span className={`text-[10px] font-black px-4 py-1.5 rounded-xl ${item.status === 'OPTIMAL' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>
-                                            {item.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-8 text-slate-400 text-xs font-black text-right">{item.last_restock}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-        }
-    };
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-black/5">
+              {loading ? (
+                <div className={`px-6 py-14 text-center text-sm ${isDarkMode ? "bg-[#0d1118] text-slate-400" : "bg-slate-50 text-slate-500"}`}>Loading inventory records...</div>
+              ) : inventoryData.length === 0 ? (
+                <div className={`px-6 py-14 text-center text-sm ${isDarkMode ? "bg-[#0d1118] text-slate-400" : "bg-slate-50 text-slate-500"}`}>No inventory items found for this hotel.</div>
+              ) : (
+                <div className={isDarkMode ? "bg-[#0d1118]" : "bg-white"}>
+                  {inventoryData.slice(0, 8).map((item) => {
+                    const ratio = Math.max(0, Math.min(100, Math.round((Number(item.stock_level || 0) / Math.max(Number(item.max_stock || 1), 1)) * 100)));
+                    return (
+                      <div key={item.id} className={`grid gap-4 border-b px-6 py-5 lg:grid-cols-[1.1fr,0.65fr,1fr,0.7fr] ${isDarkMode ? "border-white/5" : "border-slate-100"}`}>
+                        <div>
+                          <p className="text-sm font-black uppercase tracking-[0.14em]">{item.item_name}</p>
+                          <p className={`mt-1 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{item.category} • {item.supplier || "No supplier"}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>SKU</p>
+                          <p className="mt-2 text-sm font-semibold">{item.sku_id}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Stock Level</p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <div className={`h-2 w-full rounded-full ${isDarkMode ? "bg-white/10" : "bg-slate-100"}`}>
+                              <div className={`h-full rounded-full ${ratio <= 30 ? "bg-rose-500" : ratio <= 60 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${ratio}%` }} />
+                            </div>
+                            <span className="text-xs font-black">{item.stock_level}/{item.max_stock}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Status</p>
+                          <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                            item.status === "LOW"
+                              ? isDarkMode ? "bg-rose-500/15 text-rose-300" : "bg-rose-50 text-rose-700"
+                              : isDarkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
 
-    if (loading) return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-white font-sans">
-            <div className="w-12 h-12 border-4 border-[#bf9b30]/20 border-t-[#bf9b30] rounded-full animate-spin mb-4"></div>
-            <p className="text-[#bf9b30] font-bold animate-pulse tracking-widest text-xs uppercase text-center px-4">Establishing Secure Connection to HMS Inventory...</p>
-        </div>
-    );
-
-    return (
-        <div className="min-h-screen bg-white p-8 text-slate-800 font-sans relative">
-            
-            {/* Header & Controls */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+          <div className="space-y-8">
+            <section className={`rounded-[32px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-[#bf9b30]/12 p-3 text-[#bf9b30]">
+                  <BrainCircuit size={20} />
+                </div>
                 <div>
-                    <h1 className="text-4xl font-black text-[#bf9b30] tracking-tight">Inventory Overview</h1>
-                    <p className="text-slate-400 font-medium mt-1">
-                        {activeView === 'MAIN' ? 'Real-time status of Grand Royale Hotel supplies' : `Viewing: ${activeView.replace('_', ' ')} Details`}
-                    </p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">AI Forecast</p>
+                  <h2 className="text-xl font-black tracking-tight">Scenario planner</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                    {activeView !== 'MAIN' && (
-                        <button 
-                            onClick={() => setActiveView('MAIN')}
-                            className="flex items-center gap-2 text-xs font-black text-[#bf9b30] bg-[#bf9b30]/10 px-4 py-2.5 rounded-2xl hover:bg-[#bf9b30] hover:text-white transition-all"
-                        >
-                            <ArrowLeft size={14}/> BACK TO DASHBOARD
-                        </button>
-                    )}
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white border-2 border-slate-100 px-4 py-2.5 rounded-2xl text-sm font-bold outline-none focus:border-[#bf9b30]"/>
-                </div>
-            </div>
+              </div>
 
-            {/* --- STAT CARDS (Clickable) --- */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-                <div onClick={() => setActiveView('SKUS')} className={`cursor-pointer group border-2 p-7 rounded-[35px] transition-all ${activeView === 'SKUS' ? 'border-[#bf9b30] bg-[#bf9b30]/5 shadow-xl ring-4 ring-[#bf9b30]/5' : 'border-slate-50 bg-white hover:border-[#bf9b30]/30 shadow-sm'}`}>
-                    <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Package/></div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total SKUs</p>
-                    <h2 className="text-3xl font-black text-slate-900">{summary.totalSkus}</h2>
-                </div>
+              <div className="mt-6 space-y-4">
+                <input
+                  type="text"
+                  value={forecastInput.event}
+                  onChange={(event) => setForecastInput((current) => ({ ...current, event: event.target.value }))}
+                  className={`w-full rounded-2xl border px-4 py-3 text-sm font-semibold outline-none ${isDarkMode ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50"}`}
+                  placeholder="Event or demand scenario"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={forecastInput.occupancy}
+                  onChange={(event) => setForecastInput((current) => ({ ...current, occupancy: event.target.value }))}
+                  className={`w-full rounded-2xl border px-4 py-3 text-sm font-semibold outline-none ${isDarkMode ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50"}`}
+                  placeholder="Projected occupancy %"
+                />
+                <button
+                  type="button"
+                  onClick={runForecast}
+                  disabled={forecastLoading}
+                  className="w-full rounded-2xl bg-[#bf9b30] px-4 py-3 text-xs font-black uppercase tracking-[0.24em] text-[#0f1117] transition hover:brightness-110 disabled:opacity-60"
+                >
+                  {forecastLoading ? "Running Forecast..." : "Run Forecast"}
+                </button>
+              </div>
 
-                <div onClick={() => setActiveView('LOW_STOCK')} className={`cursor-pointer group border-2 p-7 rounded-[35px] transition-all ${activeView === 'LOW_STOCK' ? 'border-red-500 bg-red-50 shadow-xl' : 'border-slate-50 bg-white hover:border-red-200 shadow-sm'}`}>
-                    <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><AlertCircle/></div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Low Stock Items</p>
-                    <h2 className="text-3xl font-black text-slate-900">{summary.lowStock}</h2>
-                </div>
-
-                <div onClick={() => setActiveView('CONSUMPTION')} className={`cursor-pointer group border-2 p-7 rounded-[35px] transition-all ${activeView === 'CONSUMPTION' ? 'border-[#bf9b30] bg-[#bf9b30]/5 shadow-xl' : 'border-slate-50 bg-white hover:border-[#bf9b30]/30 shadow-sm'}`}>
-                    <div className="w-12 h-12 bg-[#bf9b30]/10 text-[#bf9b30] rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><TrendingDown/></div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Consum. Rate</p>
-                    <h2 className="text-3xl font-black text-slate-900">{summary.consumRate}%</h2>
-                </div>
-
-                <div onClick={() => setActiveView('PENDING')} className={`cursor-pointer group border-2 p-7 rounded-[35px] transition-all ${activeView === 'PENDING' ? 'border-green-500 bg-green-50 shadow-xl' : 'border-slate-50 bg-white hover:border-green-200 shadow-sm'}`}>
-                    <div className="w-12 h-12 bg-green-50 text-green-500 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Truck/></div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Pending Delivery</p>
-                    <h2 className="text-3xl font-black text-slate-900">{summary.pending}</h2>
-                </div>
-            </div>
-
-            {/* --- AI & Trends Section --- */}
-            {activeView === 'MAIN' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-                    <div className="lg:col-span-2 bg-[#bf9b30]/5 border-2 border-[#bf9b30]/10 p-10 rounded-[45px] relative overflow-hidden">
-                        <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="bg-[#bf9b30] p-2.5 rounded-xl text-white"><Cpu size={24}/></div>
-                                <h3 className="text-2xl font-black text-slate-900">AI Assist Simulation Engine</h3>
-                            </div>
-                            <p className="text-slate-500 text-sm mb-10 max-w-md leading-relaxed">Predict future supply shortages based on upcoming high-occupancy events.</p>
-                            <div className="flex gap-4">
-                                <button onClick={runForecastModel} disabled={isSimulating} className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-sm transition-all ${isSimulating ? 'bg-slate-300' : 'bg-[#bf9b30] text-white hover:bg-black'}`}>
-                                    <Play size={18} fill="currentColor"/> {isSimulating ? 'PROCESSING...' : 'RUN FORECAST MODEL'}
-                                </button>
-                                <button onClick={() => setShowReportsModal(true)} className="bg-white border-2 border-slate-100 px-8 py-4 rounded-2xl font-black text-sm text-slate-700 hover:bg-slate-50">SCENARIO REPORTS</button>
-                            </div>
+              {forecastResult ? (
+                <div className={`mt-5 rounded-[24px] border p-5 ${isDarkMode ? "border-white/10 bg-[#0d1118]" : "border-slate-200 bg-slate-50"}`}>
+                  <p className="text-sm font-bold">{forecastResult.title || "Forecast result"}</p>
+                  <p className={`mt-2 text-sm leading-relaxed ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>{forecastResult.message}</p>
+                  {Array.isArray(forecastResult.recommendations) ? (
+                    <div className="mt-4 space-y-3">
+                      {forecastResult.recommendations.map((item) => (
+                        <div key={item.item} className={`rounded-2xl px-4 py-3 ${isDarkMode ? "bg-white/5" : "bg-white"}`}>
+                          <p className="text-sm font-black">{item.item}</p>
+                          <p className={`mt-1 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Increase by {item.recommendedIncreasePercent}% • {item.reason}</p>
                         </div>
+                      ))}
                     </div>
-                    
-                    <div className="bg-white border-2 border-slate-50 p-10 rounded-[45px] shadow-sm">
-                        <h3 className="text-lg font-black text-slate-900 mb-8">Health Trends</h3>
-                        <div className="space-y-8">
-                            {healthTrends.map((item, i) => (
-                                <div key={i}>
-                                    <div className="flex justify-between text-[11px] font-black mb-3 uppercase tracking-widest text-slate-400">
-                                        <span>{item.label}</span><span>{item.val}%</span>
-                                    </div>
-                                    <div className="w-full h-3 bg-slate-50 rounded-full p-0.5 overflow-hidden border border-slate-100">
-                                        <div className={`h-full ${item.color} rounded-full transition-all duration-1000`} style={{ width: `${item.val}%` }}></div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                  ) : null}
                 </div>
-            )}
+              ) : null}
+            </section>
 
-            {/* --- DYNAMIC DATA TABLE --- */}
-            <div className="bg-white border-2 border-slate-50 rounded-[45px] overflow-hidden shadow-sm">
-                <div className="p-10 border-b border-slate-50 bg-slate-50/20 flex justify-between items-center">
+            <section className={`rounded-[32px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-[#bf9b30]/12 p-3 text-[#bf9b30]">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Low Stock</p>
+                  <h2 className="text-xl font-black tracking-tight">Reorder priorities</h2>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {lowStockItems.slice(0, 5).map((item) => (
+                  <div key={item.id} className={`rounded-2xl border px-4 py-3 ${isDarkMode ? "border-white/10 bg-[#0d1118]" : "border-slate-100 bg-slate-50"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black">{item.name}</p>
+                        <p className={`mt-1 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{item.category} • {item.supplier || "No supplier"}</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${item.severity === "CRITICAL" ? "bg-rose-500/15 text-rose-300" : "bg-amber-500/15 text-amber-300"}`}>
+                        {item.severity}
+                      </span>
+                    </div>
+                    <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>Stock: {item.stockLevel} / {item.maxStock} • Reorder point: {item.reorderPoint}</p>
+                  </div>
+                ))}
+                {!lowStockItems.length ? (
+                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>No low-stock alerts right now.</p>
+                ) : null}
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section className="grid gap-8 xl:grid-cols-2">
+          <div className={`rounded-[32px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-[#bf9b30]/12 p-3 text-[#bf9b30]">
+                <ClipboardList size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Purchase Orders</p>
+                <h2 className="text-xl font-black tracking-tight">Supplier pipeline</h2>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {purchaseOrders.slice(0, 5).map((order) => (
+                <div key={order.id} className={`rounded-2xl border px-4 py-3 ${isDarkMode ? "border-white/10 bg-[#0d1118]" : "border-slate-100 bg-slate-50"}`}>
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                        <h3 className="text-2xl font-black text-slate-900">
-                            {activeView === 'MAIN' ? 'Real-Time Stock Monitoring' : activeView.replace('_', ' ')}
-                        </h3>
-                        <p className="text-[10px] font-black text-[#bf9b30] uppercase mt-1">Status: Active Database Connection</p>
+                      <p className="text-sm font-black">{order.poNumber}</p>
+                      <p className={`mt-1 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{order.supplier}</p>
                     </div>
-                    {activeView !== 'MAIN' && (
-                        <div className="flex items-center gap-2 bg-[#bf9b30]/10 px-4 py-2 rounded-xl text-[#bf9b30] text-[10px] font-black">
-                            <Info size={14}/> SYSTEM VIEW: FILTERED
-                        </div>
-                    )}
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${isDarkMode ? "bg-white/5 text-slate-300" : "bg-white text-slate-700"}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>Expected: {formatDate(order.expectedDate)} • {formatCurrency(order.totalAmount)}</p>
                 </div>
-                <div className="overflow-x-auto">
-                    {RenderDynamicTable()}
-                </div>
+              ))}
+              {!purchaseOrders.length ? <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>No purchase orders found.</p> : null}
             </div>
-            
-            {/* Modal Components remain same but integrated with state */}
-            {/* SimulationResult and ReportsModal logic here... */}
-        </div>
-    );
+          </div>
+
+          <div className={`rounded-[32px] border p-6 ${isDarkMode ? "border-white/10 bg-[#11151d]" : "border-slate-200 bg-white"}`}>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-[#bf9b30]/12 p-3 text-[#bf9b30]">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Recent Movements</p>
+                <h2 className="text-xl font-black tracking-tight">Stock activity</h2>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {(dashboard?.recentMovements || []).map((movement, index) => (
+                <div key={`${movement.item}-${index}`} className={`rounded-2xl border px-4 py-3 ${isDarkMode ? "border-white/10 bg-[#0d1118]" : "border-slate-100 bg-slate-50"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">{movement.item}</p>
+                      <p className={`mt-1 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{movement.type} • {movement.qty} {movement.unit}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${movement.type === "OUT" ? "bg-rose-500/15 text-rose-300" : "bg-emerald-500/15 text-emerald-300"}`}>
+                      {movement.type}
+                    </span>
+                  </div>
+                  <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>By {movement.by || "Staff"} • {formatDate(movement.time)}</p>
+                </div>
+              ))}
+              {!dashboard?.recentMovements?.length ? <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>No movement logs found.</p> : null}
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 };
 
 export default Inventory;

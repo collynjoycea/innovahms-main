@@ -302,7 +302,16 @@ export default function VisionSuites() {
       const response = await fetch("/api/chatbot/rasa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "vision-suites", message }),
+        body: JSON.stringify({
+          sender: "vision-suites",
+          customer_id: sessionUser?.id || null,
+          message,
+          context_path: "/vision-suites",
+          hotel_id: searchContext.hotelId || (activeHotelFilter !== "all" ? activeHotelFilter : hotel?.id || null),
+          from: searchContext.from || "",
+          to: searchContext.to || "",
+          guests: searchContext.guests || "",
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Assistant unavailable.");
