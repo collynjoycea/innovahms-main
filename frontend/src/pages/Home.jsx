@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Star, CalendarDays, Users, Sparkles, ArrowRight } from "lucide-react";
+import { MapPin, CalendarDays, Users, Sparkles } from "lucide-react";
 import resolveImg from "../utils/resolveImg";
 
 const fallbackHotelCards = [
@@ -96,11 +96,25 @@ const toInputDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const parseInputDate = (value) => {
+  if (!value) return null;
+  const [year, month, day] = String(value).split("-").map(Number);
+  if ([year, month, day].some((part) => Number.isNaN(part))) return null;
+  return new Date(year, month - 1, day);
+};
+
+const addDaysToInputDate = (value, days) => {
+  const parsed = parseInputDate(value);
+  if (!parsed) return "";
+  const next = new Date(parsed);
+  next.setDate(next.getDate() + days);
+  return toInputDate(next);
+};
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentImg, setCurrentImg] = useState(() => _heroImgIndex);
-  const [isBooted, setIsBooted] = useState(true);
   const [hotelCards, setHotelCards] = useState(fallbackHotelCards);
   const [featuredHotels, setFeaturedHotels] = useState(fallbackFeaturedHotels);
   const [promotionCards, setPromotionCards] = useState(fallbackPromotions);
@@ -117,6 +131,8 @@ export default function LandingPage() {
     const saved = localStorage.getItem("theme");
     return saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
+  const heroMinCheckIn = toInputDate(new Date());
+  const heroMinCheckOut = heroCheckIn ? addDaysToInputDate(heroCheckIn, 1) : addDaysToInputDate(heroMinCheckIn, 1);
 
   useEffect(() => {
     const sync = () => {
@@ -277,6 +293,23 @@ export default function LandingPage() {
 
     return () => clearTimeout(timer);
   }, [location.pathname, location.hash, hotelCards.length, promotionCards.length]);
+
+  useEffect(() => {
+    if (!heroCheckIn) return;
+    if (!heroCheckOut || heroCheckOut <= heroCheckIn) {
+      setHeroCheckOut(addDaysToInputDate(heroCheckIn, 1));
+    }
+  }, [heroCheckIn, heroCheckOut]);
+
+  const handleHeroCheckInChange = (event) => {
+    const nextCheckIn = event.target.value;
+    setHeroCheckIn(nextCheckIn);
+  };
+
+  const handleHeroCheckOutChange = (event) => {
+    setHeroCheckOut(event.target.value);
+  };
+
   const handleHeroAvailabilitySearch = () => {
     const params = new URLSearchParams();
     if (heroCheckIn) params.set("from", heroCheckIn);
@@ -392,14 +425,26 @@ export default function LandingPage() {
                     <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Check-in</p>
                     <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
                       <CalendarDays size={16} className="text-[#f7db8b]" />
-                      <span>{heroCheckIn}</span>
+                      <input
+                        type="date"
+                        value={heroCheckIn}
+                        min={heroMinCheckIn}
+                        onChange={handleHeroCheckInChange}
+                        className="min-w-0 w-full bg-transparent text-[13px] font-semibold text-white/90 outline-none [color-scheme:dark]"
+                      />
                     </div>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.24em] text-[#d8c27d] font-black mb-2">Check-out</p>
                     <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-[13px] text-white/90">
                       <CalendarDays size={16} className="text-[#f7db8b]" />
-                      <span>{heroCheckOut}</span>
+                      <input
+                        type="date"
+                        value={heroCheckOut}
+                        min={heroMinCheckOut}
+                        onChange={handleHeroCheckOutChange}
+                        className="min-w-0 w-full bg-transparent text-[13px] font-semibold text-white/90 outline-none [color-scheme:dark]"
+                      />
                     </div>
                   </div>
                 </div>

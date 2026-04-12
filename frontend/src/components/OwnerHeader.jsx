@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Bell, Building2, ChevronDown, CreditCard, LogOut, MapPin, Moon, Sun, X } from 'lucide-react';
+import { clearOwnerSession, readOwnerSession } from '../utils/ownerSession';
 
 const emptyOwnerState = {
   id: null,
@@ -143,35 +144,47 @@ const OwnerHeader = ({ isDarkMode = false, toggleTheme }) => {
 
   useEffect(() => {
     const syncOwner = () => {
-      const sessionData = localStorage.getItem('ownerSession');
-      if (!sessionData) {
+      const parsedData = readOwnerSession();
+      if (!parsedData?.id) {
         setOwnerInfo(emptyOwnerState);
         return;
       }
 
-      try {
-        const parsedData = JSON.parse(sessionData);
-        if (parsedData) {
-          setOwnerInfo({
-            id: parsedData.id || null,
-            fullName: `${parsedData.firstName || ''} ${parsedData.lastName || ''}`.trim() || 'Hotel Owner',
-            hotelName: parsedData.hotelName || (parsedData.subscriptionActive ? 'Hotel Setup Required' : 'Subscription Required'),
-            subscriptionActive: Boolean(parsedData.subscriptionActive),
-            hasHotel: Boolean(parsedData.hasHotel),
-            profileImage: parsedData.profileImage || '',
-          });
-          return;
-        }
-      } catch (error) {
-        console.error('Error parsing owner session:', error);
-      }
+      setOwnerInfo((current) => ({
+        id: parsedData.id || null,
+        fullName: `${parsedData.firstName || ''} ${parsedData.lastName || ''}`.trim() || 'Hotel Owner',
+        hotelName: parsedData.hotelName || (parsedData.subscriptionActive ? 'Hotel Setup Required' : 'Subscription Required'),
+        subscriptionActive: Boolean(parsedData.subscriptionActive),
+        hasHotel: Boolean(parsedData.hasHotel),
+        profileImage: parsedData.profileImage || current.profileImage || '',
+      }));
 
-      setOwnerInfo(emptyOwnerState);
+      void (async () => {
+        try {
+          const response = await fetch(`/api/owner/profile/${parsedData.id}`);
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) return;
+          setOwnerInfo((current) =>
+            current.id === parsedData.id
+              ? {
+                  ...current,
+                  profileImage: data?.owner?.profileImage || '',
+                }
+              : current
+          );
+        } catch {
+          // Keep the existing header avatar if the refresh fails.
+        }
+      })();
     };
 
     syncOwner();
     window.addEventListener('ownerSessionUpdated', syncOwner);
-    return () => window.removeEventListener('ownerSessionUpdated', syncOwner);
+    window.addEventListener('storage', syncOwner);
+    return () => {
+      window.removeEventListener('ownerSessionUpdated', syncOwner);
+      window.removeEventListener('storage', syncOwner);
+    };
   }, []);
 
   useEffect(() => {
@@ -222,7 +235,7 @@ const OwnerHeader = ({ isDarkMode = false, toggleTheme }) => {
   }, [ownerInfo.id]);
 
   const handleLogout = () => {
-    localStorage.removeItem('ownerSession');
+    clearOwnerSession();
     navigate('/owner/login');
   };
 
