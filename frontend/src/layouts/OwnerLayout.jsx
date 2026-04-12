@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import OwnerSidebar from '../components/OwnerSidebar'; 
 import OwnerHeader from '../components/OwnerHeader'; 
+import { clearOwnerSession, persistOwnerSession, readOwnerSession } from '../utils/ownerSession';
 
 const parseDateOnly = (value) => {
   if (!value) return null;
@@ -59,25 +60,20 @@ const OwnerLayout = () => {
     }
   });
   const [session, setSession] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('ownerSession') || '{}');
-    } catch {
-      return {};
-    }
+    return readOwnerSession();
   });
 
   const persistSession = (nextSession) => {
     if (!nextSession) return;
     try {
-      const stored = JSON.parse(localStorage.getItem('ownerSession') || '{}');
-      const merged = {
-        ...stored,
-        ...nextSession,
-        loginTime: stored?.loginTime || session?.loginTime,
-      };
-      localStorage.setItem('ownerSession', JSON.stringify(merged));
-      setSession(merged);
-      window.dispatchEvent(new Event('ownerSessionUpdated'));
+      const persisted = persistOwnerSession(
+        {
+          ...nextSession,
+          loginTime: session?.loginTime,
+        },
+        { merge: true }
+      );
+      setSession(persisted);
     } catch {
       setSession(nextSession);
     }
@@ -103,23 +99,19 @@ const OwnerLayout = () => {
     try {
       const parsed = JSON.parse(session);
       if (!parsed?.email) {
-        localStorage.removeItem('ownerSession');
+        clearOwnerSession();
         navigate('/owner/login', { replace: true });
         return;
       }
     } catch {
-      localStorage.removeItem('ownerSession');
+      clearOwnerSession();
       navigate('/owner/login', { replace: true });
     }
   }, [navigate]);
 
   useEffect(() => {
     const sync = () => {
-      try {
-        setSession(JSON.parse(localStorage.getItem('ownerSession') || '{}'));
-      } catch {
-        setSession({});
-      }
+      setSession(readOwnerSession());
     };
     window.addEventListener('ownerSessionUpdated', sync);
     return () => window.removeEventListener('ownerSessionUpdated', sync);

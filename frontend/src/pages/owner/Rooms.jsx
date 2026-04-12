@@ -172,10 +172,10 @@ const handleSubmit = async (e) => {
 
   const getStatusStyles = (status) => {
     switch (status) {
-      case 'Available': return 'bg-green-100 text-green-700 border-green-200';
-      case 'Occupied': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'Maintenance': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'Available': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-300 dark:border-green-500/20';
+      case 'Occupied': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20';
+      case 'Maintenance': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-white/10 dark:text-slate-300 dark:border-white/10';
     }
   };
 
@@ -198,9 +198,9 @@ const handleSubmit = async (e) => {
   };
 
   return (
-    <div className="p-8 bg-[#faf9f6] min-h-screen font-sans">
+    <div className="min-h-screen bg-[#faf9f6] p-8 font-sans dark:bg-transparent dark:text-slate-100">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-800 font-serif">Rooms</h1>
+        <h1 className="font-serif text-2xl font-bold text-slate-800 dark:text-white">Rooms</h1>
         <button onClick={openAddModal} className="bg-[#bf9b30] text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:brightness-110 shadow-lg">
           <Plus size={18} /> Add New Room
         </button>
@@ -209,41 +209,41 @@ const handleSubmit = async (e) => {
       {/* Filter Bar */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input type="text" placeholder="Search Room #..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-black/5 rounded-xl outline-none text-sm" value={filters.roomNumber} onChange={(e) => setFilters({...filters, roomNumber: e.target.value})} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
+          <input type="text" placeholder="Search Room #..." className="w-full rounded-xl border border-black/5 bg-white py-2.5 pl-10 pr-4 text-sm outline-none dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200 dark:placeholder:text-slate-500" value={filters.roomNumber} onChange={(e) => setFilters({...filters, roomNumber: e.target.value})} />
         </div>
-        <select className="px-4 py-2.5 bg-white border border-black/5 rounded-xl outline-none text-sm" value={filters.roomType} onChange={(e) => setFilters({...filters, roomType: e.target.value})}>
+        <select className="rounded-xl border border-black/5 bg-white px-4 py-2.5 text-sm outline-none dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200" value={filters.roomType} onChange={(e) => setFilters({...filters, roomType: e.target.value})}>
             <option value="All">All Types</option>
             {['Single', 'Double', 'Suite', 'Deluxe'].map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select className="px-4 py-2.5 bg-white border border-black/5 rounded-xl outline-none text-sm" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}>
+        <select className="rounded-xl border border-black/5 bg-white px-4 py-2.5 text-sm outline-none dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}>
             <option value="All">All Statuses</option>
             {['Available', 'Occupied', 'Maintenance', 'Cleaning'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">MAX ₱</span>
-          <input type="number" placeholder="Price" className="w-full pl-16 pr-4 py-2.5 bg-white border border-black/5 rounded-xl text-sm" value={filters.maxPrice} onChange={(e) => setFilters({...filters, maxPrice: e.target.value})} />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-500">MAX ₱</span>
+          <input type="number" placeholder="Price" className="w-full rounded-xl border border-black/5 bg-white py-2.5 pl-16 pr-4 text-sm dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200 dark:placeholder:text-slate-500" value={filters.maxPrice} onChange={(e) => setFilters({...filters, maxPrice: e.target.value})} />
         </div>
       </div>
 
       {/* Table Section */}
-      <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-3xl border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-black/5">
+          <thead className="border-b border-black/5 bg-slate-50 dark:border-white/10 dark:bg-[#0d1118]">
             <tr>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400">Room Info</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400">Capacity</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400">Price / Night</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400">Status</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400 text-right">Actions</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Room Info</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Capacity</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Price / Night</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Status</th>
+              <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-black/5">
+          <tbody className="divide-y divide-black/5 dark:divide-white/10">
             {filteredRooms.map((room) => (
-              <tr key={room.id} className="hover:bg-slate-50/50 transition-colors">
+              <tr key={room.id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.03]">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-black/5">
+                    <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-black/5 bg-slate-100 dark:border-white/10 dark:bg-[#0d1118]">
                       {room.images?.[0] ? (
                         <img
                           src={resolveImg(room.images[0])}
@@ -256,23 +256,23 @@ const handleSubmit = async (e) => {
                       )}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-800">Room {room.roomNumber}</div>
-                      <div className="text-sm text-slate-500">{room.roomName || room.roomType}</div>
+                      <div className="font-bold text-slate-800 dark:text-white">Room {room.roomNumber}</div>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">{room.roomName || room.roomType}</div>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-xs text-slate-600">
+                <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
                     <div className="flex items-center gap-2">{room.maxAdults} Adults</div>
                     <div className="flex items-center gap-2">{room.maxChildren} Kids</div>
                 </td>
-                <td className="px-6 py-4 font-serif text-[#bf9b30] font-bold">₱{Number(room.price).toLocaleString()}</td>
+                <td className="px-6 py-4 font-serif font-bold text-[#bf9b30]">₱{Number(room.price).toLocaleString()}</td>
                 <td className="px-6 py-4">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${getStatusStyles(room.status)}`}>
                     {room.status || 'Available'}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-3 text-slate-400">
+                  <div className="flex justify-end gap-3 text-slate-400 dark:text-slate-500">
                     <button onClick={() => openEditModal(room)} className="hover:text-blue-500"><Edit size={18} /></button>
                     <button onClick={() => { setRoomToDelete(room); setShowDeleteModal(true); }} className="hover:text-red-500"><Trash2 size={18} /></button>
                   </div>
@@ -285,11 +285,11 @@ const handleSubmit = async (e) => {
 
       {/* ADD/EDIT MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2rem] p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] bg-white p-8 shadow-2xl dark:bg-[#11151d] dark:text-slate-100">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-slate-800 font-serif">{isEditing ? 'Update Room' : 'New Room Registration'}</h2>
-                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                <h2 className="font-serif text-2xl font-bold text-slate-800 dark:text-white">{isEditing ? 'Update Room' : 'New Room Registration'}</h2>
+                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white"><X size={24} /></button>
             </div>
             
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -297,59 +297,59 @@ const handleSubmit = async (e) => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Room #</label>
-                        <input type="text" value={roomData.roomNumber} required className="w-full p-3 rounded-xl border border-slate-200 outline-none" onChange={e => setRoomData({...roomData, roomNumber: e.target.value})} />
+                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Room #</label>
+                        <input type="text" value={roomData.roomNumber} required className="w-full rounded-xl border border-slate-200 p-3 outline-none dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200" onChange={e => setRoomData({...roomData, roomNumber: e.target.value})} />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Room Name</label>
-                        <input type="text" value={roomData.roomName} placeholder="e.g. Deluxe Garden" className="w-full p-3 rounded-xl border border-slate-200 outline-none" onChange={e => setRoomData({...roomData, roomName: e.target.value})} />
+                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Room Name</label>
+                        <input type="text" value={roomData.roomName} placeholder="e.g. Deluxe Garden" className="w-full rounded-xl border border-slate-200 p-3 outline-none dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200 dark:placeholder:text-slate-500" onChange={e => setRoomData({...roomData, roomName: e.target.value})} />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Type</label>
-                        <select value={roomData.roomType} className="w-full p-3 rounded-xl border border-slate-200 bg-white" onChange={e => setRoomData({...roomData, roomType: e.target.value})}>
+                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Type</label>
+                        <select value={roomData.roomType} className="w-full rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200" onChange={e => setRoomData({...roomData, roomType: e.target.value})}>
                             {['Single', 'Double', 'Suite', 'Deluxe'].map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Price / Night</label>
-                        <input type="number" value={roomData.price} required className="w-full p-3 rounded-xl border border-slate-200 outline-none" onChange={e => setRoomData({...roomData, price: e.target.value})} />
+                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Price / Night</label>
+                        <input type="number" value={roomData.price} required className="w-full rounded-xl border border-slate-200 p-3 outline-none dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200" onChange={e => setRoomData({...roomData, price: e.target.value})} />
                     </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Capacity</label>
-                  <div className="flex gap-4 p-3 bg-slate-50 rounded-xl border border-black/5">
+                  <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Capacity</label>
+                  <div className="flex gap-4 rounded-xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-[#0d1118]">
                     {/* Adults Input */}
                     <div className="flex flex-1 items-center justify-between px-2">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Adults</span>
-                        <span className="text-[9px] text-slate-300 font-medium">Ages 18+</span>
+                        <span className="mb-1 text-[10px] font-bold uppercase leading-none text-slate-400 dark:text-slate-500">Adults</span>
+                        <span className="text-[9px] font-medium text-slate-300 dark:text-slate-600">Ages 18+</span>
                       </div>
                       <input 
                         type="number" 
                         min="1"
-                        className="bg-transparent w-12 text-right font-bold text-slate-700 outline-none focus:text-[#bf9b30]" 
+                        className="w-12 bg-transparent text-right font-bold text-slate-700 outline-none focus:text-[#bf9b30] dark:text-slate-200" 
                         value={roomData.maxAdults} 
                         onChange={e => setRoomData({...roomData, maxAdults: e.target.value})} 
                       />
                     </div>
 
                     {/* Divider */}
-                    <div className="w-px h-8 bg-slate-200 self-center"></div>
+                    <div className="h-8 w-px self-center bg-slate-200 dark:bg-white/10"></div>
 
                     {/* Children Input */}
                     <div className="flex flex-1 items-center justify-between px-2">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Children</span>
-                        <span className="text-[9px] text-slate-300 font-medium">Ages 0-17</span>
+                        <span className="mb-1 text-[10px] font-bold uppercase leading-none text-slate-400 dark:text-slate-500">Children</span>
+                        <span className="text-[9px] font-medium text-slate-300 dark:text-slate-600">Ages 0-17</span>
                       </div>
                       <input 
                         type="number" 
                         min="0"
-                        className="bg-transparent w-12 text-right font-bold text-slate-700 outline-none focus:text-[#bf9b30]" 
+                        className="w-12 bg-transparent text-right font-bold text-slate-700 outline-none focus:text-[#bf9b30] dark:text-slate-200" 
                         value={roomData.maxChildren} 
                         onChange={e => setRoomData({...roomData, maxChildren: e.target.value})} 
                       />
@@ -358,22 +358,22 @@ const handleSubmit = async (e) => {
                 </div>
 
                 <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Description</label>
-                    <textarea rows="4" className="w-full p-3 rounded-xl border border-slate-200 outline-none resize-none" value={roomData.description} onChange={e => setRoomData({...roomData, description: e.target.value})}></textarea>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Description</label>
+                    <textarea rows="4" className="w-full resize-none rounded-xl border border-slate-200 p-3 outline-none dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200" value={roomData.description} onChange={e => setRoomData({...roomData, description: e.target.value})}></textarea>
                 </div>
               </div>
 
               {/* Right Column: Amenities & Images */}
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Amenities</label>
+                  <label className="mb-2 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Amenities</label>
                   
                   {/* Input Field */}
                   <div className="relative mb-3">
                     <input 
                       type="text" 
                       placeholder="Type amenity and press Enter..." 
-                      className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-[#bf9b30] transition-colors"
+                      className="w-full rounded-xl border border-slate-200 p-3 outline-none transition-colors focus:border-[#bf9b30] dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200 dark:placeholder:text-slate-500"
                       value={amenityInput}
                       onChange={(e) => setAmenityInput(e.target.value)}
                       onKeyDown={addAmenity}
@@ -395,14 +395,14 @@ const handleSubmit = async (e) => {
 
                   {/* Quick Suggestions (Optional) */}
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Suggestions</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">Suggestions</p>
                     <div className="flex flex-wrap gap-2">
                       {AMENITY_OPTIONS.filter(opt => !roomData.amenities.includes(opt)).map(option => (
                         <button
                           key={option}
                           type="button"
                           onClick={() => setRoomData({...roomData, amenities: [...roomData.amenities, option]})}
-                          className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold hover:bg-slate-200 transition-colors"
+                          className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-500 transition-colors hover:bg-slate-200 dark:bg-[#0d1118] dark:text-slate-300 dark:hover:bg-white/10"
                         >
                           + {option}
                         </button>
@@ -412,7 +412,7 @@ const handleSubmit = async (e) => {
                 </div>
 
                 <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Upload Room Images</label>
+                    <label className="mb-2 block text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Upload Room Images</label>
                     <div className="space-y-4">
                         <input 
                             type="file" 
@@ -422,7 +422,7 @@ const handleSubmit = async (e) => {
                             id="room-images"
                             onChange={handleImageUpload} 
                         />
-                        <label htmlFor="room-images" className="flex items-center justify-center w-full p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                        <label htmlFor="room-images" className="flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-200 p-4 transition-colors hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5">
                             <div className="text-center">
                                 <ImageIcon className="mx-auto text-slate-400 mb-2" />
                                 <span className="text-xs font-bold text-[#bf9b30]">Click to upload photos</span>
@@ -464,7 +464,7 @@ const handleSubmit = async (e) => {
                 </div>
 
                 <div className="flex gap-3 pt-6">
-                    <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                    <button type="button" onClick={() => setShowModal(false)} className="flex-1 rounded-xl py-3 font-bold text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5">Cancel</button>
                     <button type="submit" className="flex-2 py-3 px-8 bg-[#bf9b30] text-white rounded-xl font-bold shadow-lg shadow-[#bf9b30]/20">
                         {isEditing ? 'Update Room' : 'Create Room'}
                     </button>
@@ -477,14 +477,14 @@ const handleSubmit = async (e) => {
 
       {/* Delete Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[60] p-6">
-            <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl relative">
-                <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-red-600 mb-6"><AlertTriangle size={32} /></div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-2 font-serif">Remove Room?</h2>
-                <p className="text-slate-500 mb-8 text-sm">Deleting Room {roomToDelete?.roomNumber} is permanent.</p>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-6 backdrop-blur-md">
+            <div className="relative w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-2xl dark:bg-[#11151d] dark:text-slate-100">
+                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300"><AlertTriangle size={32} /></div>
+                <h2 className="mb-2 font-serif text-2xl font-bold text-slate-800 dark:text-white">Remove Room?</h2>
+                <p className="mb-8 text-sm text-slate-500 dark:text-slate-400">Deleting Room {roomToDelete?.roomNumber} is permanent.</p>
                 <div className="flex flex-col gap-2">
                     <button onClick={confirmDelete} className="w-full py-4 bg-red-500 text-white rounded-2xl font-bold shadow-lg">Confirm Deletion</button>
-                    <button onClick={() => setShowDeleteModal(false)} className="w-full py-4 text-slate-500 font-bold">Cancel</button>
+                    <button onClick={() => setShowDeleteModal(false)} className="w-full py-4 font-bold text-slate-500 dark:text-slate-300">Cancel</button>
                 </div>
             </div>
         </div>

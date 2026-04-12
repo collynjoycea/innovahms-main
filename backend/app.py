@@ -41,7 +41,7 @@ def get_db_connection():
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "innovahmsdb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "lily1245"),
+        password=os.getenv("DB_PASSWORD", "12345"),
         port=os.getenv("DB_PORT", "5432"),
     )
 
@@ -2593,6 +2593,7 @@ def _owner_profile_payload(cur, owner_id):
             "hotelAddress": row.get("hotel_address") or "",
             "hotelDescription": row.get("hotel_description") or "",
             "contactPhone": row.get("contact_phone") or row.get("contact_number") or "",
+            "hotelProfilePicture": business_image,
             "businessImage": business_image,
             "hotelLogo": hotel_logo,
             "buildingImage": building_image,
@@ -2638,9 +2639,6 @@ def _owner_session_payload(cur, owner_row):
         "roomLimit": subscription.get("roomLimit"),
         "hasHotel": subscription.get("hasHotel"),
         "contactNumber": owner_row.get("contact_number") or "",
-        "profileImage": owner_row.get("profile_image") or "",
-        "hotelLogo": hotel.get("hotel_logo") or "",
-        "hotelBuildingImage": hotel.get("hotel_building_image") or hotel.get("hotel_logo") or "",
         "hotelDescription": hotel.get("hotel_description") or "",
         "contactPhone": hotel.get("contact_phone") or owner_row.get("contact_number") or "",
     }
@@ -5621,7 +5619,12 @@ def update_owner_profile(owner_id):
         hotel_address = str(hotel_payload.get("hotelAddress") or "").strip()
         hotel_description = str(hotel_payload.get("hotelDescription") or "").strip()
         contact_phone = str(hotel_payload.get("contactPhone") or "").strip()
-        business_image = str(hotel_payload.get("businessImage") or hotel_payload.get("hotelLogo") or "").strip()
+        business_image = str(
+            hotel_payload.get("hotelProfilePicture")
+            or hotel_payload.get("businessImage")
+            or hotel_payload.get("hotelLogo")
+            or ""
+        ).strip()
         building_image = str(hotel_payload.get("buildingImage") or "").strip()
         check_in_policy = str(hotel_payload.get("checkInPolicy") or "").strip()
         check_out_policy = str(hotel_payload.get("checkOutPolicy") or "").strip()

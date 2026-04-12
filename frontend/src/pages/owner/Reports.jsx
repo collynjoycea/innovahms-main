@@ -229,14 +229,14 @@ const Reports = () => {
   };
 
   if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-[#F8F9FA]">
+    <div className="flex h-screen flex-col items-center justify-center bg-[#F8F9FA] dark:bg-transparent">
        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
        <p className="text-slate-500 font-black uppercase tracking-[0.3em] animate-pulse text-xs">Initializing AI Engine</p>
     </div>
   );
 
   return (
-    <div className="p-8 bg-[#F8F9FA] min-h-screen text-slate-700 font-sans">
+    <div className="min-h-screen bg-[#F8F9FA] p-8 font-sans text-slate-700 dark:bg-transparent dark:text-slate-100">
       
       {/* CUSTOM ANIMATED ALERT */}
       <AnimatePresence>
@@ -245,7 +245,7 @@ const Reports = () => {
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 20, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            className="fixed top-0 left-1/2 -translate-x-1/2 z-[99] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-slate-700"
+              className="fixed top-0 left-1/2 z-[99] flex -translate-x-1/2 items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900 px-6 py-4 text-white shadow-2xl"
           >
             <div className="p-2 bg-blue-500 rounded-lg animate-pulse"><RefreshCw size={18} /></div>
             <div>
@@ -265,26 +265,26 @@ const Reports = () => {
           {currentView === "table-view" && (
             <button 
               onClick={() => setCurrentView("dashboard")}
-              className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm group"
+              className="group rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:bg-slate-50 dark:border-white/10 dark:bg-[#11151d] dark:hover:bg-white/5"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
             </button>
           )}
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
+            <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
               {currentView === "dashboard" ? "Advanced Analytics" : activeCategory?.replace(/_/g, ' ')}
             </h1>
-            <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+            <p className="mt-1 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               {currentView === "dashboard" ? "Live forecasting and behavioral monitoring." : "Viewing detailed records."}
             </p>
           </div>
         </div>
         <div className="flex gap-3">
-          <button onClick={exportCSV} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 hover:bg-slate-50 shadow-sm transition-all uppercase tracking-widest">
+          <button onClick={exportCSV} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-black uppercase tracking-widest text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200 dark:shadow-none dark:hover:bg-white/5">
             <Download size={14}/> CSV
           </button>
-          <button onClick={exportPDF} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 hover:bg-slate-50 shadow-sm transition-all uppercase tracking-widest">
+          <button onClick={exportPDF} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-black uppercase tracking-widest text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-white/10 dark:bg-[#11151d] dark:text-slate-200 dark:shadow-none dark:hover:bg-white/5">
             <FileText size={14}/> PDF
           </button>
           <button onClick={fetchReportData} className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all uppercase tracking-widest">
@@ -307,7 +307,7 @@ const Reports = () => {
             {/* SECTION 2: Logs & Operational Data */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-10">
               <div className="xl:col-span-2">
-                <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+                <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                     <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 uppercase tracking-tight">
                       <Activity size={20} className="text-blue-600"/> Real-time Logs
@@ -319,7 +319,7 @@ const Reports = () => {
                         placeholder="Search guest or event..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:bg-white focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all" 
+                        className="w-full rounded-xl border border-slate-100 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/5 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200 dark:focus:bg-[#11151d]" 
                       />
                     </div>
                   </div>
@@ -327,7 +327,7 @@ const Reports = () => {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-100">
+                        <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:border-white/10 dark:text-slate-500">
                           <th className="text-left pb-4">Event Type</th>
                           <th className="text-left pb-4">Staff</th>
                           <th className="text-left pb-4">Value</th>
@@ -335,19 +335,19 @@ const Reports = () => {
                           <th className="text-right pb-4">Time</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody className="divide-y divide-slate-50 dark:divide-white/10">
                         {filteredLogs.map((log, i) => (
-                          <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                            <td className="py-4 font-bold text-slate-800">{log.event}</td>
+                          <tr key={i} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.03]">
+                            <td className="py-4 font-bold text-slate-800 dark:text-white">{log.event}</td>
                             <td className="py-4 text-blue-600 font-semibold group-hover:underline cursor-pointer">{log.user}</td>
-                            <td className="py-4 font-black text-slate-900">{log.value}</td>
+                            <td className="py-4 font-black text-slate-900 dark:text-slate-100">{log.value}</td>
                             <td className="py-4">
                               <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${
                                 log.status === 'CONFIRMED' || log.status === 'SUCCESS' ? 'bg-green-100 text-green-600' : 
                                 log.status === 'ALERT' || log.status === 'STOCK OUT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
                               }`}>{log.status}</span>
                             </td>
-                            <td className="py-4 text-right text-slate-400 font-medium">{log.time}</td>
+                            <td className="py-4 text-right font-medium text-slate-400 dark:text-slate-500">{log.time}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -376,7 +376,7 @@ const Reports = () => {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm relative overflow-hidden"
+              className="relative overflow-hidden rounded-[3rem] border border-slate-200 bg-white p-10 shadow-sm dark:border-white/10 dark:bg-[#11151d] dark:shadow-none"
             >
               <div className="flex items-center gap-4 mb-10">
                 <div className="p-4 bg-amber-100 text-amber-600 rounded-2xl shadow-inner"><Play size={24} fill="currentColor"/></div>
@@ -420,20 +420,20 @@ const Reports = () => {
         ) : (
           /* NEW SECTION: TABLE VIEW FOR CARDS */
           <motion.div key="table" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+            <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
               <div className="flex flex-col lg:flex-row justify-between items-center gap-6 mb-10">
                 <div className="relative w-full lg:w-96">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type="text" 
                     placeholder="Search by Name or ID..." 
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 transition-all" 
+                    className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-3.5 pl-12 pr-4 text-sm outline-none transition-all focus:bg-white focus:ring-4 focus:ring-blue-500/5 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200 dark:focus:bg-[#11151d]" 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
                 <div className="flex gap-4">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl">
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 dark:border-white/10 dark:bg-[#0d1118]">
                     <Filter size={14} className="text-slate-400" />
                     <select 
                       onChange={(e) => setRoomTypeFilter(e.target.value)}
@@ -450,9 +450,9 @@ const Reports = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
+                <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-100">
+                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:border-white/10 dark:text-slate-500">
                       <th className="pb-6">Hotel ID</th>
                       <th className="pb-6">Room ID</th>
                       <th className="pb-6">Customer ID</th>
@@ -463,23 +463,23 @@ const Reports = () => {
                       <th className="pb-6 text-right">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-white/10">
                     {dynamicTableData.map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                        <td className="py-5 font-bold text-slate-500">{row.hotelId}</td>
-                        <td className="py-5 font-bold text-slate-900">{row.roomId}</td>
+                      <tr key={i} className="group transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+                        <td className="py-5 font-bold text-slate-500 dark:text-slate-400">{row.hotelId}</td>
+                        <td className="py-5 font-bold text-slate-900 dark:text-white">{row.roomId}</td>
                         <td className="py-5 font-black text-blue-600">{row.customerId ?? '--'}</td>
-                        <td className="py-5 font-black text-slate-800 uppercase">{row.customerName}</td>
-                        <td className="py-5 text-slate-500 font-medium">{row.status || '--'}</td>
-                        <td className="py-5 text-slate-500 font-medium">{row.checkInDate || '--'}</td>
-                        <td className="py-5 text-slate-500 font-medium">{row.checkOutDate || '--'}</td>
-                        <td className="py-5 text-right font-black text-slate-900">{formatPeso(row.totalAmount)}</td>
+                        <td className="py-5 font-black uppercase text-slate-800 dark:text-white">{row.customerName}</td>
+                        <td className="py-5 font-medium text-slate-500 dark:text-slate-400">{row.status || '--'}</td>
+                        <td className="py-5 font-medium text-slate-500 dark:text-slate-400">{row.checkInDate || '--'}</td>
+                        <td className="py-5 font-medium text-slate-500 dark:text-slate-400">{row.checkOutDate || '--'}</td>
+                        <td className="py-5 text-right font-black text-slate-900 dark:text-white">{formatPeso(row.totalAmount)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {dynamicTableData.length === 0 && (
-                  <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">No records found for this category</div>
+                  <div className="py-20 text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">No records found for this category</div>
                 )}
               </div>
             </div>
@@ -495,11 +495,11 @@ const Reports = () => {
 const StatCard = ({ title, value, change, sub, isUp, live, highlight, onClick }) => (
   <div 
     onClick={onClick}
-    className={`bg-white p-6 rounded-[2rem] border cursor-pointer ${highlight ? 'border-blue-500 shadow-blue-50' : 'border-slate-100'} shadow-sm transition-all hover:shadow-md hover:-translate-y-1`}
+    className={`cursor-pointer rounded-[2rem] border bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:bg-[#11151d] dark:shadow-none dark:hover:shadow-none ${highlight ? 'border-blue-500 shadow-blue-50 dark:border-blue-500/40' : 'border-slate-100 dark:border-white/10'}`}
   >
-    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{title}</p>
+    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{title}</p>
     <div className="flex items-center gap-3">
-      <h2 className="text-3xl font-black text-slate-900 tracking-tighter">{value ?? 0}</h2>
+      <h2 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">{value ?? 0}</h2>
       {change && (
         <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 ${isUp ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
           <TrendingUp size={10} /> {change}
@@ -512,7 +512,7 @@ const StatCard = ({ title, value, change, sub, isUp, live, highlight, onClick })
         </div>
       )}
     </div>
-    {sub && <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-tight">{sub}</p>}
+    {sub && <p className="mt-2 text-xs font-bold uppercase tracking-tight text-slate-400 dark:text-slate-500">{sub}</p>}
   </div>
 );
 
@@ -522,10 +522,10 @@ const OperationalCard = ({ title, alert, alertItem, sub, val, percentage, label 
   const numericPercentage = Number.isFinite(Number(percentage)) ? Number(percentage) : null;
   
   return (
-    <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm transition-all hover:shadow-md">
-      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{title}</h4>
+    <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#11151d] dark:shadow-none dark:hover:shadow-none">
+      <h4 className="mb-6 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{title}</h4>
       {isInventory ? (
-        <div className={`p-5 rounded-2xl border ${numericAlert > 0 && numericAlert < 30 ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+        <div className={`rounded-2xl border p-5 ${numericAlert > 0 && numericAlert < 30 ? 'bg-red-50 border-red-100 dark:bg-red-500/10 dark:border-red-500/20' : 'bg-slate-50 border-slate-100 dark:bg-[#0d1118] dark:border-white/10'}`}>
           <div className="flex justify-between items-center mb-1">
             <span className={`text-[10px] font-black uppercase tracking-wider ${numericAlert > 0 && numericAlert < 30 ? 'text-red-600' : 'text-slate-500'}`}>
               {numericAlert > 0 && numericAlert < 30 ? 'Critical Stock' : 'Stock Level'}
@@ -534,18 +534,18 @@ const OperationalCard = ({ title, alert, alertItem, sub, val, percentage, label 
               {alert ?? '--'} LEFT
             </span>
           </div>
-          <p className="text-sm font-black text-slate-800 uppercase">{alertItem || 'No Alerts'}</p>
+          <p className="text-sm font-black uppercase text-slate-800 dark:text-white">{alertItem || 'No Alerts'}</p>
         </div>
       ) : (
         <div className="space-y-5">
           <div className="flex justify-between items-end">
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase">{label}</p>
-              <p className="text-2xl font-black text-slate-900">{numericPercentage === null ? '--' : `${numericPercentage}%`}</p>
+              <p className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">{label}</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">{numericPercentage === null ? '--' : `${numericPercentage}%`}</p>
             </div>
-            <p className="text-sm font-black text-slate-800">{val}</p>
+            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{val}</p>
           </div>
-          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-[#0d1118]">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${numericPercentage ?? 0}%` }}
@@ -553,7 +553,7 @@ const OperationalCard = ({ title, alert, alertItem, sub, val, percentage, label 
               className={`h-full ${(numericPercentage ?? 0) > 90 ? 'bg-green-500' : 'bg-amber-500'}`}
             />
           </div>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{sub}</p>
+          <p className="text-[10px] font-bold uppercase tracking-tight text-slate-400 dark:text-slate-500">{sub}</p>
         </div>
       )}
     </div>
@@ -568,7 +568,7 @@ const SimBox = ({ title, value, status, color, warning }) => {
     slate: 'bg-slate-50 text-slate-600 border-slate-100'
   };
   return (
-    <div className={`p-6 rounded-[2rem] border ${themes[color]} shadow-sm transition-all hover:scale-[1.02]`}>
+    <div className={`rounded-[2rem] border p-6 shadow-sm transition-all hover:scale-[1.02] dark:shadow-none ${themes[color]}`}>
       <div className="flex justify-between items-start mb-4">
         <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{title}</p>
         {warning && <AlertTriangle size={16} className="animate-bounce" />}
