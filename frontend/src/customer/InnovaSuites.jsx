@@ -13,34 +13,41 @@ const php = (value) =>
 function TourModal({ open, onClose, roomName, tour, loading }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
+  const isInteractive = Boolean(tour?.isInteractive);
 
   const panoramaUrl = tour?.panoramaUrl ? resolveImg(tour.panoramaUrl, null) : null;
+  const previewUrl = tour?.previewUrl ? resolveImg(tour.previewUrl, panoramaUrl) : panoramaUrl;
 
   useEffect(() => {
     if (!open) return;
     if (!containerRef.current) return;
+    if (!isInteractive) return;
     if (!panoramaUrl) return;
 
-    containerRef.current.innerHTML = "";
-    const viewer = new Marzipano.Viewer(containerRef.current, { controls: { mouseViewMode: "drag" } });
-    viewerRef.current = viewer;
+    try {
+      containerRef.current.innerHTML = "";
+      const viewer = new Marzipano.Viewer(containerRef.current, { controls: { mouseViewMode: "drag" } });
+      viewerRef.current = viewer;
 
-    const source = Marzipano.ImageUrlSource.fromString(panoramaUrl);
-    const geometry = new Marzipano.EquirectGeometry([{ width: 4000 }]);
-    const limiter = Marzipano.RectilinearView.limit.traditional(2048, (120 * Math.PI) / 180);
-    const view = new Marzipano.RectilinearView(
-      { yaw: tour.initialYaw ?? 0, pitch: tour.initialPitch ?? 0, fov: tour.initialFov ?? Math.PI / 2 },
-      limiter
-    );
+      const source = Marzipano.ImageUrlSource.fromString(panoramaUrl);
+      const geometry = new Marzipano.EquirectGeometry([{ width: 4000 }]);
+      const limiter = Marzipano.RectilinearView.limit.traditional(2048, (120 * Math.PI) / 180);
+      const view = new Marzipano.RectilinearView(
+        { yaw: tour.initialYaw ?? 0, pitch: tour.initialPitch ?? 0, fov: tour.initialFov ?? Math.PI / 2 },
+        limiter
+      );
 
-    const scene = viewer.createScene({ source, geometry, view });
-    scene.switchTo({ transitionDuration: 350 });
+      const scene = viewer.createScene({ source, geometry, view });
+      scene.switchTo({ transitionDuration: 350 });
+    } catch {
+      // keep preview mode available when the image is not a valid panorama
+    }
 
     return () => {
       try { viewerRef.current?.destroy?.(); } catch { }
       viewerRef.current = null;
     };
-  }, [open, panoramaUrl]);
+  }, [open, panoramaUrl, isInteractive]);
 
   if (!open) return null;
 
@@ -66,8 +73,12 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
           <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
             Loading 360° tour...
           </div>
-        ) : tour?.panoramaUrl ? (
+        ) : isInteractive && panoramaUrl ? (
           <div ref={containerRef} className="h-full w-full" />
+        ) : previewUrl ? (
+          <div className="h-full w-full flex items-center justify-center bg-black px-6">
+            <img src={previewUrl} alt={roomName} className="max-h-[70vh] max-w-full object-contain" />
+          </div>
         ) : (
           <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
             No 360° tour configured for this room yet.
@@ -181,6 +192,8 @@ export default function InnovaSuites() {
     setTourLoading(true);
     const fallback = {
       panoramaUrl: resolveImg(room.imageUrl || room.images?.[0], '/images/my-room-360.jpg'),
+      previewUrl: resolveImg(room.imageUrl || room.images?.[0], '/images/my-room-360.jpg'),
+      isInteractive: false,
       initialYaw: 0, initialPitch: 0, initialFov: Math.PI / 2,
     };
     try {

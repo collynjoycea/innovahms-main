@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, CreditCard, Crown, Loader2, Lock, ShieldCheck, Sparkles } from 'lucide-react';
-import { persistOwnerSession, readOwnerSession } from '../../utils/ownerSession';
-const PENDING_PAYMENT_KEY = 'ownerPendingSubscriptionPayment';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Crown, Loader2, Lock, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+
+const OWNER_SESSION_KEY = 'ownerSession';
 
 const formatPhp = (value) => {
   const amount = Number(value || 0);
   try {
-    return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      maximumFractionDigits: 0,
+    }).format(amount);
   } catch {
     return `PHP ${amount.toLocaleString()}`;
   }
@@ -20,12 +24,15 @@ const planAccent = (slug) => {
 };
 
 const parseSession = () => {
-  return readOwnerSession();
+  try {
+    return JSON.parse(localStorage.getItem(OWNER_SESSION_KEY) || '{}');
+  } catch {
+    return {};
+  }
 };
 
 export default function OwnerSubscription() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [session, setSession] = useState(parseSession());
   const [packages, setPackages] = useState([]);
   const [subscription, setSubscription] = useState(null);
@@ -37,17 +44,16 @@ export default function OwnerSubscription() {
   const [hotelForm, setHotelForm] = useState({ hotelCode: '', hotelName: '', hotelAddress: '' });
 
   const ownerId = session?.id;
-  const accessUnlocked = Boolean(session?.subscriptionActive && session?.hasHotel && session?.isApproved);
+  const accessUnlocked = Boolean(session?.subscriptionActive && session?.hasHotel);
 
   const persistSession = (nextSession) => {
-    const persisted = persistOwnerSession(
-      {
-        ...nextSession,
-        loginTime: session?.loginTime || new Date().toISOString(),
-      },
-      { merge: true }
-    );
-    setSession(persisted);
+    localStorage.setItem(OWNER_SESSION_KEY, JSON.stringify({
+      ...session,
+      ...nextSession,
+      loginTime: session?.loginTime || new Date().toISOString(),
+    }));
+    setSession(parseSession());
+    window.dispatchEvent(new Event('ownerSessionUpdated'));
   };
 
   const load = async () => {
@@ -75,58 +81,9 @@ export default function OwnerSubscription() {
     load();
   }, [ownerId]);
 
-  useEffect(() => {
-    const paymentState = searchParams.get('payment');
-    const pendingRaw = localStorage.getItem(PENDING_PAYMENT_KEY);
-    if (!ownerId || !paymentState || !pendingRaw) return;
-
-    let pending = null;
-    try {
-      pending = JSON.parse(pendingRaw);
-    } catch {
-      pending = null;
-    }
-    if (!pending || Number(pending.ownerId) !== Number(ownerId) || !pending.linkId) return;
-
-    if (paymentState === 'failed') {
-      setError('Subscription payment was not completed.');
-      localStorage.removeItem(PENDING_PAYMENT_KEY);
-      setSearchParams({});
-      return;
-    }
-
-    if (paymentState !== 'success') return;
-
-    const verify = async () => {
-      localStorage.removeItem(PENDING_PAYMENT_KEY);
-      setPaymentLoading(pending.linkId);
-      try {
-        const response = await fetch(`/api/owner/subscription/verify/${pending.linkId}?owner_id=${ownerId}`);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Unable to verify subscription payment.');
-        if (data.session) persistSession(data.session);
-        setSubscription(data.subscription || null);
-        setMessage(
-          data.isSimulated
-            ? 'Simulated PayMongo payment confirmed. Owner functions are now unlocked.'
-            : 'Subscription payment confirmed. Owner functions are now unlocked.'
-        );
-        setSearchParams({});
-        await load();
-      } catch (err) {
-        localStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(pending));
-        setError(err.message || 'Unable to verify subscription payment.');
-      } finally {
-        setPaymentLoading('');
-      }
-    };
-
-    verify();
-  }, [ownerId, searchParams, setSearchParams]);
-
   const currentPlanId = useMemo(() => subscription?.packageId, [subscription]);
 
-  const startCheckout = async (pkg, billingCycle) => {
+  const activatePlan = async (pkg, billingCycle) => {
     if (!ownerId) return;
     setError('');
     setMessage('');
@@ -138,16 +95,14 @@ export default function OwnerSubscription() {
         body: JSON.stringify({ ownerId, packageId: pkg.id, billingCycle }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to start subscription checkout.');
-      localStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({
-        ownerId,
-        linkId: data.linkId,
-        packageId: pkg.id,
-        billingCycle,
-      }));
-      window.location.href = data.checkoutUrl;
+      if (!response.ok) throw new Error(data.error || 'Unable to activate subscription.');
+      if (data.session) persistSession(data.session);
+      setSubscription(data.subscription || null);
+      setMessage(data.message || `${pkg.name} ${billingCycle.toLowerCase()} subscription activated successfully.`);
+      await load();
     } catch (err) {
-      setError(err.message || 'Unable to start subscription checkout.');
+      setError(err.message || 'Unable to activate subscription.');
+    } finally {
       setPaymentLoading('');
     }
   };
@@ -176,27 +131,28 @@ export default function OwnerSubscription() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8f5ed_0%,#f4f6fb_100%)] p-6 md:p-10 dark:bg-none dark:bg-transparent dark:text-slate-100">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8f5ed_0%,#f4f6fb_100%)] p-6 md:p-10">
       <div className="mx-auto max-w-6xl space-y-6">
         <section className="overflow-hidden rounded-[32px] border border-[#bf9b30]/15 bg-[#111111] text-white shadow-[0_30px_80px_-40px_rgba(15,23,42,0.85)]">
           <div className="grid gap-8 px-8 py-10 md:grid-cols-[1.1fr_0.9fr]">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.32em] text-[#d2b04e]">Owner Subscription</p>
               <h1 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
-                {accessUnlocked ? 'Subscription Active' : 'Portal Locked Until Payment'}
+                {accessUnlocked ? 'Subscription Active' : 'Portal Locked Until Activation'}
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/70">
-                Your owner account and hotel are already registered. Payment and admin approval both need to clear before the owner tools and actions unlock across the portal.
+                Choose a plan and it activates immediately. Owner access is now controlled by your active subscription,
+                plan limits, and linked hotel setup.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-white/70">
                   {session?.subscriptionPlan || 'No active plan'}
                 </div>
-                <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${session?.isApproved ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {session?.isApproved ? 'Admin Approved' : 'Admin Review Pending'}
+                <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${session?.approvalStatus === 'APPROVED' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-white/65'}`}>
+                  {session?.approvalStatus === 'APPROVED' ? 'Profile Approved' : `Profile ${session?.approvalStatus || 'Pending'}`}
                 </div>
                 <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${accessUnlocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {accessUnlocked ? 'Features Unlocked' : !session?.subscriptionActive ? 'Payment Required' : !session?.isApproved ? 'Approval Required' : 'Hotel Setup Required'}
+                  {accessUnlocked ? 'Features Unlocked' : !session?.subscriptionActive ? 'Activation Required' : 'Hotel Setup Required'}
                 </div>
               </div>
             </div>
@@ -224,7 +180,7 @@ export default function OwnerSubscription() {
         </section>
 
         {(error || message) && (
-          <div className={`rounded-2xl border px-5 py-4 text-sm font-semibold ${error ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
+          <div className={`rounded-2xl border px-5 py-4 text-sm font-semibold ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
             {error || message}
           </div>
         )}
@@ -236,7 +192,7 @@ export default function OwnerSubscription() {
             packages.map((pkg) => {
               const isCurrent = Number(currentPlanId) === Number(pkg.id);
               return (
-                <article key={pkg.id} className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_50px_-30px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
+                <article key={pkg.id} className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_50px_-30px_rgba(15,23,42,0.35)]">
                   <div className={`bg-gradient-to-r ${planAccent(pkg.slug)} p-6 text-white`}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -252,10 +208,10 @@ export default function OwnerSubscription() {
                   </div>
 
                   <div className="space-y-5 p-6">
-                    <p className="min-h-[48px] text-sm leading-relaxed text-slate-600 dark:text-slate-300">{pkg.description || 'Subscription package for hotel owner operations.'}</p>
+                    <p className="min-h-[48px] text-sm leading-relaxed text-slate-600">{pkg.description || 'Subscription package for hotel owner operations.'}</p>
                     <div className="space-y-2">
                       {(pkg.features || []).map((feature) => (
-                        <div key={feature} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <div key={feature} className="flex items-start gap-2 text-sm text-slate-700">
                           <CheckCircle2 size={16} className="mt-0.5 text-[#bf9b30]" />
                           <span>{feature}</span>
                         </div>
@@ -264,19 +220,19 @@ export default function OwnerSubscription() {
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
-                        onClick={() => startCheckout(pkg, 'MONTHLY')}
+                        onClick={() => activatePlan(pkg, 'MONTHLY')}
                         disabled={Boolean(paymentLoading)}
-                        className="rounded-2xl border border-slate-200 bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-60 dark:border-white/10"
+                        className="rounded-2xl border border-slate-200 bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-60"
                       >
-                        {paymentLoading === `${pkg.id}-MONTHLY` ? 'Processing...' : isCurrent ? 'Renew Monthly' : 'Pay Monthly'}
+                        {paymentLoading === `${pkg.id}-MONTHLY` ? 'Activating...' : isCurrent ? 'Renew Monthly' : 'Activate Monthly'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => startCheckout(pkg, 'ANNUAL')}
+                        onClick={() => activatePlan(pkg, 'ANNUAL')}
                         disabled={Boolean(paymentLoading)}
-                        className="rounded-2xl border border-[#bf9b30]/30 bg-[#bf9b30]/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-[#8f7423] disabled:opacity-60 dark:text-[#f0cf75]"
+                        className="rounded-2xl border border-[#bf9b30]/30 bg-[#bf9b30]/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-[#8f7423] disabled:opacity-60"
                       >
-                        {paymentLoading === `${pkg.id}-ANNUAL` ? 'Processing...' : isCurrent ? 'Renew Annual' : 'Pay Annual'}
+                        {paymentLoading === `${pkg.id}-ANNUAL` ? 'Activating...' : isCurrent ? 'Renew Annual' : 'Activate Annual'}
                       </button>
                     </div>
                   </div>
@@ -287,21 +243,21 @@ export default function OwnerSubscription() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.28)]">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-slate-900 p-3 text-white"><CreditCard size={20} /></div>
+              <div className="rounded-2xl bg-slate-900 p-3 text-white"><Zap size={20} /></div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">Portal Access Rules</p>
-                <h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Payment and approval both unlock access</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Portal Access Rules</p>
+                <h2 className="mt-1 text-2xl font-black text-slate-900">Subscription controls owner access</h2>
               </div>
             </div>
             <div className="mt-6 grid gap-3">
               {[
-                'Owners can register their account and hotel first, but operational actions stay disabled until a subscription is paid and the admin review is approved.',
-                'You can browse the owner pages before payment, but forms and action buttons remain read-only.',
-                'Renewing a package keeps the owner portal available, while approval status controls whether hotel tools can actually be used.',
+                'Activating a subscription immediately unlocks the owner tools included in that package.',
+                'Starter owners can manage rooms, reservations, customers, reviews, and dashboard access.',
+                'Higher plans unlock extra modules like staff, inventory, reports, and promotions based on the selected tier.',
               ].map((item) => (
-                <div key={item} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-300">
+                <div key={item} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <Lock size={16} className="mt-0.5 text-[#bf9b30]" />
                   <span>{item}</span>
                 </div>
@@ -309,37 +265,37 @@ export default function OwnerSubscription() {
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-[#11151d] dark:shadow-none">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">Registered Property</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900 dark:text-white">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.28)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Registered Property</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">
               {session?.hasHotel ? 'Hotel Already Registered' : 'Property Details Needed'}
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
               {session?.hasHotel
-                ? 'Your hotel was created during owner signup. Subscription payment and admin approval are the last steps before owner actions unlock.'
-                : 'If this owner account has no linked hotel yet, you can still attach one here after payment.'}
+                ? 'Your hotel was created during owner signup. Subscription activation is the last step before the allowed owner tools unlock.'
+                : 'If this owner account has no linked hotel yet, you can still attach one here after activating a subscription.'}
             </p>
 
             {session?.hasHotel ? (
               <div className="mt-6 space-y-3">
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-[#0d1118]">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Hotel Name</p>
-                  <p className="mt-2 text-lg font-black text-slate-900 dark:text-white">{session?.hotelName || subscription?.hotelName || 'Registered Hotel'}</p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Hotel Name</p>
+                  <p className="mt-2 text-lg font-black text-slate-900">{session?.hotelName || subscription?.hotelName || 'Registered Hotel'}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-[#0d1118]">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Hotel Code</p>
-                    <p className="mt-2 text-sm font-black text-slate-900 dark:text-white">{session?.hotelCode || subscription?.hotelCode || '--'}</p>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Hotel Code</p>
+                    <p className="mt-2 text-sm font-black text-slate-900">{session?.hotelCode || subscription?.hotelCode || '--'}</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-[#0d1118]">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Portal Status</p>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Portal Status</p>
                     <p className={`mt-2 text-sm font-black ${accessUnlocked ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {accessUnlocked ? 'Unlocked after payment and admin approval' : !session?.subscriptionActive ? 'Waiting for payment' : !session?.isApproved ? 'Waiting for admin approval' : 'Hotel setup required'}
+                      {accessUnlocked ? 'Unlocked after subscription activation' : !session?.subscriptionActive ? 'Waiting for activation' : 'Hotel setup required'}
                     </p>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-dashed border-[#bf9b30]/35 bg-[#bf9b30]/[0.06] px-4 py-4 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-300">
-                  Rooms, reservations, staff tools, reports, and all other owner actions stay read-only until both the subscription payment and admin review are confirmed.
+                <div className="rounded-2xl border border-dashed border-[#bf9b30]/35 bg-[#bf9b30]/[0.06] px-4 py-4 text-sm font-medium leading-relaxed text-slate-700">
+                  The modules visible to this owner depend on the active plan, including room limits and higher-tier feature access.
                 </div>
               </div>
             ) : (
@@ -350,7 +306,7 @@ export default function OwnerSubscription() {
                   value={hotelForm.hotelCode}
                   disabled={!session?.subscriptionActive}
                   onChange={(event) => setHotelForm((current) => ({ ...current, hotelCode: event.target.value.toUpperCase() }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <input
                   type="text"
@@ -358,7 +314,7 @@ export default function OwnerSubscription() {
                   value={hotelForm.hotelName}
                   disabled={!session?.subscriptionActive}
                   onChange={(event) => setHotelForm((current) => ({ ...current, hotelName: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <input
                   type="text"
@@ -366,12 +322,12 @@ export default function OwnerSubscription() {
                   value={hotelForm.hotelAddress}
                   disabled={!session?.subscriptionActive}
                   onChange={(event) => setHotelForm((current) => ({ ...current, hotelAddress: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#0d1118] dark:text-slate-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={!session?.subscriptionActive || hotelSaving}
-                  className="w-full rounded-2xl bg-slate-900 px-5 py-3 text-[11px] font-black uppercase tracking-[0.24em] text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#bf9b30] dark:text-[#0d0c0a]"
+                  className="w-full rounded-2xl bg-slate-900 px-5 py-3 text-[11px] font-black uppercase tracking-[0.24em] text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {hotelSaving ? 'Saving...' : 'Save Hotel Setup'}
                 </button>

@@ -953,9 +953,11 @@ def _build_tour_payload(cur, room_id):
         return {
             "roomId": room_id,
             "panoramaUrl": fallback_panorama,
+            "previewUrl": fallback_panorama,
             "initialYaw": 0,
             "initialPitch": 0,
             "initialFov": 1.5708,
+            "isInteractive": False,
         }
 
     cur.execute(
@@ -974,21 +976,25 @@ def _build_tour_payload(cur, room_id):
         return {
             "roomId": room_id,
             "panoramaUrl": fallback_panorama,
+            "previewUrl": fallback_panorama,
             "initialYaw": 0,
             "initialPitch": 0,
             "initialFov": 1.5708,
+            "isInteractive": False,
         }
 
-    panorama_url = row.get("panorama_url")
-    if fallback_panorama and (not panorama_url or panorama_url in GENERIC_TOUR_IMAGE_PATHS):
-        panorama_url = fallback_panorama
+    configured_panorama_url = row.get("panorama_url")
+    has_dedicated_panorama = bool(configured_panorama_url and configured_panorama_url not in GENERIC_TOUR_IMAGE_PATHS)
+    panorama_url = configured_panorama_url if has_dedicated_panorama else fallback_panorama
 
     return {
         "roomId": row.get("room_id"),
         "panoramaUrl": panorama_url,
+        "previewUrl": fallback_panorama or panorama_url,
         "initialYaw": _to_float(row.get("initial_yaw"), 0),
         "initialPitch": _to_float(row.get("initial_pitch"), 0),
         "initialFov": _to_float(row.get("initial_fov"), 1.5708),
+        "isInteractive": has_dedicated_panorama,
     }
 
 
@@ -2278,6 +2284,125 @@ def _get_owner_subscription(cur, owner_id):
     return row
 
 
+def _resolve_owner_primary_hotel_id(cur, owner_id):
+    if not owner_id or not _table_exists(cur, "hotels"):
+        return None
+    cur.execute(
+        """
+        SELECT id
+        FROM hotels
+        WHERE owner_id = %s
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (owner_id,),
+    )
+    row = cur.fetchone() or {}
+    return row.get("id")
+
+
+def _activate_owner_subscription(cur, owner_id, package_row, billing_cycle="MONTHLY"):
+    _ensure_membership_tables(cur)
+    normalized_cycle = str(billing_cycle or "MONTHLY").upper()
+    if normalized_cycle not in {"MONTHLY", "ANNUAL"}:
+        raise ValueError("Invalid billing cycle.")
+    if not owner_id:
+        raise ValueError("Owner is required.")
+    if not package_row or not package_row.get("id"):
+        raise ValueError("Package not found.")
+
+    current_row = _get_owner_subscription(cur, owner_id) or {}
+    hotel_id = current_row.get("hotel_id") or _resolve_owner_primary_hotel_id(cur, owner_id)
+    amount = _package_amount_for_cycle(package_row, normalized_cycle)
+    starts_at, next_renewal = _subscription_cycle_dates(
+        current_row,
+        normalized_cycle,
+        carry_requires_payment_proof=True,
+    )
+    subscription_id = current_row.get("id")
+
+    if subscription_id:
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET
+                owner_id = %s,
+                hotel_id = %s,
+                package_id = %s,
+                billing_cycle = %s,
+                amount = %s,
+                status = 'ACTIVE',
+                payment_status = 'PAID',
+                paymongo_payment_id = NULL,
+                starts_at = %s,
+                renewal_date = %s,
+                last_paid_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (
+                owner_id,
+                hotel_id,
+                package_row.get("id"),
+                normalized_cycle,
+                amount,
+                starts_at,
+                next_renewal,
+                subscription_id,
+            ),
+        )
+        updated = cur.fetchone() or {}
+        subscription_id = updated.get("id") or subscription_id
+    else:
+        cur.execute(
+            """
+            INSERT INTO hotel_package_subscriptions (
+                owner_id, hotel_id, package_id, billing_cycle, amount,
+                status, payment_status, paymongo_payment_id, starts_at,
+                renewal_date, last_paid_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, 'ACTIVE', 'PAID', NULL, %s, %s, NOW(), NOW())
+            RETURNING id
+            """,
+            (
+                owner_id,
+                hotel_id,
+                package_row.get("id"),
+                normalized_cycle,
+                amount,
+                starts_at,
+                next_renewal,
+            ),
+        )
+        inserted = cur.fetchone() or {}
+        subscription_id = inserted.get("id")
+
+    cur.execute(
+        """
+        SELECT
+            s.*,
+            p.name AS package_name,
+            p.slug AS package_slug,
+            p.description AS package_description,
+            p.monthly_price,
+            p.annual_price,
+            p.max_rooms,
+            p.features,
+            h.hotel_name,
+            h.hotel_code,
+            h.hotel_address
+        FROM hotel_package_subscriptions s
+        LEFT JOIN membership_packages p ON p.id = s.package_id
+        LEFT JOIN hotels h ON h.id = s.hotel_id
+        WHERE s.id = %s
+        LIMIT 1
+        """,
+        (subscription_id,),
+    )
+    return cur.fetchone()
+
+
 def _serialize_owner_subscription(row):
     if not row:
         return {
@@ -2406,7 +2531,7 @@ def _reservation_owner_id(cur, reservation_id):
 
 
 def _owner_can_mutate(cur, owner_id):
-    return bool(owner_id) and _owner_is_approved(cur, owner_id) and _owner_has_active_subscription(cur, owner_id)
+    return bool(owner_id) and _owner_has_active_subscription(cur, owner_id)
 
 
 def _ensure_profile_media_columns(cur):
@@ -2706,8 +2831,6 @@ def _owner_feature_required_response(feature_key, subscription=None):
 
 def _owner_feature_guard(cur, owner_id, feature_key, mutation=False):
     subscription, allowed_features = _owner_access_state(cur, owner_id)
-    if not _owner_is_approved(cur, owner_id):
-        return _owner_approval_required_response(_owner_approval_status(cur, owner_id)), subscription
     if not subscription.get("isActive"):
         return (_owner_subscription_required_response() if mutation else None), subscription
     if feature_key in allowed_features:
@@ -3063,7 +3186,7 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
             <p><strong>Hotel:</strong> {safe_hotel_name}</p>
             <p><strong>Assigned Hotel Code:</strong> <span style="font-size: 18px; letter-spacing: 1px;">{safe_hotel_code}</span></p>
             <p>Please keep this code for hotel setup, staff access, and future owner account references.</p>
-            <p>You can now log in to the owner portal, but owner actions remain locked until subscription payment is completed.</p>
+            <p>You can now log in to the owner portal and activate a subscription to unlock the owner tools included in your plan.</p>
             <p>Thank you,<br>Innova HMS</p>
         </div>
     """
@@ -3073,7 +3196,7 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
         f"Hotel: {hotel_name or 'your hotel'}\n"
         f"Assigned Hotel Code: {hotel_code}\n\n"
         "Please keep this code for hotel setup, staff access, and future owner account references.\n"
-        "You can now log in to the owner portal, but owner actions remain locked until subscription payment is completed.\n\n"
+        "You can now log in to the owner portal and activate a subscription to unlock the owner tools included in your plan.\n\n"
         "Thank you,\nInnova HMS"
     )
 
@@ -5349,7 +5472,7 @@ def owner_signup():
                     False,
                 )
                 return jsonify({
-                    'message': 'Owner and hotel registered successfully. The account is now pending admin review before owner tools can be used.',
+                    'message': 'Owner and hotel registered successfully. Activate a subscription to unlock the owner tools included in your plan.',
                     'ownerId': owner_id,
                     'hotelId': hotel['id'],
                     'hotelName': hotel.get('hotel_name') or 'Hotel',
@@ -5487,7 +5610,7 @@ def owner_signup():
             True,
         )
         return jsonify({
-            'message': 'Owner and hotel registered successfully. The account is now pending admin review before owner tools can be used.',
+            'message': 'Owner and hotel registered successfully. Activate a subscription to unlock the owner tools included in your plan.',
             'ownerId': owner_id,
             'hotelId': hotel_id,
             'hotelName': hotel_name or 'Hotel',
@@ -5768,17 +5891,6 @@ def owner_create_subscription_payment_link():
     conn = None
     cur = None
     try:
-        if not _is_integration_enabled("paymongo", default=True):
-            return _integration_disabled_error(
-                "paymongo",
-                "PayMongo payments are temporarily disabled by the admin.",
-            )
-
-        simulation_mode = _owner_subscription_simulation_enabled()
-        paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
-        if not simulation_mode and (not paymongo_key or 'your_' in paymongo_key):
-            return jsonify({'error': 'PayMongo API key not configured. Please set PAYMONGO_SECRET_KEY in backend/.env file.'}), 503
-
         data = request.get_json(silent=True) or {}
         owner_id = _to_int(data.get("ownerId"), 0)
         package_id = _to_int(data.get("packageId"), 0)
@@ -5811,86 +5923,37 @@ def owner_create_subscription_payment_link():
         if not package_row:
             return jsonify({"error": "Package not found."}), 404
 
-        amount = _package_amount_for_cycle(package_row, billing_cycle)
-        amount_cents = int(round(amount * 100))
-        if amount_cents <= 0:
+        subscription_row = _activate_owner_subscription(cur, owner_id, package_row, billing_cycle)
+        amount = _to_float((subscription_row or {}).get("amount"), 0)
+        if amount <= 0:
             return jsonify({"error": "Invalid subscription amount."}), 400
-
-        cur.execute("SELECT id FROM hotels WHERE owner_id = %s ORDER BY id ASC LIMIT 1", (owner_id,))
-        hotel = cur.fetchone() or {}
-        hotel_id = hotel.get("id")
-        current_subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_id))
-        pending_status = 'ACTIVE' if current_subscription.get("isActive") else 'PENDING'
-
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-        success_url = _owner_subscription_checkout_url(frontend_url, 'success', simulation_mode)
-        failed_url = _owner_subscription_checkout_url(frontend_url, 'failed', simulation_mode)
-
-        if simulation_mode:
-            link_id = _owner_subscription_simulated_link_id(owner_id, package_id, billing_cycle)
-            checkout_url = success_url
-        else:
-            payload = {
-                'data': {
-                    'attributes': {
-                        'amount': amount_cents,
-                        'currency': 'PHP',
-                        'description': f'Innova HMS {package_row.get("name")} {billing_cycle.title()} Subscription',
-                        'remarks': f'Owner #{owner_id} subscription',
-                        'redirect': {'success': success_url, 'failed': failed_url},
-                    }
-                }
-            }
-            response = requests.post(
-                'https://api.paymongo.com/v1/links',
-                json=payload,
-                headers=_paymongo_headers(),
-                timeout=15,
-            )
-            result = response.json()
-            if not response.ok:
-                errors = result.get('errors', [{}])
-                msg = errors[0].get('detail', 'PayMongo error') if errors else 'PayMongo error'
-                return jsonify({'error': msg}), 400
-
-            link_data = result.get('data', {})
-            attrs = link_data.get('attributes', {})
-            checkout_url = attrs.get('checkout_url', '')
-            link_id = link_data.get('id', '')
 
         cur.execute(
             """
-            INSERT INTO hotel_package_subscriptions (
-                owner_id, hotel_id, package_id, billing_cycle, amount, status,
-                payment_status, paymongo_payment_id, starts_at, updated_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, 'PENDING', %s, CURRENT_DATE, NOW())
-            ON CONFLICT (owner_id) DO UPDATE SET
-                hotel_id = EXCLUDED.hotel_id,
-                package_id = EXCLUDED.package_id,
-                billing_cycle = EXCLUDED.billing_cycle,
-                amount = EXCLUDED.amount,
-                status = %s,
-                payment_status = 'PENDING',
-                paymongo_payment_id = EXCLUDED.paymongo_payment_id,
-                updated_at = NOW()
-            RETURNING id
+            SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
+            FROM owners o
+            LEFT JOIN hotels h ON o.id = h.owner_id
+            WHERE o.id = %s
+            LIMIT 1
             """,
-            (owner_id, hotel_id, package_id, billing_cycle, amount, pending_status, link_id, pending_status),
+            (owner_id,),
         )
-        subscription_row = cur.fetchone() or {}
+        owner = cur.fetchone()
+        serialized_subscription = _serialize_owner_subscription(subscription_row)
         conn.commit()
         return jsonify({
-            "checkoutUrl": checkout_url,
-            "linkId": link_id,
-            "subscriptionId": subscription_row.get("id"),
+            "message": f"{package_row.get('name')} {billing_cycle.lower()} subscription activated successfully.",
+            "subscriptionId": (subscription_row or {}).get("id"),
             "amount": amount,
             "packageName": package_row.get("name"),
             "billingCycle": billing_cycle,
-            "isSimulated": simulation_mode,
+            "subscription": serialized_subscription,
+            "session": _owner_session_payload(cur, owner) if owner else None,
+            "checkoutUrl": None,
+            "linkId": None,
+            "isSimulated": True,
+            "autoActivated": True,
         }), 200
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'PayMongo request timed out. Try again.'}), 504
     except Exception as e:
         if conn:
             conn.rollback()
@@ -8159,7 +8222,7 @@ def owner_cancel_reservation(reservation_id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         owner_id = _reservation_owner_id(cur, reservation_id)
         if not _owner_can_mutate(cur, owner_id):
-            return _owner_approval_required_response(_owner_approval_status(cur, owner_id)) if not _owner_is_approved(cur, owner_id) else _owner_subscription_required_response()
+            return _owner_subscription_required_response()
         cur.execute(
             "UPDATE reservations SET status = 'CANCELLED' WHERE id = %s RETURNING id",
             (reservation_id,)
@@ -8184,7 +8247,7 @@ def owner_delete_reservation(reservation_id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         owner_id = _reservation_owner_id(cur, reservation_id)
         if not _owner_can_mutate(cur, owner_id):
-            return _owner_approval_required_response(_owner_approval_status(cur, owner_id)) if not _owner_is_approved(cur, owner_id) else _owner_subscription_required_response()
+            return _owner_subscription_required_response()
         cur.execute("DELETE FROM reservations WHERE id = %s RETURNING id", (reservation_id,))
         if not cur.fetchone():
             return jsonify({'error': 'Reservation not found'}), 404
@@ -8794,6 +8857,7 @@ def get_recommendations():
             first_image = images[0] if images else "https://images.unsplash.com/photo-1611892440504-42a792e24d32"
             max_adults = int(row.get('max_adults') or 0)
             max_children = int(row.get('max_children') or 0)
+            room_tour = _build_tour_payload(cur, row.get('id'))
 
             formatted_rooms.append({
                 "id": row.get('id'),
@@ -8808,7 +8872,7 @@ def get_recommendations():
                 "has_wifi": any('wifi' in a for a in amenities),
                 "has_pool": any('pool' in a for a in amenities),
                 "has_dining": any('breakfast' in a or 'dining' in a for a in amenities),
-                "has_virtual_tour": True
+                "has_virtual_tour": bool((room_tour or {}).get("isInteractive"))
             })
 
         return jsonify(formatted_rooms), 200
@@ -10384,7 +10448,7 @@ def vision_rooms():
             room_id = row.get("id")
             has_tour = False
             try:
-                has_tour = bool(_build_tour_payload(cur, room_id))
+                has_tour = bool((_build_tour_payload(cur, room_id) or {}).get("isInteractive"))
             except Exception:
                 has_tour = False
 

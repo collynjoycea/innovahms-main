@@ -46,13 +46,14 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const [viewerError, setViewerError] = useState(false);
-
-  // Resolve panorama URL once — handles relative paths, full URLs, and null
+  const isInteractive = Boolean(tour?.isInteractive);
   const panoramaUrl = tour?.panoramaUrl ? resolveImg(tour.panoramaUrl, null) : null;
+  const previewUrl = tour?.previewUrl ? resolveImg(tour.previewUrl, panoramaUrl) : panoramaUrl;
 
   useEffect(() => {
     if (!open) return;
     if (!containerRef.current) return;
+    if (!isInteractive) return;
     if (!panoramaUrl) return;
 
     try {
@@ -80,7 +81,7 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
       try { viewerRef.current?.destroy?.(); } catch { }
       viewerRef.current = null;
     };
-  }, [open, panoramaUrl]);
+  }, [open, panoramaUrl, isInteractive]);
 
   if (!open) return null;
 
@@ -106,17 +107,19 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
           <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
             Loading 360 tour...
           </div>
-        ) : panoramaUrl && !viewerError ? (
+        ) : isInteractive && panoramaUrl && !viewerError ? (
           <div ref={containerRef} className="h-full w-full" />
-        ) : panoramaUrl ? (
+        ) : previewUrl ? (
           <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
             <img
-              src={panoramaUrl}
+              src={previewUrl}
               alt={roomName}
               className="max-h-[70vh] max-w-full object-contain"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
-            <p className="text-white/70 text-sm font-semibold">Preview mode loaded for this tour.</p>
+            <p className="text-white/70 text-sm font-semibold">
+              {viewerError ? "Preview mode loaded because the 360 viewer could not start." : "Preview mode loaded for this room image."}
+            </p>
           </div>
         ) : (
           <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
@@ -274,15 +277,21 @@ export default function VisionSuites() {
     setTourLoading(true);
     const fallbackTour = {
       panoramaUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || "/images/deluxe-room.jpg",
+      previewUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || "/images/deluxe-room.jpg",
       initialYaw: 0,
       initialPitch: 0,
       initialFov: Math.PI / 2,
+      isInteractive: false,
     };
     try {
       const res = await fetch(`/api/vision/rooms/${room.id}/tour`);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `Tour load failed (HTTP ${res.status}).`);
-      setTourData(payload.tour || fallbackTour);
+      setTourData(payload?.tour ? {
+        ...fallbackTour,
+        ...payload.tour,
+        previewUrl: payload.tour?.previewUrl || payload.tour?.panoramaUrl || fallbackTour.previewUrl,
+      } : fallbackTour);
     } catch {
       setTourData(fallbackTour);
     } finally {

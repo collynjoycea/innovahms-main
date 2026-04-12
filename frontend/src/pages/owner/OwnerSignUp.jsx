@@ -522,8 +522,8 @@ export default function OwnerSignUp() {
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-[#6b5d45] dark:text-[#b7a88d]">
                     {successData.createdHotel
-                      ? "Your owner account and hotel profile are saved. Keep this hotel code while the registration waits for admin review."
-                      : "Your owner account is now linked to the existing hotel code shown below and is waiting for admin review."}
+                      ? "Your owner account and hotel profile are saved. Keep this hotel code and activate a subscription to unlock the included owner tools."
+                      : "Your owner account is now linked to the existing hotel code shown below. Activate a subscription when you're ready to unlock the owner tools."}
                   </p>
                 </div>
               </div>

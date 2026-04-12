@@ -35,6 +35,7 @@ export default function VirtualTour() {
   const [roomName, setRoomName] = useState("Innova Room");
   const [tour, setTour] = useState({
     panoramaUrl: FALLBACK_PANORAMA,
+    previewUrl: FALLBACK_PANORAMA,
     initialYaw: 0,
     initialPitch: 0,
     initialFov: Math.PI / 2,
@@ -73,6 +74,7 @@ export default function VirtualTour() {
         setRoomName(location.state?.roomName || "Innova Room");
         setTour({
           panoramaUrl: previewFromState,
+          previewUrl: previewFromState,
           initialYaw: 0,
           initialPitch: 0,
           initialFov: Math.PI / 2,
@@ -99,6 +101,7 @@ export default function VirtualTour() {
           setRoomName(currentRoom.roomName || currentRoom.name || "Innova Room");
           setTour({
             panoramaUrl: currentPreview,
+            previewUrl: currentPreview,
             initialYaw: 0,
             initialPitch: 0,
             initialFov: Math.PI / 2,
@@ -111,13 +114,17 @@ export default function VirtualTour() {
         const tourPayload = await tourRes.json().catch(() => ({}));
 
         if (tourRes.ok && tourPayload?.tour && isMounted) {
-          setHasInteractiveTour(true);
+          setHasInteractiveTour(Boolean(tourPayload.tour.isInteractive));
           setTour({
             panoramaUrl: resolveImg(tourPayload.tour.panoramaUrl, currentPreview),
+            previewUrl: resolveImg(tourPayload.tour.previewUrl, currentPreview),
             initialYaw: Number(tourPayload.tour.initialYaw || 0),
             initialPitch: Number(tourPayload.tour.initialPitch || 0),
             initialFov: Number(tourPayload.tour.initialFov || Math.PI / 2),
           });
+          if (!tourPayload.tour.isInteractive) {
+            setNotice("This room currently has a preview image only. A dedicated 360 panorama has not been configured yet.");
+          }
         } else if (isMounted) {
           setNotice("No dedicated 360 tour is configured for this room, suite, or amenity yet. Showing its current preview.");
         }
@@ -210,7 +217,7 @@ export default function VirtualTour() {
           {(!isActive || !hasInteractiveTour) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl overflow-hidden">
               <img
-                src={tour.panoramaUrl || FALLBACK_PANORAMA}
+                src={tour.previewUrl || tour.panoramaUrl || FALLBACK_PANORAMA}
                 alt={`${roomName} preview`}
                 className="absolute inset-0 w-full h-full object-cover opacity-70 transition-opacity duration-500 group-hover:opacity-85"
               />

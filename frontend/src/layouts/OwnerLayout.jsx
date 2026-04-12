@@ -214,7 +214,7 @@ const OwnerLayout = () => {
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-700">Read-Only Portal</p>
                   <p className="mt-1 text-sm font-semibold text-amber-900">
-                    Your hotel is registered, but owner actions stay locked until you pay a subscription.
+                    Your hotel is registered, but owner actions stay locked until you activate a subscription.
                   </p>
                 </div>
                 <button
@@ -222,7 +222,7 @@ const OwnerLayout = () => {
                   onClick={() => navigate('/owner/subscription')}
                   className="rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-white"
                 >
-                  Pay Subscription
+                  Activate Subscription
                 </button>
               </div>
             </div>
