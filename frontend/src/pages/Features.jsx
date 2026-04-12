@@ -28,9 +28,9 @@ export default function Features() {
     },
     { 
       title: "Indoor Navigation", 
-      desc: "Dynamic, interactive property maps guiding guests seamlessly through large resorts.", 
+      desc: "Dynamic, interactive property maps guiding guests seamlessly through large hotels.", 
       icon: <Map className="w-8 h-8 text-[#bf9b30]" />,
-      img: "https://images.unsplash.com/photo-1569336415962-a4bd4f79c3f2?q=80&w=400"
+      img: "/images/AI-concierge.jpg"
     }
   ];
 

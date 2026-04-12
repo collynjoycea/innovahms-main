@@ -41,7 +41,7 @@ def get_db_connection():
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "innovahmsdb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "12345"),
+        password=os.getenv("DB_PASSWORD", "lily1245"),
         port=os.getenv("DB_PORT", "5432"),
     )
 
