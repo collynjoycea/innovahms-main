@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, ArrowRight, Globe, AlertCircle, Landmark, Sparkles } from 'lucide-react';
 import ForgotPasswordModal from '../../components/ForgotPasswordModal';
 import { isValidEmail, normalizeEmail } from '../../utils/authValidation';
+import { persistOwnerSession, readOwnerSession } from '../../utils/ownerSession';
 
 const InputField = ({ label, type, icon, placeholder, value, onChange, isFocused, onFocus, onBlur, children }) => (
   <div className="group relative">
@@ -34,8 +35,6 @@ const InputField = ({ label, type, icon, placeholder, value, onChange, isFocused
   </div>
 );
 
-const OWNER_SESSION_KEY = 'ownerSession';
-
 const OwnerLogin = () => {
   const navigate = useNavigate();
   const [focused, setFocused] = useState(null);
@@ -53,8 +52,7 @@ const OwnerLogin = () => {
   }, []);
 
   useEffect(() => {
-    const storedSession = localStorage.getItem(OWNER_SESSION_KEY);
-    if (storedSession) navigate('/owner');
+    if (readOwnerSession()?.email) navigate('/owner');
   }, [navigate]);
 
   const handleSubmit = async (event) => {
@@ -79,20 +77,32 @@ const OwnerLogin = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, email: normalizedEmail }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (response.ok) {
-        localStorage.setItem(OWNER_SESSION_KEY, JSON.stringify({
-          ...data.owner,
-          loginTime: new Date().toISOString()
-        }));
-        window.dispatchEvent(new Event("ownerSessionUpdated"));
-        navigate('/owner');
+        try {
+          persistOwnerSession(
+            {
+              ...(data?.owner || {}),
+              loginTime: new Date().toISOString(),
+            },
+            { merge: false }
+          );
+          navigate('/owner');
+        } catch {
+          setFeedback('Unable to create browser session. Please clear site storage and try again.');
+        }
       } else {
-        setFeedback(data.error || 'Authentication Failed');
+        if (response.status === 401) {
+          setFeedback(data?.error || 'Invalid email or password');
+        } else if (response.status >= 500) {
+          setFeedback(data?.error || 'Server error. Ensure Flask is running.');
+        } else {
+          setFeedback(data?.error || `Authentication failed (${response.status})`);
+        }
       }
     } catch (error) {
-      setFeedback('Cloud Link Interrupted');
+      setFeedback('Cannot connect to the server. Ensure Vite and Flask are running.');
     } finally {
       setIsSubmitting(false);
     }
