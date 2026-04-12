@@ -1,0 +1,132 @@
+version: "3.1"
+
+intents:
+  - greet
+  - goodbye
+  - affirm
+  - deny
+  - ask_room_availability
+  - ask_amenities
+  - ask_checkin_checkout
+  - request_booking_help
+  - ask_digital_key
+  - ask_loyalty_points
+  - modify_booking
+  - cancel_booking
+  - inform_booking_details
+  - ask_about_hotel
+  - ask_features
+  - ask_virtual_tour
+  - ask_reviews
+  - ask_payment_methods
+  - ask_cancellation_policy
+  - ask_contact_info
+  - ask_location
+  - ask_restaurant
+  - ask_parking
+  - ask_transportation
+  - ask_membership
+  - ask_special_requests
+  - ask_information
+  - out_of_scope
+
+entities:
+  - room_type
+  - amenity
+  - guest_count
+  - check_in_date
+  - check_out_date
+  - payment_method
+
+slots:
+  room_type:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: room_type
+  amenity:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: amenity
+  guest_count:
+    type: float
+    mappings:
+      - type: from_entity
+        entity: guest_count
+  check_in_date:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: check_in_date
+  check_out_date:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: check_out_date
+
+responses:
+  utter_greet:
+    - text: "Welcome to Innova-HMS! I'm your 24/7 AI assistant. Feel free to ask me anything!"
+  utter_goodbye:
+    - text: "Thank you. If you need help with your stay, room selection, or booking concerns, just send a message."
+  utter_ask_booking_details:
+    - text: "Please share your preferred room type, check-in/check-out dates, or number of guests so I can guide your reservation."
+  utter_about_hotel:
+    - text: "Innova-HMS is a smart hotel platform providing seamless booking, check-in, digital keys, loyalty rewards, and 24/7 guest support. Check our About Us page for more details."
+  utter_features:
+    - text: "Our key features include: 360 virtual tours, instant digital key access via QR, loyalty points program, real-time room availability, instant booking confirmation, and smart concierge support. Visit Features page for more."
+  utter_virtual_tour:
+    - text: "Your can explore 360 virtual tours of our rooms from the Home page or Vision Suites section. Click 'Explore 360' on any room card to start your virtual tour."
+  utter_reviews:
+    - text: "Check our guest reviews on the Home page Reviews section to see what previous guests say about their experience with us."
+  utter_payment_methods:
+    - text: "We accept all major credit cards, debit cards, and online payment methods. Payment details are confirmed during checkout."
+  utter_cancellation_policy:
+    - text: "We offer free cancellation up to 48 hours before check-in. Check your booking details or our Privileges page for the full cancellation policy."
+  utter_contact_info:
+    - text: "You can contact us through the Contact page with your phone number and email. Our team responds within hours during business hours."
+  utter_location:
+    - text: "You can find our exact location, directions, and interactive map on the Neighborhood Map page. We're centrally located for easy access to major attractions."
+  utter_restaurant:
+    - text: "Yes, we have an on-site restaurant offering local and international cuisine. You can make dining reservations through the front desk or during your stay."
+  utter_parking:
+    - text: "Yes, free parking is available for our guests. Parking details and instructions are provided upon check-in."
+  utter_transportation:
+    - text: "Airport transfers and shuttle services are available upon request. Contact us during booking or check-in to arrange transportation."
+  utter_membership:
+    - text: "Join our membership program to earn loyalty points on every booking! Check the Membership page for benefits, tiers, and how to sign up for exclusive rewards."
+  utter_special_requests:
+    - text: "We accommodate special requests based on availability. Please mention your special needs during booking or contact our team directly."
+  utter_information:
+    - text: "I'd be happy to help! Feel free to ask me anything about the hotel, our policies, amenities, booking process, or any other information you need. What specifically would you like to know?"
+  utter_out_of_scope:
+    - text: "I'm here to help with anything you need. Feel free to ask me any question about the hotel, your booking, or anything else!"
+
+actions:
+  - action_check_room_availability
+  - action_get_amenities
+  - action_get_checkin_checkout_info
+  - action_reservation_assistance
+  - action_get_digital_key_status
+  - action_get_loyalty_summary
+  - action_get_booking_policy
+  - action_capture_guest_preferences
+  - action_get_about_hotel
+  - action_get_features
+  - action_get_virtual_tour_info
+  - action_get_reviews
+  - action_get_payment_methods
+  - action_get_cancellation_policy
+  - action_get_contact_info
+  - action_get_location_info
+  - action_get_restaurant_info
+  - action_get_parking_info
+  - action_get_transportation_info
+  - action_get_membership_info
+  - action_handle_special_requests
+  - action_default_fallback
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true

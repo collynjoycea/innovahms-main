@@ -1,0 +1,129 @@
+version: "3.1"
+
+rules:
+  - rule: greet user
+    steps:
+      - intent: greet
+      - action: utter_greet
+
+  - rule: say goodbye
+    steps:
+      - intent: goodbye
+      - action: utter_goodbye
+
+  - rule: room availability
+    steps:
+      - intent: ask_room_availability
+      - action: action_check_room_availability
+      - action: action_capture_guest_preferences
+
+  - rule: amenities
+    steps:
+      - intent: ask_amenities
+      - action: action_get_amenities
+
+  - rule: checkin checkout
+    steps:
+      - intent: ask_checkin_checkout
+      - action: action_get_checkin_checkout_info
+
+  - rule: reservation assistance
+    steps:
+      - intent: request_booking_help
+      - action: action_reservation_assistance
+      - action: action_capture_guest_preferences
+
+  - rule: digital key
+    steps:
+      - intent: ask_digital_key
+      - action: action_get_digital_key_status
+
+  - rule: loyalty summary
+    steps:
+      - intent: ask_loyalty_points
+      - action: action_get_loyalty_summary
+
+  - rule: modify booking
+    steps:
+      - intent: modify_booking
+      - action: action_get_booking_policy
+
+  - rule: cancel booking
+    steps:
+      - intent: cancel_booking
+      - action: action_get_booking_policy
+
+  - rule: about hotel
+    steps:
+      - intent: ask_about_hotel
+      - action: utter_about_hotel
+
+  - rule: features
+    steps:
+      - intent: ask_features
+      - action: utter_features
+
+  - rule: virtual tour
+    steps:
+      - intent: ask_virtual_tour
+      - action: utter_virtual_tour
+
+  - rule: reviews
+    steps:
+      - intent: ask_reviews
+      - action: utter_reviews
+
+  - rule: payment methods
+    steps:
+      - intent: ask_payment_methods
+      - action: utter_payment_methods
+
+  - rule: cancellation policy
+    steps:
+      - intent: ask_cancellation_policy
+      - action: utter_cancellation_policy
+
+  - rule: contact info
+    steps:
+      - intent: ask_contact_info
+      - action: utter_contact_info
+
+  - rule: location
+    steps:
+      - intent: ask_location
+      - action: utter_location
+
+  - rule: restaurant
+    steps:
+      - intent: ask_restaurant
+      - action: utter_restaurant
+
+  - rule: parking
+    steps:
+      - intent: ask_parking
+      - action: utter_parking
+
+  - rule: transportation
+    steps:
+      - intent: ask_transportation
+      - action: utter_transportation
+
+  - rule: membership
+    steps:
+      - intent: ask_membership
+      - action: utter_membership
+
+  - rule: special requests
+    steps:
+      - intent: ask_special_requests
+      - action: utter_special_requests
+
+  - rule: general information
+    steps:
+      - intent: ask_information
+      - action: utter_information
+
+  - rule: fallback
+    steps:
+      - intent: out_of_scope
+      - action: utter_out_of_scope
