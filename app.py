@@ -10,6 +10,7 @@ import requests
 import threading
 import re
 import uuid
+import random
 from html import escape
 from datetime import datetime, timedelta
 from collections import Counter, defaultdict
@@ -45,8 +46,17 @@ def get_db_connection():
     )
 
 UPLOAD_FOLDER = 'static/uploads/rooms'
+OWNER_DOCUMENT_UPLOAD_FOLDER = os.path.join('static', 'uploads', 'owner-documents')
+OWNER_DOCUMENT_FIELDS = {
+    'businessPermit': 'business_permit_path',
+    'birCertificate': 'bir_certificate_path',
+    'fireSafetyCertificate': 'fire_safety_certificate_path',
+    'validId': 'valid_id_path',
+}
+OWNER_DOCUMENT_ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'webp'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OWNER_DOCUMENT_UPLOAD_FOLDER, exist_ok=True)
 
 
 def _safe_close(conn=None, cur=None):
@@ -113,6 +123,11 @@ def _table_has_column(cur, table_name, column_name):
         (table_name, column_name),
     )
     return cur.fetchone() is not None
+
+
+def _allowed_owner_document(filename):
+    ext = str(filename or '').rsplit('.', 1)[-1].lower()
+    return ext in OWNER_DOCUMENT_ALLOWED_EXTENSIONS
 
 
 def _parse_text_array(value):
@@ -204,6 +219,221 @@ def _to_int(value, default=0):
         return int(default)
 
 
+EMAIL_PATTERN = re.compile(r"^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$", re.IGNORECASE)
+NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z\s'.-]{1,49}$")
+HOTEL_CODE_PATTERN = re.compile(r"^INNOVAHMS-\d+$", re.IGNORECASE)
+
+
+def _normalize_email(value):
+    return str(value or "").strip().lower()
+
+
+def _normalize_phone(value):
+    raw = re.sub(r"[^\d+]", "", str(value or "").strip())
+    if raw.startswith("+"):
+        return f"+{re.sub(r'[^\d]', '', raw[1:])}"
+    digits = re.sub(r"\D", "", raw)
+    if digits.startswith("63") and len(digits) == 12:
+        return f"+{digits}"
+    if digits.startswith("09") and len(digits) == 11:
+        return f"+63{digits[1:]}"
+    return digits
+
+
+def _is_valid_email(value):
+    return bool(EMAIL_PATTERN.fullmatch(_normalize_email(value)))
+
+
+def _is_valid_name(value):
+    return bool(NAME_PATTERN.fullmatch(str(value or "").strip()))
+
+
+def _is_valid_phone(value):
+    normalized = _normalize_phone(value)
+    if normalized.startswith("+63"):
+        return len(normalized) == 13
+    digits = re.sub(r"\D", "", normalized)
+    return len(digits) >= 10
+
+
+def _is_valid_hotel_code(value):
+    return bool(HOTEL_CODE_PATTERN.fullmatch(str(value or "").strip().upper()))
+
+
+def _password_strength_errors(password):
+    value = str(password or "")
+    issues = []
+    if len(value) < 8:
+        issues.append("at least 8 characters")
+    if not re.search(r"[A-Z]", value):
+        issues.append("one uppercase letter")
+    if not re.search(r"[a-z]", value):
+        issues.append("one lowercase letter")
+    if not re.search(r"\d", value):
+        issues.append("one number")
+    if not re.search(r"[^A-Za-z0-9]", value):
+        issues.append("one special character")
+    return issues
+
+
+def _password_strength_message(password):
+    issues = _password_strength_errors(password)
+    if not issues:
+        return ""
+    return "Password must contain " + ", ".join(issues) + "."
+
+
+def _ensure_password_reset_tables(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_otps (
+            id SERIAL PRIMARY KEY,
+            user_type VARCHAR(20) NOT NULL,
+            user_id INTEGER NOT NULL,
+            email VARCHAR(120),
+            contact_number VARCHAR(30),
+            channel VARCHAR(10) NOT NULL DEFAULT 'email',
+            otp_hash TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            consumed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_password_reset_otps_lookup
+        ON password_reset_otps (user_type, user_id, created_at DESC)
+        """
+    )
+
+
+AUTH_USER_MAP = {
+    "customer": {
+        "table": "customers",
+        "label": "customer",
+        "select": "id, first_name, last_name, email, contact_number, password_hash",
+        "name_sql": "COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')",
+        "contact_column": "contact_number",
+        "requires_hotel_code": False,
+    },
+    "owner": {
+        "table": "owners",
+        "label": "owner",
+        "select": "id, first_name, last_name, email, contact_number, password_hash",
+        "name_sql": "COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')",
+        "contact_column": "contact_number",
+        "requires_hotel_code": False,
+    },
+    "staff": {
+        "table": "staff",
+        "label": "staff",
+        "select": "id, first_name, last_name, email, contact_number, password_hash, hotel_code",
+        "name_sql": "COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')",
+        "contact_column": "contact_number",
+        "requires_hotel_code": True,
+    },
+    "admin": {
+        "table": "admins",
+        "label": "admin",
+        "select": "id, name, email, password_hash",
+        "name_sql": "COALESCE(name, 'Admin')",
+        "contact_column": None,
+        "requires_hotel_code": False,
+    },
+}
+
+
+def _fetch_auth_user(cur, user_type, email, hotel_code=None):
+    config = AUTH_USER_MAP.get((user_type or "").strip().lower())
+    if not config:
+        return None
+
+    normalized_email = _normalize_email(email)
+    params = [normalized_email]
+    query = f"SELECT {config['select']}, {config['name_sql']} AS full_name FROM {config['table']} WHERE LOWER(email) = %s"
+    if config["requires_hotel_code"]:
+        query += " AND UPPER(COALESCE(hotel_code, '')) = %s"
+        params.append(str(hotel_code or "").strip().upper())
+    query += " ORDER BY id DESC LIMIT 1"
+    cur.execute(query, tuple(params))
+    return cur.fetchone()
+
+
+def _generate_otp_code():
+    return "".join(random.choices("0123456789", k=6))
+
+
+def _mask_email(value):
+    email = _normalize_email(value)
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        local_mask = f"{local[:1]}*"
+    else:
+        local_mask = f"{local[:2]}***"
+    return f"{local_mask}@{domain}"
+
+
+def _mask_phone(value):
+    normalized = _normalize_phone(value)
+    digits = re.sub(r"\D", "", normalized)
+    if len(digits) < 4:
+        return normalized
+    return f"***{digits[-4:]}"
+
+
+def _send_password_reset_otp(user, user_type, otp_code, channel):
+    channel_value = "sms" if str(channel or "").lower() == "sms" else "email"
+    recipient_email = _normalize_email(user.get("email"))
+    recipient_phone = user.get("contact_number") or ""
+    recipient_name = (user.get("full_name") or user.get("name") or user_type.title()).strip() or user_type.title()
+
+    subject = "Your Innova HMS password reset OTP"
+    plain_text = (
+        f"Hello {recipient_name},\n\n"
+        f"Your password reset OTP is {otp_code}. This code expires in 10 minutes.\n\n"
+        "If you did not request this, please ignore this message.\n\n"
+        "Innova HMS"
+    )
+    html_content = (
+        "<div style=\"font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;\">"
+        f"<p>Hello {escape(recipient_name)},</p>"
+        f"<p>Your password reset OTP is <strong style=\"font-size:20px;letter-spacing:4px;\">{escape(otp_code)}</strong>.</p>"
+        "<p>This code expires in 10 minutes.</p>"
+        "<p>If you did not request this, please ignore this message.</p>"
+        "<p>Innova HMS</p>"
+        "</div>"
+    )
+
+    if channel_value == "sms":
+        try:
+            if _is_integration_enabled("twilio", default=True):
+                twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
+                twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
+                twilio_phone = os.getenv("TWILIO_PHONE_NUMBER")
+                if all([twilio_sid, twilio_token, twilio_phone, recipient_phone]):
+                    from twilio.rest import Client
+                    client = Client(twilio_sid, twilio_token)
+                    client.messages.create(
+                        body=f"Innova HMS OTP: {otp_code}. Expires in 10 minutes.",
+                        from_=twilio_phone,
+                        to=recipient_phone,
+                    )
+                    return True, None
+        except Exception as exc:
+            print(f"Password reset SMS error: {exc}")
+        return False, otp_code
+
+    try:
+        if recipient_email and _send_sendgrid_email(recipient_email, subject, html_content, plain_text):
+            return True, None
+    except Exception as exc:
+        print(f"Password reset email error: {exc}")
+    return False, otp_code
+
+
 def _to_int_or_none(value):
     try:
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -213,7 +443,409 @@ def _to_int_or_none(value):
         return None
 
 
+API_INTEGRATION_DEFAULTS = [
+    {
+        "slug": "paymongo",
+        "name": "PayMongo",
+        "category": "Payment",
+        "description": "Guest bookings and subscription payments.",
+        "tier": "All",
+    },
+    {
+        "slug": "sendgrid",
+        "name": "SendGrid",
+        "category": "Email",
+        "description": "Transactional email delivery for notifications and onboarding.",
+        "tier": "All",
+    },
+    {
+        "slug": "twilio",
+        "name": "Twilio",
+        "category": "SMS",
+        "description": "SMS delivery for alerts and guest-facing notifications.",
+        "tier": "Pro+",
+    },
+    {
+        "slug": "rasa",
+        "name": "RASA AI",
+        "category": "AI / NLP",
+        "description": "Chat assistant used across booking and concierge flows.",
+        "tier": "Pro+",
+    },
+    {
+        "slug": "openstreetmap",
+        "name": "OpenStreetMap",
+        "category": "Maps",
+        "description": "Map tiles, search, and hotel geocoding support.",
+        "tier": "Enterprise",
+    },
+]
+
+API_INTEGRATION_INDEX = {
+    item["slug"]: item
+    for item in API_INTEGRATION_DEFAULTS
+}
+
+
+def _ensure_api_integrations_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_integrations (
+            id SERIAL PRIMARY KEY,
+            slug VARCHAR(80) NOT NULL UNIQUE,
+            name VARCHAR(120) NOT NULL,
+            category VARCHAR(80) NOT NULL,
+            description TEXT,
+            service_tier VARCHAR(40) DEFAULT 'All',
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            last_disabled_reason TEXT,
+            updated_by VARCHAR(160),
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    alter_statements = [
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS service_tier VARCHAR(40) DEFAULT 'All'",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS last_disabled_reason TEXT",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS updated_by VARCHAR(160)",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE api_integrations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ]
+    for statement in alter_statements:
+        cur.execute(statement)
+
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_integrations_slug ON api_integrations(slug)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_api_integrations_order ON api_integrations(display_order, id)")
+
+
+def _seed_api_integrations(cur):
+    _ensure_api_integrations_table(cur)
+
+    for display_order, item in enumerate(API_INTEGRATION_DEFAULTS, start=1):
+        cur.execute(
+            """
+            INSERT INTO api_integrations (
+                slug, name, category, description, service_tier, is_enabled, display_order
+            )
+            VALUES (%s, %s, %s, %s, %s, TRUE, %s)
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                category = EXCLUDED.category,
+                description = EXCLUDED.description,
+                service_tier = EXCLUDED.service_tier,
+                display_order = EXCLUDED.display_order
+            """,
+            (
+                item["slug"],
+                item["name"],
+                item["category"],
+                item["description"],
+                item["tier"],
+                display_order,
+            ),
+        )
+
+    # Firebase is not part of the live system and should not appear in admin controls.
+    cur.execute("DELETE FROM api_integrations WHERE slug = %s", ("firebase",))
+
+
+def _mask_secret(raw_value, prefix=4, suffix=4):
+    value = str(raw_value or "").strip()
+    if not value:
+        return "Not configured"
+    if len(value) <= prefix + suffix:
+        if len(value) <= 2:
+            return "Configured"
+        return f"{value[:1]}...{value[-1:]}"
+    return f"{value[:prefix]}...{value[-suffix:]}"
+
+
+def _integration_runtime_details(slug):
+    normalized_slug = str(slug or "").strip().lower()
+
+    if normalized_slug == "paymongo":
+        secret_key = str(os.getenv("PAYMONGO_SECRET_KEY", "") or "").strip()
+        configured = bool(secret_key and "your_" not in secret_key)
+        return {
+            "isConfigured": configured,
+            "providerValue": _mask_secret(secret_key, prefix=8, suffix=4),
+            "runtimeMode": "Live key configured" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "sendgrid":
+        secret_key = str(os.getenv("SENDGRID_API_KEY", "") or "").strip()
+        configured = bool(secret_key)
+        return {
+            "isConfigured": configured,
+            "providerValue": _mask_secret(secret_key, prefix=6, suffix=2),
+            "runtimeMode": "Transactional email" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "twilio":
+        sid = str(os.getenv("TWILIO_ACCOUNT_SID", "") or "").strip()
+        token = str(os.getenv("TWILIO_AUTH_TOKEN", "") or "").strip()
+        phone = str(os.getenv("TWILIO_PHONE_NUMBER", "") or "").strip()
+        configured = bool(sid and token and phone)
+        provider_value = _mask_secret(sid, prefix=4, suffix=4)
+        if phone:
+            provider_value = f"{provider_value} | {phone}"
+        return {
+            "isConfigured": configured,
+            "providerValue": provider_value if configured else "Not configured",
+            "runtimeMode": "SMS delivery" if configured else "Missing credentials",
+        }
+
+    if normalized_slug == "rasa":
+        webhook_url = str(os.getenv("RASA_WEBHOOK_URL", "") or "").strip()
+        return {
+            "isConfigured": True,
+            "providerValue": webhook_url or "Built-in concierge fallback",
+            "runtimeMode": "External webhook" if webhook_url else "Fallback replies",
+        }
+
+    if normalized_slug == "openstreetmap":
+        return {
+            "isConfigured": True,
+            "providerValue": "Public API (OSM / Nominatim)",
+            "runtimeMode": "Public map service",
+        }
+
+    return {
+        "isConfigured": False,
+        "providerValue": "Unknown",
+        "runtimeMode": "Unavailable",
+    }
+
+
+def _serialize_api_integration_row(row):
+    if not row:
+        return None
+
+    slug = str(row.get("slug") or "").strip().lower()
+    runtime = _integration_runtime_details(slug)
+    is_enabled = bool(row.get("is_enabled", True))
+    status = "DISABLED" if not is_enabled else ("LIVE" if runtime.get("isConfigured") else "NOT CONFIGURED")
+    if slug == "rasa" and is_enabled and runtime.get("runtimeMode") == "Fallback replies":
+        status = "FALLBACK"
+
+    return {
+        "id": row.get("id"),
+        "slug": slug,
+        "name": row.get("name") or API_INTEGRATION_INDEX.get(slug, {}).get("name") or slug,
+        "category": row.get("category") or API_INTEGRATION_INDEX.get(slug, {}).get("category") or "Integration",
+        "description": row.get("description") or API_INTEGRATION_INDEX.get(slug, {}).get("description") or "",
+        "tier": row.get("service_tier") or API_INTEGRATION_INDEX.get(slug, {}).get("tier") or "All",
+        "isEnabled": is_enabled,
+        "isConfigured": bool(runtime.get("isConfigured")),
+        "providerValue": runtime.get("providerValue"),
+        "runtimeMode": runtime.get("runtimeMode"),
+        "status": status,
+        "disabledReason": row.get("last_disabled_reason"),
+        "updatedBy": row.get("updated_by"),
+        "updatedAt": _serialize_date(row.get("updated_at")),
+    }
+
+
+def _get_api_integrations(cur):
+    _seed_api_integrations(cur)
+    cur.execute(
+        """
+        SELECT
+            id,
+            slug,
+            name,
+            category,
+            description,
+            service_tier,
+            is_enabled,
+            last_disabled_reason,
+            updated_by,
+            updated_at
+        FROM api_integrations
+        ORDER BY display_order ASC, id ASC
+        """
+    )
+    return [_serialize_api_integration_row(row) for row in (cur.fetchall() or [])]
+
+
+def _get_api_integration(cur, slug):
+    normalized_slug = str(slug or "").strip().lower()
+    _seed_api_integrations(cur)
+    cur.execute(
+        """
+        SELECT
+            id,
+            slug,
+            name,
+            category,
+            description,
+            service_tier,
+            is_enabled,
+            last_disabled_reason,
+            updated_by,
+            updated_at
+        FROM api_integrations
+        WHERE slug = %s
+        LIMIT 1
+        """,
+        (normalized_slug,),
+    )
+    return _serialize_api_integration_row(cur.fetchone())
+
+
+def _is_integration_enabled(slug, default=True):
+    conn = None
+    cur = None
+    normalized_slug = str(slug or "").strip().lower()
+    if not normalized_slug:
+        return bool(default)
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_api_integrations(cur)
+        cur.execute("SELECT is_enabled FROM api_integrations WHERE slug = %s LIMIT 1", (normalized_slug,))
+        row = cur.fetchone()
+        if row is None:
+            return bool(default)
+        return bool(row.get("is_enabled", default))
+    except Exception as exc:
+        print(f"Integration toggle check failed for {normalized_slug}: {exc}")
+        return bool(default)
+    finally:
+        _safe_close(conn, cur)
+
+
+def _integration_disabled_error(slug, message=None, status_code=503):
+    meta = API_INTEGRATION_INDEX.get(str(slug or "").strip().lower(), {})
+    integration_name = meta.get("name") or "This integration"
+    return (
+        jsonify(
+            {
+                "error": message or f"{integration_name} is temporarily disabled by the admin.",
+                "disabled": True,
+                "integration": str(slug or "").strip().lower(),
+            }
+        ),
+        status_code,
+    )
+
+
+INTEGRATION_OWNER_IMPACT = {
+    "paymongo": "guest and subscription payment flows",
+    "sendgrid": "email-based notices and delivery confirmations",
+    "twilio": "SMS-based notices and alerts",
+    "rasa": "AI assistant and concierge features",
+    "openstreetmap": "map, location, and nearby hotel tools",
+}
+
+
+def _notify_owners_of_integration_change(integration):
+    conn = None
+    cur = None
+    try:
+        if not integration:
+            return 0
+
+        integration_name = str(integration.get("name") or "This service").strip()
+        integration_slug = str(integration.get("slug") or "").strip().lower()
+        is_enabled = bool(integration.get("isEnabled"))
+        impact = INTEGRATION_OWNER_IMPACT.get(integration_slug, "some platform features")
+        updated_by = str(integration.get("updatedBy") or "the admin").strip() or "the admin"
+        disabled_reason = str(integration.get("disabledReason") or "").strip()
+        notification_type = "owner_api_restored" if is_enabled else "owner_api_disabled"
+        title = (
+            f"{integration_name} is available again"
+            if is_enabled
+            else f"{integration_name} temporarily unavailable"
+        )
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_notification_types(cur)
+
+        if not _table_exists(cur, "owners"):
+            return 0
+
+        if _table_exists(cur, "hotels"):
+            cur.execute(
+                """
+                SELECT DISTINCT ON (o.id)
+                    o.id,
+                    o.first_name,
+                    h.hotel_name
+                FROM owners o
+                LEFT JOIN hotels h ON h.owner_id = o.id
+                ORDER BY o.id ASC, h.id ASC
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, first_name, '' AS hotel_name
+                FROM owners
+                ORDER BY id ASC
+                """
+            )
+
+        owners = cur.fetchall() or []
+    except Exception as exc:
+        print(f"Owner integration notification lookup failed: {exc}")
+        return 0
+    finally:
+        _safe_close(conn, cur)
+
+    sent_count = 0
+    for owner in owners:
+        owner_id = owner.get("id")
+        if not owner_id:
+            continue
+
+        hotel_label = str(owner.get("hotel_name") or "").strip() or "your property"
+        if is_enabled:
+            message = (
+                f"{integration_name} has been re-enabled by {updated_by}. "
+                f"{impact.capitalize()} are available again for {hotel_label}."
+            )
+        else:
+            message = (
+                f"{integration_name} has been temporarily disabled by {updated_by}. "
+                f"{impact.capitalize()} are temporarily unavailable for {hotel_label} until the service is restored."
+            )
+            if disabled_reason:
+                message += f" Reason: {disabled_reason}"
+
+        notification_id = _create_notification(
+            owner_id,
+            "owner",
+            notification_type,
+            title,
+            message,
+            data={
+                "integrationSlug": integration_slug,
+                "integrationName": integration_name,
+                "isEnabled": is_enabled,
+                "impact": impact,
+                "disabledReason": disabled_reason,
+                "updatedBy": updated_by,
+                "updatedAt": integration.get("updatedAt"),
+            },
+        )
+        if notification_id:
+            sent_count += 1
+
+    return sent_count
+
+
 def _hotel_geocoding_enabled():
+    if not _is_integration_enabled("openstreetmap", default=True):
+        return False
     raw = str(os.getenv("HOTEL_GEOCODING_ENABLED", "true")).strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
@@ -321,9 +953,11 @@ def _build_tour_payload(cur, room_id):
         return {
             "roomId": room_id,
             "panoramaUrl": fallback_panorama,
+            "previewUrl": fallback_panorama,
             "initialYaw": 0,
             "initialPitch": 0,
             "initialFov": 1.5708,
+            "isInteractive": False,
         }
 
     cur.execute(
@@ -342,21 +976,25 @@ def _build_tour_payload(cur, room_id):
         return {
             "roomId": room_id,
             "panoramaUrl": fallback_panorama,
+            "previewUrl": fallback_panorama,
             "initialYaw": 0,
             "initialPitch": 0,
             "initialFov": 1.5708,
+            "isInteractive": False,
         }
 
-    panorama_url = row.get("panorama_url")
-    if fallback_panorama and (not panorama_url or panorama_url in GENERIC_TOUR_IMAGE_PATHS):
-        panorama_url = fallback_panorama
+    configured_panorama_url = row.get("panorama_url")
+    has_dedicated_panorama = bool(configured_panorama_url and configured_panorama_url not in GENERIC_TOUR_IMAGE_PATHS)
+    panorama_url = configured_panorama_url if has_dedicated_panorama else fallback_panorama
 
     return {
         "roomId": row.get("room_id"),
         "panoramaUrl": panorama_url,
+        "previewUrl": fallback_panorama or panorama_url,
         "initialYaw": _to_float(row.get("initial_yaw"), 0),
         "initialPitch": _to_float(row.get("initial_pitch"), 0),
         "initialFov": _to_float(row.get("initial_fov"), 1.5708),
+        "isInteractive": has_dedicated_panorama,
     }
 
 
@@ -592,6 +1230,9 @@ CUSTOMER_PRIVILEGE_BOOKING_DISCOUNTS = {
     "gold": 10,
     "platinum": 15,
 }
+
+CUSTOMER_BOOKING_VAT_PERCENT = 12
+CUSTOMER_BOOKING_TAX_PERCENT = 5
 
 
 ABOUT_PAGE_DEFAULT = {
@@ -1221,11 +1862,19 @@ def _build_customer_booking_pricing(cur, customer_id, base_amount):
     subscription = _serialize_customer_privilege_subscription(_get_customer_privilege_subscription(cur, customer_id)) if customer_id else {}
     discount_percent = _customer_booking_discount_percent(subscription)
     discount_amount = round(normalized_base * (discount_percent / 100), 2) if discount_percent > 0 else 0.0
-    total_amount = round(max(normalized_base - discount_amount, 0), 2)
+    subtotal_amount = round(max(normalized_base - discount_amount, 0), 2)
+    vat_amount = round(subtotal_amount * (CUSTOMER_BOOKING_VAT_PERCENT / 100), 2)
+    tax_amount = round(subtotal_amount * (CUSTOMER_BOOKING_TAX_PERCENT / 100), 2)
+    total_amount = round(subtotal_amount + vat_amount + tax_amount, 2)
     return {
         "baseAmount": normalized_base,
         "discountPercent": discount_percent,
         "discountAmount": discount_amount,
+        "subtotalAmount": subtotal_amount,
+        "vatPercent": CUSTOMER_BOOKING_VAT_PERCENT,
+        "vatAmount": vat_amount,
+        "taxPercent": CUSTOMER_BOOKING_TAX_PERCENT,
+        "taxAmount": tax_amount,
         "totalAmount": total_amount,
         "subscription": subscription,
     }
@@ -1236,6 +1885,11 @@ def _ensure_reservation_pricing_columns(cur):
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS base_amount NUMERIC(12, 2)",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS privilege_discount_percent INTEGER DEFAULT 0",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS privilege_discount_amount NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS subtotal_amount NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS vat_percent NUMERIC(6, 2) DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(12, 2) DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS tax_percent NUMERIC(6, 2) DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(12, 2) DEFAULT 0",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS applied_privilege_slug VARCHAR(80)",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS applied_privilege_name VARCHAR(80)",
     ]
@@ -1493,14 +2147,15 @@ def _build_customer_membership_summary(cur, customer_id):
             if check_in and hasattr(check_in, "month") and check_in.month == today.month and check_in.year == today.year:
                 monthly_spend += amount
 
+    stay_points_total = int(total_spend // 100)
+    stay_points_this_month = int(monthly_spend // 100)
     loyalty = _get_customer_loyalty(cur, customer_id)
-    points = _to_int(loyalty.get("points"), int(total_spend // 100))
-    raw_tier = str(loyalty.get("tier") or _normalize_tier(points)).upper()
-    points_this_month = _to_int(loyalty.get("points_this_month"), int(monthly_spend // 100))
-    if points_this_month == 0 and monthly_spend > 0:
-        points_this_month = int(monthly_spend // 100)
-
     subscription = _serialize_customer_privilege_subscription(_get_customer_privilege_subscription(cur, customer_id))
+    privilege_bonus_points = _to_int(loyalty.get("points"), 0)
+    privilege_bonus_this_month = _to_int(loyalty.get("points_this_month"), 0)
+    points = stay_points_total + privilege_bonus_points
+    raw_tier = _normalize_tier(points)
+    points_this_month = stay_points_this_month + privilege_bonus_this_month
     effective_tier = _higher_customer_tier(raw_tier, str(subscription.get("packageSlug") or "").upper() if subscription.get("isActive") else raw_tier)
     progress = _progress_percent(points, effective_tier)
     booking_discount_percent = _customer_booking_discount_percent(subscription)
@@ -1512,6 +2167,38 @@ def _build_customer_membership_summary(cur, customer_id):
         "loyaltyTier": raw_tier,
         "pointsThisMonth": points_this_month,
         "nextRewardProgressPercent": progress,
+        "pointSources": [
+            {
+                "key": "stay-spend",
+                "label": "Stay Spend Points",
+                "points": stay_points_total,
+                "pointsThisMonth": stay_points_this_month,
+                "description": "Earn 1 point for every PHP 100 spent on completed or active bookings.",
+            },
+            {
+                "key": "privilege-bonus",
+                "label": "Privilege Bonus Points",
+                "points": privilege_bonus_points,
+                "pointsThisMonth": privilege_bonus_this_month,
+                "description": (
+                    f"{subscription.get('packageName')} adds {subscription.get('bonusPoints')} bonus points on successful payment."
+                    if subscription.get("packageName") and _to_int(subscription.get("bonusPoints"), 0) > 0
+                    else "Privilege activations and renewals add bonus points to your balance."
+                ),
+            },
+        ],
+        "pointsBalance": {
+            "total": points,
+            "thisMonth": points_this_month,
+            "staySpendPoints": stay_points_total,
+            "staySpendPointsThisMonth": stay_points_this_month,
+            "privilegeBonusPoints": privilege_bonus_points,
+            "privilegeBonusPointsThisMonth": privilege_bonus_this_month,
+            "activePlanBonusPoints": _to_int(subscription.get("bonusPoints"), 0),
+            "earnRatePhp": 100,
+            "earnRatePoints": 1,
+            "explanation": "Current balance = stay spend points + privilege bonus points.",
+        },
         "privilege": subscription,
         "bookingPrivilege": {
             "discountPercent": booking_discount_percent,
@@ -1597,6 +2284,128 @@ def _get_owner_subscription(cur, owner_id):
     return row
 
 
+def _resolve_owner_primary_hotel_id(cur, owner_id):
+    if not owner_id or not _table_exists(cur, "hotels"):
+        return None
+    cur.execute(
+        """
+        SELECT id
+        FROM hotels
+        WHERE owner_id = %s
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (owner_id,),
+    )
+    row = cur.fetchone() or {}
+    return row.get("id")
+
+
+def _activate_owner_subscription(cur, owner_id, package_row, billing_cycle="MONTHLY"):
+    _ensure_membership_tables(cur)
+    normalized_cycle = str(billing_cycle or "MONTHLY").upper()
+    if normalized_cycle not in {"MONTHLY", "ANNUAL"}:
+        raise ValueError("Invalid billing cycle.")
+    if not owner_id:
+        raise ValueError("Owner is required.")
+    if not package_row or not package_row.get("id"):
+        raise ValueError("Package not found.")
+
+    current_row = _get_owner_subscription(cur, owner_id) or {}
+    if _serialize_owner_subscription(current_row).get("isActive", False):
+        raise ValueError("Owner already has an active subscription. Please renew at the end of the current billing cycle.")
+
+    hotel_id = current_row.get("hotel_id") or _resolve_owner_primary_hotel_id(cur, owner_id)
+    amount = _package_amount_for_cycle(package_row, normalized_cycle)
+    starts_at, next_renewal = _subscription_cycle_dates(
+        current_row,
+        normalized_cycle,
+        carry_requires_payment_proof=True,
+    )
+    subscription_id = current_row.get("id")
+
+    if subscription_id:
+        cur.execute(
+            """
+            UPDATE hotel_package_subscriptions
+            SET
+                owner_id = %s,
+                hotel_id = %s,
+                package_id = %s,
+                billing_cycle = %s,
+                amount = %s,
+                status = 'ACTIVE',
+                payment_status = 'PAID',
+                paymongo_payment_id = NULL,
+                starts_at = %s,
+                renewal_date = %s,
+                last_paid_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (
+                owner_id,
+                hotel_id,
+                package_row.get("id"),
+                normalized_cycle,
+                amount,
+                starts_at,
+                next_renewal,
+                subscription_id,
+            ),
+        )
+        updated = cur.fetchone() or {}
+        subscription_id = updated.get("id") or subscription_id
+    else:
+        cur.execute(
+            """
+            INSERT INTO hotel_package_subscriptions (
+                owner_id, hotel_id, package_id, billing_cycle, amount,
+                status, payment_status, paymongo_payment_id, starts_at,
+                renewal_date, last_paid_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, 'ACTIVE', 'PAID', NULL, %s, %s, NOW(), NOW())
+            RETURNING id
+            """,
+            (
+                owner_id,
+                hotel_id,
+                package_row.get("id"),
+                normalized_cycle,
+                amount,
+                starts_at,
+                next_renewal,
+            ),
+        )
+        inserted = cur.fetchone() or {}
+        subscription_id = inserted.get("id")
+
+    cur.execute(
+        """
+        SELECT
+            s.*,
+            p.name AS package_name,
+            p.slug AS package_slug,
+            p.description AS package_description,
+            p.monthly_price,
+            p.annual_price,
+            p.max_rooms,
+            p.features,
+            h.hotel_name,
+            h.hotel_code,
+            h.hotel_address
+        FROM hotel_package_subscriptions s
+        LEFT JOIN membership_packages p ON p.id = s.package_id
+        LEFT JOIN hotels h ON h.id = s.hotel_id
+        WHERE s.id = %s
+        LIMIT 1
+        """,
+        (subscription_id,),
+    )
+    return cur.fetchone()
+
+
 def _serialize_owner_subscription(row):
     if not row:
         return {
@@ -1672,6 +2481,20 @@ def _owner_subscription_required_response():
     }), 403
 
 
+def _owner_approval_required_response(status="PENDING"):
+    normalized_status = str(status or "PENDING").upper()
+    message = (
+        "Your owner account is waiting for admin review. Upload the required business documents and wait for approval before using the system."
+        if normalized_status != "REJECTED"
+        else "Your owner account was reviewed but not approved yet. Please contact the admin team for the next steps."
+    )
+    return jsonify({
+        "error": message,
+        "code": "OWNER_APPROVAL_REQUIRED",
+        "approvalStatus": normalized_status,
+    }), 403
+
+
 def _hotel_owner_id(cur, hotel_id):
     cur.execute("SELECT owner_id FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
     row = cur.fetchone() or {}
@@ -1717,14 +2540,65 @@ def _owner_can_mutate(cur, owner_id):
 def _ensure_profile_media_columns(cur):
     statements = [
         "ALTER TABLE owners ADD COLUMN IF NOT EXISTS profile_image TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS business_permit_path TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS bir_certificate_path TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS fire_safety_certificate_path TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS valid_id_path TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS bank_name TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS bank_account_name TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS bank_account_number TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20)",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS review_notes TEXT",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        "ALTER TABLE owners ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP",
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS profile_image TEXT",
         "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS hotel_logo TEXT",
         "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS hotel_building_image TEXT",
         "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS hotel_description TEXT",
         "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS contact_phone TEXT",
+        "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS check_in_policy TEXT",
+        "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS check_out_policy TEXT",
+        "ALTER TABLE hotels ADD COLUMN IF NOT EXISTS cancellation_policy TEXT",
     ]
     for statement in statements:
         _execute_in_savepoint(cur, statement, ignore_errors=True, prefix="profile_media_alter")
+
+    if _table_has_column(cur, "owners", "approval_status"):
+        _execute_in_savepoint(
+            cur,
+            "UPDATE owners SET approval_status = 'APPROVED' WHERE COALESCE(TRIM(approval_status), '') = ''",
+            ignore_errors=True,
+            prefix="owner_approval_seed",
+        )
+
+
+def _save_owner_document(file_storage, owner_id, field_key):
+    if not file_storage or not getattr(file_storage, 'filename', ''):
+        raise ValueError('Missing required owner document upload.')
+
+    filename = secure_filename(file_storage.filename)
+    if not filename or not _allowed_owner_document(filename):
+        raise ValueError('Owner documents must be PDF, PNG, JPG, JPEG, or WEBP files.')
+
+    ext = filename.rsplit('.', 1)[-1].lower()
+    stored_name = secure_filename(f"owner_{owner_id}_{field_key}_{uuid.uuid4().hex[:10]}.{ext}")
+    absolute_path = os.path.join(OWNER_DOCUMENT_UPLOAD_FOLDER, stored_name)
+    file_storage.save(absolute_path)
+    return f"/static/uploads/owner-documents/{stored_name}"
+
+
+def _owner_approval_status(cur, owner_id):
+    _ensure_profile_media_columns(cur)
+    if not owner_id or not _table_has_column(cur, "owners", "approval_status"):
+        return "APPROVED"
+    cur.execute("SELECT approval_status FROM owners WHERE id = %s LIMIT 1", (owner_id,))
+    row = cur.fetchone() or {}
+    status = str(row.get("approval_status") or "").strip().upper()
+    return status or "APPROVED"
+
+
+def _owner_is_approved(cur, owner_id):
+    return _owner_approval_status(cur, owner_id) == "APPROVED"
 
 
 def _room_preview_image_for_hotel(cur, hotel_id):
@@ -1756,6 +2630,17 @@ def _owner_profile_payload(cur, owner_id):
         "o.email",
         "o.contact_number",
         "o.profile_image",
+        "o.business_permit_path",
+        "o.bir_certificate_path",
+        "o.fire_safety_certificate_path",
+        "o.valid_id_path",
+        "o.bank_name",
+        "o.bank_account_name",
+        "o.bank_account_number",
+        "o.approval_status",
+        "o.review_notes",
+        "o.reviewed_at",
+        "o.approved_at",
         "h.id AS hotel_id",
         "h.hotel_name",
         "h.hotel_code",
@@ -1764,6 +2649,9 @@ def _owner_profile_payload(cur, owner_id):
         "h.hotel_building_image",
         "h.hotel_description",
         "h.contact_phone",
+        "h.check_in_policy",
+        "h.check_out_policy",
+        "h.cancellation_policy",
         "h.latitude",
         "h.longitude",
     ]
@@ -1814,6 +2702,17 @@ def _owner_profile_payload(cur, owner_id):
             "email": row.get("email") or "",
             "contactNumber": row.get("contact_number") or "",
             "profileImage": row.get("profile_image") or "",
+            "approvalStatus": str(row.get("approval_status") or "APPROVED").upper(),
+            "reviewNotes": row.get("review_notes") or "",
+            "reviewedAt": _serialize_date(row.get("reviewed_at")),
+            "approvedAt": _serialize_date(row.get("approved_at")),
+            "businessPermitPath": row.get("business_permit_path") or "",
+            "birCertificatePath": row.get("bir_certificate_path") or "",
+            "fireSafetyCertificatePath": row.get("fire_safety_certificate_path") or "",
+            "validIdPath": row.get("valid_id_path") or "",
+            "bankName": row.get("bank_name") or "",
+            "bankAccountName": row.get("bank_account_name") or "",
+            "bankAccountNumber": row.get("bank_account_number") or "",
         },
         "hotel": {
             "id": hotel_id,
@@ -1822,9 +2721,13 @@ def _owner_profile_payload(cur, owner_id):
             "hotelAddress": row.get("hotel_address") or "",
             "hotelDescription": row.get("hotel_description") or "",
             "contactPhone": row.get("contact_phone") or row.get("contact_number") or "",
+            "hotelProfilePicture": business_image,
             "businessImage": business_image,
             "hotelLogo": hotel_logo,
             "buildingImage": building_image,
+            "checkInPolicy": row.get("check_in_policy") or "",
+            "checkOutPolicy": row.get("check_out_policy") or "",
+            "cancellationPolicy": row.get("cancellation_policy") or "",
             "latitude": row.get("latitude"),
             "longitude": row.get("longitude"),
         },
@@ -1853,6 +2756,8 @@ def _owner_session_payload(cur, owner_row):
         "longitude": owner_row.get("longitude"),
         "subscriptionStatus": subscription.get("status"),
         "subscriptionActive": subscription.get("isActive"),
+        "approvalStatus": _owner_approval_status(cur, owner_row.get("id")),
+        "isApproved": _owner_is_approved(cur, owner_row.get("id")),
         "subscriptionPlan": subscription.get("packageName"),
         "subscriptionPlanSlug": subscription.get("packageSlug"),
         "subscriptionRenewalDate": subscription.get("renewalDate"),
@@ -1862,9 +2767,6 @@ def _owner_session_payload(cur, owner_row):
         "roomLimit": subscription.get("roomLimit"),
         "hasHotel": subscription.get("hasHotel"),
         "contactNumber": owner_row.get("contact_number") or "",
-        "profileImage": owner_row.get("profile_image") or "",
-        "hotelLogo": hotel.get("hotel_logo") or "",
-        "hotelBuildingImage": hotel.get("hotel_building_image") or hotel.get("hotel_logo") or "",
         "hotelDescription": hotel.get("hotel_description") or "",
         "contactPhone": hotel.get("contact_phone") or owner_row.get("contact_number") or "",
     }
@@ -2043,6 +2945,8 @@ def _seed_notification_types(cur):
         ('owner_new_booking', 'New Booking', 'New booking notifications for owners', 'BOOKING', 'NORMAL'),
         ('owner_staff_task_completed', 'Staff Task Completed', 'Task completion notifications for owners', 'STAFF', 'NORMAL'),
         ('owner_low_inventory', 'Low Inventory Alert', 'Low inventory alerts for owners', 'INVENTORY', 'HIGH'),
+        ('owner_api_disabled', 'Service Unavailable', 'Integration outage alerts for owners', 'SYSTEM', 'HIGH'),
+        ('owner_api_restored', 'Service Restored', 'Integration restoration alerts for owners', 'SYSTEM', 'NORMAL'),
 
         # Customer notifications
         ('customer_booking_confirmed', 'Booking Confirmed', 'Booking confirmation for customers', 'BOOKING', 'HIGH'),
@@ -2073,7 +2977,7 @@ def _create_notification(user_id, user_type, notification_type_key, title, messa
         conn = get_db_connection()
         cur = conn.cursor()
 
-        _ensure_notification_tables(cur)
+        _seed_notification_types(cur)
 
         # Get notification type ID
         cur.execute("SELECT id FROM notification_types WHERE type_key = %s AND is_active = TRUE", (notification_type_key,))
@@ -2163,6 +3067,15 @@ def _send_email_notification(notification):
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("sendgrid", default=True):
+            _log_notification_delivery(
+                notification['id'],
+                'email',
+                'skipped',
+                {'reason': 'disabled_by_admin'},
+            )
+            return
+
         sendgrid_key = os.getenv('SENDGRID_API_KEY')
         if not sendgrid_key:
             return
@@ -2220,6 +3133,9 @@ def _send_email_notification(notification):
 
 
 def _send_sendgrid_email(recipient_email, subject, html_content, plain_text=None):
+    if not _is_integration_enabled("sendgrid", default=True):
+        return False
+
     sendgrid_key = os.getenv('SENDGRID_API_KEY')
     if not sendgrid_key or not recipient_email:
         return False
@@ -2273,7 +3189,7 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
             <p><strong>Hotel:</strong> {safe_hotel_name}</p>
             <p><strong>Assigned Hotel Code:</strong> <span style="font-size: 18px; letter-spacing: 1px;">{safe_hotel_code}</span></p>
             <p>Please keep this code for hotel setup, staff access, and future owner account references.</p>
-            <p>You can now log in to the owner portal, but owner actions remain locked until subscription payment is completed.</p>
+            <p>You can now log in to the owner portal and activate a subscription to unlock the owner tools included in your plan.</p>
             <p>Thank you,<br>Innova HMS</p>
         </div>
     """
@@ -2283,7 +3199,7 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
         f"Hotel: {hotel_name or 'your hotel'}\n"
         f"Assigned Hotel Code: {hotel_code}\n\n"
         "Please keep this code for hotel setup, staff access, and future owner account references.\n"
-        "You can now log in to the owner portal, but owner actions remain locked until subscription payment is completed.\n\n"
+        "You can now log in to the owner portal and activate a subscription to unlock the owner tools included in your plan.\n\n"
         "Thank you,\nInnova HMS"
     )
 
@@ -2296,7 +3212,18 @@ def _send_owner_hotel_code_email(owner_email, first_name, hotel_name, hotel_code
 
 def _send_sms_notification(notification):
     """Send SMS notification using Twilio"""
+    conn = None
+    cur = None
     try:
+        if not _is_integration_enabled("twilio", default=True):
+            _log_notification_delivery(
+                notification['id'],
+                'sms',
+                'skipped',
+                {'reason': 'disabled_by_admin'},
+            )
+            return
+
         twilio_sid = os.getenv('TWILIO_ACCOUNT_SID')
         twilio_token = os.getenv('TWILIO_AUTH_TOKEN')
         twilio_phone = os.getenv('TWILIO_PHONE_NUMBER')
@@ -2348,6 +3275,29 @@ def _send_push_notification(notification):
     _log_notification_delivery(notification['id'], 'push', 'sent', {'note': 'Push notification placeholder'})
 
 
+def _serialize_notification_row(notification):
+    if not notification:
+        return notification
+
+    serialized = dict(notification)
+    for field in ("created_at", "updated_at", "sent_at", "read_at", "expires_at"):
+        serialized[field] = _serialize_date(serialized.get(field))
+
+    data_value = serialized.get("data")
+    if data_value:
+        if isinstance(data_value, dict):
+            serialized["data"] = data_value
+        else:
+            try:
+                serialized["data"] = json.loads(data_value)
+            except Exception:
+                serialized["data"] = {}
+    else:
+        serialized["data"] = {}
+
+    return serialized
+
+
 def _log_notification_delivery(notification_id, channel, status, response_data=None):
     """Log notification delivery attempt"""
     try:
@@ -2395,15 +3345,7 @@ def _get_user_notifications(user_id, user_type, limit=50, unread_only=False):
         cur.execute(query, params)
         notifications = cur.fetchall()
 
-        # Convert data JSON back to dict
-        for notification in notifications:
-            if notification['data']:
-                try:
-                    notification['data'] = json.loads(notification['data'])
-                except:
-                    notification['data'] = {}
-
-        return notifications
+        return [_serialize_notification_row(notification) for notification in notifications]
 
     except Exception as e:
         print(f"Error getting notifications: {e}")
@@ -2432,6 +3374,39 @@ def _mark_notification_read(notification_id, user_id, user_type):
     except Exception as e:
         print(f"Error marking notification read: {e}")
         return False
+    finally:
+        _safe_close(conn, cur)
+
+
+def _mark_all_notifications_read(user_id, user_type):
+    """Mark all notifications as read for a user"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            UPDATE notifications
+            SET is_read = TRUE,
+                read_at = COALESCE(read_at, NOW())
+            WHERE user_id = %s
+              AND user_type = %s
+              AND is_read = FALSE
+            """,
+            (user_id, user_type),
+        )
+
+        updated_count = cur.rowcount or 0
+        conn.commit()
+        return updated_count
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error marking all notifications read: {e}")
+        return None
     finally:
         _safe_close(conn, cur)
 
@@ -2517,22 +3492,24 @@ def _update_notification_preferences(user_id, user_type, preferences):
 
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    data = request.json or {}
+    email = _normalize_email(data.get('email'))
+    password = data.get('password') or ''
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid email address."}), 400
+    if not password:
+        return jsonify({"error": "Password is required."}), 400
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, name, email, password_hash FROM admins WHERE email = %s", (email,))
+        cur.execute("SELECT id, name, email, password_hash FROM admins WHERE LOWER(email) = %s", (email,))
         admin = cur.fetchone()
         cur.close()
         conn.close()
         if admin and check_password_hash(admin['password_hash'], password):
             return jsonify({
                 "message": "Admin login successful!",
-                "admin": {"id": admin['id'], "name": admin['name'], "email": admin['email'], "role": "SuperAdmin"}
+                "admin": {"id": admin['id'], "name": admin['name'], "email": admin['email'], "role": "Admin"}
             }), 200
         return jsonify({"error": "Access Denied: Invalid Credentials"}), 401
     except Exception as e:
@@ -2701,9 +3678,15 @@ def admin_owners():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_profile_media_columns(cur)
         cur.execute("""
             SELECT o.id, o.first_name, o.last_name, o.email, o.contact_number, o.created_at,
+                   o.business_permit_path, o.bir_certificate_path, o.fire_safety_certificate_path, o.valid_id_path,
+                   o.bank_name, o.bank_account_name, o.bank_account_number,
+                   o.approval_status, o.review_notes, o.reviewed_at, o.approved_at,
                    h.id AS hotel_id, h.hotel_name, h.hotel_address, h.hotel_code,
+                   h.hotel_logo, h.hotel_building_image, h.hotel_description,
+                   h.check_in_policy, h.check_out_policy, h.cancellation_policy,
                    COUNT(r.id) AS total_rooms
             FROM owners o
             LEFT JOIN hotels h ON h.owner_id = o.id
@@ -2725,6 +3708,23 @@ def admin_owners():
                 'hotelCode': row.get('hotel_code') or '',
                 'totalRooms': _to_int(row.get('total_rooms'), 0),
                 'createdAt': _serialize_date(row.get('created_at')),
+                'approvalStatus': str(row.get('approval_status') or 'APPROVED').upper(),
+                'reviewNotes': row.get('review_notes') or '',
+                'reviewedAt': _serialize_date(row.get('reviewed_at')),
+                'approvedAt': _serialize_date(row.get('approved_at')),
+                'businessPermitPath': row.get('business_permit_path') or '',
+                'birCertificatePath': row.get('bir_certificate_path') or '',
+                'fireSafetyCertificatePath': row.get('fire_safety_certificate_path') or '',
+                'validIdPath': row.get('valid_id_path') or '',
+                'bankName': row.get('bank_name') or '',
+                'bankAccountName': row.get('bank_account_name') or '',
+                'bankAccountNumber': row.get('bank_account_number') or '',
+                'hotelLogo': row.get('hotel_logo') or '',
+                'hotelBuildingImage': row.get('hotel_building_image') or '',
+                'hotelDescription': row.get('hotel_description') or '',
+                'checkInPolicy': row.get('check_in_policy') or '',
+                'checkOutPolicy': row.get('check_out_policy') or '',
+                'cancellationPolicy': row.get('cancellation_policy') or '',
             })
         return jsonify({'owners': owners, 'total': len(owners)}), 200
     except Exception as e:
@@ -3288,15 +4288,7 @@ def admin_get_notifications():
                 LIMIT %s
             """, (limit,))
 
-            notifications = cur.fetchall()
-
-            # Convert data JSON back to dict
-            for notification in notifications:
-                if notification['data']:
-                    try:
-                        notification['data'] = json.loads(notification['data'])
-                    except:
-                        notification['data'] = {}
+            notifications = [_serialize_notification_row(notification) for notification in (cur.fetchall() or [])]
 
         except Exception as e:
             print(f"Error getting all notifications: {e}")
@@ -3730,16 +4722,104 @@ def admin_system_logs():
         return jsonify({'error': str(e)}), 500
     finally:
         _safe_close(conn, cur)
-    
-    @app.route('/api/google-login', methods=['POST'])
-    def google_login():
-      data = request.json
+
+
+@app.route('/api/admin/integrations', methods=['GET'])
+def admin_get_integrations():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        integrations = _get_api_integrations(cur)
+        return jsonify({'integrations': integrations}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/integrations/<string:slug>', methods=['PATCH'])
+def admin_update_integration(slug):
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        if 'isEnabled' not in data:
+            return jsonify({'error': 'isEnabled is required.'}), 400
+
+        normalized_slug = str(slug or '').strip().lower()
+        if normalized_slug not in API_INTEGRATION_INDEX:
+            return jsonify({'error': 'Integration not found.'}), 404
+
+        is_enabled = bool(data.get('isEnabled'))
+        updated_by = str(data.get('updatedBy') or 'Admin').strip() or 'Admin'
+        reason = str(data.get('reason') or '').strip()
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_api_integrations(cur)
+        cur.execute(
+            """
+            UPDATE api_integrations
+            SET
+                is_enabled = %s,
+                last_disabled_reason = %s,
+                updated_by = %s,
+                updated_at = NOW()
+            WHERE slug = %s
+            RETURNING
+                id,
+                slug,
+                name,
+                category,
+                description,
+                service_tier,
+                is_enabled,
+                last_disabled_reason,
+                updated_by,
+                updated_at
+            """,
+            (
+                is_enabled,
+                None if is_enabled else (reason or 'Temporarily disabled by admin.'),
+                updated_by,
+                normalized_slug,
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            conn.rollback()
+            return jsonify({'error': 'Integration not found.'}), 404
+
+        conn.commit()
+        integration = _serialize_api_integration_row(row)
+        owner_notification_count = _notify_owners_of_integration_change(integration)
+        action = 'enabled' if integration.get('isEnabled') else 'disabled'
+        return jsonify({
+            'message': (
+                f"{integration.get('name')} {action} successfully. "
+                f"{owner_notification_count} owner notification(s) queued."
+            ),
+            'integration': integration,
+            'ownerNotificationCount': owner_notification_count,
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+ 
+@app.route('/api/google-login', methods=['POST'])
+def google_login():
+    data = request.json
     token = data.get('token')
 
     try:
         idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo['email']
-        
+
         conn = get_db_connection()
         cur = conn.cursor()
 
@@ -3755,7 +4835,7 @@ def admin_system_logs():
             )
             user_id = cur.fetchone()[0]
             conn.commit()
-            
+
             final_first_name = first_name
             final_last_name = last_name
             final_contact = ""
@@ -3769,7 +4849,7 @@ def admin_system_logs():
             "message": "Login successful!",
             "user": {
                 "id": user_id,
-                "firstName": final_first_name, 
+                "firstName": final_first_name,
                 "lastName": final_last_name,
                 "email": email,
                 "contactNumber": final_contact
@@ -3837,16 +4917,34 @@ def facebook_login():
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    data = request.json
-    f_name = data.get('firstName')
-    l_name = data.get('lastName')
-    email = data.get('email')
-    contact = data.get('contactNumber')
-    password = data.get('password')
+    data = request.json or {}
+    f_name = str(data.get('firstName') or '').strip()
+    l_name = str(data.get('lastName') or '').strip()
+    email = _normalize_email(data.get('email'))
+    contact = str(data.get('contactNumber') or '').strip()
+    password = data.get('password') or ''
+
+    if not all([f_name, l_name, email, contact, password]):
+        return jsonify({"error": "Please complete all required fields."}), 400
+    if not _is_valid_name(f_name) or not _is_valid_name(l_name):
+        return jsonify({"error": "Names must contain only letters and valid punctuation."}), 400
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid email address."}), 400
+    if not _is_valid_phone(contact):
+        return jsonify({"error": "Enter a valid contact number."}), 400
+    password_error = _password_strength_message(password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
+
     hashed_pw = generate_password_hash(password)
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SELECT id FROM customers WHERE LOWER(email) = %s LIMIT 1", (email,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "This email is already registered."}), 409
         cur.execute(
             "INSERT INTO customers (first_name, last_name, email, contact_number, password_hash) VALUES (%s, %s, %s, %s, %s)",
             (f_name, l_name, email, contact, hashed_pw)
@@ -3860,9 +4958,13 @@ def signup():
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
+    data = request.json or {}
+    email = _normalize_email(data.get('email'))
+    password = data.get('password') or ''
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid email address."}), 400
+    if not password:
+        return jsonify({"error": "Password is required."}), 400
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3994,6 +5096,168 @@ def change_user_password():
         _safe_close(conn, cur)
 
 
+@app.route('/api/auth/forgot-password/request', methods=['POST'])
+def request_password_reset_otp():
+    conn = None
+    cur = None
+    try:
+        payload = request.get_json(silent=True) or {}
+        user_type = str(payload.get("userType") or "").strip().lower()
+        email = _normalize_email(payload.get("email"))
+        hotel_code = str(payload.get("hotelCode") or "").strip().upper()
+        channel = "sms" if str(payload.get("channel") or "").strip().lower() == "sms" else "email"
+
+        if user_type not in AUTH_USER_MAP:
+            return jsonify({"error": "Unsupported account type."}), 400
+        if not _is_valid_email(email):
+            return jsonify({"error": "Enter a valid email address."}), 400
+        if AUTH_USER_MAP[user_type]["requires_hotel_code"] and not _is_valid_hotel_code(hotel_code):
+            return jsonify({"error": "Enter a valid hotel code."}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_password_reset_tables(cur)
+
+        user = _fetch_auth_user(cur, user_type, email, hotel_code)
+        if not user:
+            return jsonify({"error": "No account matched the provided details."}), 404
+        if channel == "sms" and not _is_valid_phone(user.get("contact_number")):
+            return jsonify({"error": "This account has no valid mobile number for OTP delivery."}), 400
+
+        cur.execute(
+            """
+            UPDATE password_reset_otps
+            SET consumed_at = NOW()
+            WHERE user_type = %s
+              AND user_id = %s
+              AND consumed_at IS NULL
+            """,
+            (user_type, user.get("id")),
+        )
+
+        otp_code = _generate_otp_code()
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        cur.execute(
+            """
+            INSERT INTO password_reset_otps (
+                user_type, user_id, email, contact_number, channel, otp_hash, expires_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                user_type,
+                user.get("id"),
+                email,
+                user.get("contact_number"),
+                channel,
+                generate_password_hash(otp_code),
+                expires_at,
+            ),
+        )
+        conn.commit()
+
+        delivered, dev_otp = _send_password_reset_otp(user, user_type, otp_code, channel)
+        destination = _mask_phone(user.get("contact_number")) if channel == "sms" else _mask_email(email)
+
+        return jsonify({
+            "message": f"OTP sent to {destination}." if delivered else f"OTP generated for {destination}. Delivery provider is unavailable in this environment.",
+            "channel": channel,
+            "destination": destination,
+            "expiresInMinutes": 10,
+            "devOtp": dev_otp,
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/auth/forgot-password/reset', methods=['POST'])
+def reset_password_with_otp():
+    conn = None
+    cur = None
+    try:
+        payload = request.get_json(silent=True) or {}
+        user_type = str(payload.get("userType") or "").strip().lower()
+        email = _normalize_email(payload.get("email"))
+        hotel_code = str(payload.get("hotelCode") or "").strip().upper()
+        otp_code = str(payload.get("otp") or "").strip()
+        new_password = payload.get("newPassword") or ""
+
+        if user_type not in AUTH_USER_MAP:
+            return jsonify({"error": "Unsupported account type."}), 400
+        if not _is_valid_email(email):
+            return jsonify({"error": "Enter a valid email address."}), 400
+        if AUTH_USER_MAP[user_type]["requires_hotel_code"] and not _is_valid_hotel_code(hotel_code):
+            return jsonify({"error": "Enter a valid hotel code."}), 400
+        if not re.fullmatch(r"\d{6}", otp_code):
+            return jsonify({"error": "OTP must be 6 digits."}), 400
+
+        password_error = _password_strength_message(new_password)
+        if password_error:
+            return jsonify({"error": password_error}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_password_reset_tables(cur)
+
+        user = _fetch_auth_user(cur, user_type, email, hotel_code)
+        if not user:
+            return jsonify({"error": "No account matched the provided details."}), 404
+
+        cur.execute(
+            """
+            SELECT id, otp_hash, expires_at
+            FROM password_reset_otps
+            WHERE user_type = %s
+              AND user_id = %s
+              AND consumed_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_type, user.get("id")),
+        )
+        otp_row = cur.fetchone()
+        if not otp_row:
+            return jsonify({"error": "No active OTP found. Request a new OTP first."}), 400
+        if otp_row.get("expires_at") and otp_row["expires_at"] < datetime.utcnow():
+            return jsonify({"error": "OTP has expired. Request a new OTP."}), 400
+        if not check_password_hash(otp_row.get("otp_hash") or "", otp_code):
+            return jsonify({"error": "Invalid OTP."}), 400
+
+        cur.execute(
+            f"UPDATE {AUTH_USER_MAP[user_type]['table']} SET password_hash = %s WHERE id = %s",
+            (generate_password_hash(new_password), user.get("id")),
+        )
+        cur.execute(
+            "UPDATE password_reset_otps SET consumed_at = NOW() WHERE id = %s",
+            (otp_row.get("id"),),
+        )
+        conn.commit()
+
+        try:
+            _create_notification(
+                user.get("id"),
+                user_type,
+                "system_alert",
+                "Password reset completed",
+                "Your password was updated successfully via OTP verification.",
+                {"source": "forgot-password"},
+            )
+        except Exception:
+            pass
+
+        return jsonify({"message": "Password updated successfully. You can now log in."}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
 @app.route('/api/user/profile/<int:customer_id>', methods=['GET'])
 def get_user_profile(customer_id):
     conn = None
@@ -4015,25 +5279,52 @@ def get_user_profile(customer_id):
 
 @app.route('/api/owner/signup', methods=['POST'])
 def owner_signup():
-    data = request.get_json(silent=True) or {}
+    data = request.form if request.files else (request.get_json(silent=True) or {})
     f_name = (data.get('firstName') or '').strip()
     l_name = (data.get('lastName') or '').strip()
-    email = (data.get('email') or '').strip().lower()
+    email = _normalize_email(data.get('email'))
     contact = (data.get('contactNumber') or '').strip()
     password = data.get('password') or ''
     hotel_code = (data.get('hotelCode') or '').strip().upper()
     hotel_name = (data.get('hotelName') or '').strip()
     hotel_address = (data.get('hotelAddress') or '').strip()
+    hotel_description = (data.get('hotelDescription') or '').strip()
+    business_image = (data.get('businessImage') or '').strip()
+    building_image = (data.get('buildingImage') or '').strip()
+    check_in_policy = (data.get('checkInPolicy') or '').strip()
+    check_out_policy = (data.get('checkOutPolicy') or '').strip()
+    cancellation_policy = (data.get('cancellationPolicy') or '').strip()
+    bank_name = (data.get('bankName') or '').strip()
+    bank_account_name = (data.get('bankAccountName') or '').strip()
+    bank_account_number = (data.get('bankAccountNumber') or '').strip()
+    owner_documents = {field: request.files.get(field) for field in OWNER_DOCUMENT_FIELDS}
     hotel_coordinates = _geocode_hotel_address(hotel_address, hotel_name)
 
     if not all([f_name, l_name, email, contact, password]):
         return jsonify({'error': 'Please complete all required fields.'}), 400
+    if not _is_valid_name(f_name) or not _is_valid_name(l_name):
+        return jsonify({'error': 'Owner name contains invalid characters.'}), 400
+    if not _is_valid_email(email):
+        return jsonify({'error': 'Enter a valid email address.'}), 400
+    if not _is_valid_phone(contact):
+        return jsonify({'error': 'Enter a valid contact number.'}), 400
 
-    if len(password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters long.'}), 400
+    missing_documents = [field for field, file_storage in owner_documents.items() if not file_storage or not getattr(file_storage, 'filename', '')]
+    if missing_documents:
+        return jsonify({'error': 'Business Permit, BIR Certificate, Fire Safety Certificate, and Valid ID are required.'}), 400
+
+    for file_storage in owner_documents.values():
+        if not _allowed_owner_document(getattr(file_storage, 'filename', '')):
+            return jsonify({'error': 'Owner documents must be PDF, PNG, JPG, JPEG, or WEBP files.'}), 400
+
+    password_error = _password_strength_message(password)
+    if password_error:
+        return jsonify({'error': password_error}), 400
 
     if not hotel_code and not hotel_name:
         return jsonify({'error': 'Please provide a hotel code or enter a hotel name to create a new hotel.'}), 400
+    if hotel_code and not _is_valid_hotel_code(hotel_code):
+        return jsonify({'error': 'Hotel code must follow the INNOVAHMS-123 format.'}), 400
 
     hashed_pw = generate_password_hash(password)
     conn = None
@@ -4041,6 +5332,7 @@ def owner_signup():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_profile_media_columns(cur)
 
         cur.execute('SELECT id FROM owners WHERE LOWER(email) = %s LIMIT 1', (email,))
         existing_owner = cur.fetchone()
@@ -4086,6 +5378,35 @@ def owner_signup():
                     (f_name, l_name, email, contact, hashed_pw)
                 )
                 owner_id = cur2.fetchone()[0]
+                owner_doc_paths = {
+                    column_name: _save_owner_document(owner_documents[field], owner_id, field)
+                    for field, column_name in OWNER_DOCUMENT_FIELDS.items()
+                }
+                cur2.execute(
+                    """
+                    UPDATE owners
+                    SET business_permit_path = %s,
+                        bir_certificate_path = %s,
+                        fire_safety_certificate_path = %s,
+                        valid_id_path = %s,
+                        bank_name = %s,
+                        bank_account_name = %s,
+                        bank_account_number = %s,
+                        approval_status = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        owner_doc_paths["business_permit_path"],
+                        owner_doc_paths["bir_certificate_path"],
+                        owner_doc_paths["fire_safety_certificate_path"],
+                        owner_doc_paths["valid_id_path"],
+                        bank_name or None,
+                        bank_account_name or None,
+                        bank_account_number or None,
+                        'PENDING',
+                        owner_id,
+                    ),
+                )
                 update_fields = ['owner_id = %s']
                 update_params = [owner_id]
                 if hotel_address and _table_has_column(cur, 'hotels', 'hotel_address'):
@@ -4095,6 +5416,24 @@ def owner_signup():
                     update_fields.append("latitude = %s")
                     update_fields.append("longitude = %s")
                     update_params.extend([claimed_coordinates['latitude'], claimed_coordinates['longitude']])
+                if hotel_description and _table_has_column(cur, 'hotels', 'hotel_description'):
+                    update_fields.append("hotel_description = %s")
+                    update_params.append(hotel_description)
+                if business_image and _table_has_column(cur, 'hotels', 'hotel_logo'):
+                    update_fields.append("hotel_logo = %s")
+                    update_params.append(business_image)
+                if building_image and _table_has_column(cur, 'hotels', 'hotel_building_image'):
+                    update_fields.append("hotel_building_image = %s")
+                    update_params.append(building_image)
+                if check_in_policy and _table_has_column(cur, 'hotels', 'check_in_policy'):
+                    update_fields.append("check_in_policy = %s")
+                    update_params.append(check_in_policy)
+                if check_out_policy and _table_has_column(cur, 'hotels', 'check_out_policy'):
+                    update_fields.append("check_out_policy = %s")
+                    update_params.append(check_out_policy)
+                if cancellation_policy and _table_has_column(cur, 'hotels', 'cancellation_policy'):
+                    update_fields.append("cancellation_policy = %s")
+                    update_params.append(cancellation_policy)
                 update_params.append(hotel['id'])
                 cur2.execute(
                     f"UPDATE hotels SET {', '.join(update_fields)} WHERE id = %s",
@@ -4136,13 +5475,14 @@ def owner_signup():
                     False,
                 )
                 return jsonify({
-                    'message': 'Owner and hotel registered successfully. Subscription payment is required to unlock owner functions.',
+                    'message': 'Owner and hotel registered successfully. Activate a subscription to unlock the owner tools included in your plan.',
                     'ownerId': owner_id,
                     'hotelId': hotel['id'],
                     'hotelName': hotel.get('hotel_name') or 'Hotel',
                     'hotelCode': resolved_hotel_code,
                     'createdHotel': False,
                     'subscriptionRequired': True,
+                    'approvalStatus': 'PENDING',
                     'hotelCodeEmailSent': hotel_code_email_sent,
                     'hotelCodeSentTo': email,
                 }), 201
@@ -4167,12 +5507,59 @@ def owner_signup():
             (f_name, l_name, email, contact, hashed_pw)
         )
         owner_id = cur2.fetchone()[0]
+        owner_doc_paths = {
+            column_name: _save_owner_document(owner_documents[field], owner_id, field)
+            for field, column_name in OWNER_DOCUMENT_FIELDS.items()
+        }
+        cur2.execute(
+            """
+            UPDATE owners
+            SET business_permit_path = %s,
+                bir_certificate_path = %s,
+                fire_safety_certificate_path = %s,
+                valid_id_path = %s,
+                bank_name = %s,
+                bank_account_name = %s,
+                bank_account_number = %s,
+                approval_status = %s
+            WHERE id = %s
+            """,
+            (
+                owner_doc_paths["business_permit_path"],
+                owner_doc_paths["bir_certificate_path"],
+                owner_doc_paths["fire_safety_certificate_path"],
+                owner_doc_paths["valid_id_path"],
+                bank_name or None,
+                bank_account_name or None,
+                bank_account_number or None,
+                'PENDING',
+                owner_id,
+            ),
+        )
 
         hotel_columns = ['id', 'owner_id', 'hotel_name']
         hotel_values = [hotel_id, owner_id, hotel_name]
         if _table_has_column(cur, 'hotels', 'hotel_address'):
             hotel_columns.append('hotel_address')
             hotel_values.append(hotel_address or '')
+        if _table_has_column(cur, 'hotels', 'hotel_description'):
+            hotel_columns.append('hotel_description')
+            hotel_values.append(hotel_description or '')
+        if _table_has_column(cur, 'hotels', 'hotel_logo'):
+            hotel_columns.append('hotel_logo')
+            hotel_values.append(business_image or '')
+        if _table_has_column(cur, 'hotels', 'hotel_building_image'):
+            hotel_columns.append('hotel_building_image')
+            hotel_values.append(building_image or '')
+        if _table_has_column(cur, 'hotels', 'check_in_policy'):
+            hotel_columns.append('check_in_policy')
+            hotel_values.append(check_in_policy or '')
+        if _table_has_column(cur, 'hotels', 'check_out_policy'):
+            hotel_columns.append('check_out_policy')
+            hotel_values.append(check_out_policy or '')
+        if _table_has_column(cur, 'hotels', 'cancellation_policy'):
+            hotel_columns.append('cancellation_policy')
+            hotel_values.append(cancellation_policy or '')
         if hotel_coordinates and _table_has_column(cur, 'hotels', 'latitude'):
             hotel_columns.append('latitude')
             hotel_values.append(hotel_coordinates['latitude'])
@@ -4226,13 +5613,14 @@ def owner_signup():
             True,
         )
         return jsonify({
-            'message': 'Owner and hotel registered successfully. Subscription payment is required to unlock owner functions.',
+            'message': 'Owner and hotel registered successfully. Activate a subscription to unlock the owner tools included in your plan.',
             'ownerId': owner_id,
             'hotelId': hotel_id,
             'hotelName': hotel_name or 'Hotel',
             'hotelCode': generated_hotel_code,
             'createdHotel': True,
             'subscriptionRequired': True,
+            'approvalStatus': 'PENDING',
             'hotelCodeEmailSent': hotel_code_email_sent,
             'hotelCodeSentTo': email,
         }), 201
@@ -4245,9 +5633,13 @@ def owner_signup():
 
 @app.route('/api/owner/login', methods=['POST'])
 def owner_login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
+    data = request.json or {}
+    email = _normalize_email(data.get('email'))
+    password = data.get('password') or ''
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid email address."}), 400
+    if not password:
+        return jsonify({"error": "Password is required."}), 400
     conn = None
     cur = None
     try:
@@ -4312,6 +5704,7 @@ def update_owner_profile(owner_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         _ensure_profile_media_columns(cur)
+        owner_payload = data.get("owner") or data
 
         cur.execute(
             """
@@ -4320,16 +5713,22 @@ def update_owner_profile(owner_id):
                 last_name = COALESCE(%s, last_name),
                 email = COALESCE(%s, email),
                 contact_number = COALESCE(%s, contact_number),
-                profile_image = COALESCE(%s, profile_image)
+                profile_image = COALESCE(%s, profile_image),
+                bank_name = COALESCE(%s, bank_name),
+                bank_account_name = COALESCE(%s, bank_account_name),
+                bank_account_number = COALESCE(%s, bank_account_number)
             WHERE id = %s
             RETURNING id
             """,
             (
-                data.get("firstName"),
-                data.get("lastName"),
-                data.get("email"),
-                data.get("contactNumber"),
-                data.get("profileImage"),
+                owner_payload.get("firstName"),
+                owner_payload.get("lastName"),
+                owner_payload.get("email"),
+                owner_payload.get("contactNumber"),
+                owner_payload.get("profileImage"),
+                (owner_payload.get("bankName") or "").strip() or None,
+                (owner_payload.get("bankAccountName") or "").strip() or None,
+                (owner_payload.get("bankAccountNumber") or "").strip() or None,
                 owner_id,
             ),
         )
@@ -4346,8 +5745,16 @@ def update_owner_profile(owner_id):
         hotel_address = str(hotel_payload.get("hotelAddress") or "").strip()
         hotel_description = str(hotel_payload.get("hotelDescription") or "").strip()
         contact_phone = str(hotel_payload.get("contactPhone") or "").strip()
-        business_image = str(hotel_payload.get("businessImage") or hotel_payload.get("hotelLogo") or "").strip()
+        business_image = str(
+            hotel_payload.get("hotelProfilePicture")
+            or hotel_payload.get("businessImage")
+            or hotel_payload.get("hotelLogo")
+            or ""
+        ).strip()
         building_image = str(hotel_payload.get("buildingImage") or "").strip()
+        check_in_policy = str(hotel_payload.get("checkInPolicy") or "").strip()
+        check_out_policy = str(hotel_payload.get("checkOutPolicy") or "").strip()
+        cancellation_policy = str(hotel_payload.get("cancellationPolicy") or "").strip()
         hotel_coordinates = _geocode_hotel_address(hotel_address, hotel_name) if hotel_address else None
 
         if hotel:
@@ -4358,6 +5765,9 @@ def update_owner_profile(owner_id):
                 "contact_phone = COALESCE(%s, contact_phone)",
                 "hotel_logo = COALESCE(%s, hotel_logo)",
                 "hotel_building_image = COALESCE(%s, hotel_building_image)",
+                "check_in_policy = COALESCE(%s, check_in_policy)",
+                "check_out_policy = COALESCE(%s, check_out_policy)",
+                "cancellation_policy = COALESCE(%s, cancellation_policy)",
             ]
             params = [
                 hotel_name or None,
@@ -4366,6 +5776,9 @@ def update_owner_profile(owner_id):
                 contact_phone or None,
                 business_image or None,
                 building_image or None,
+                check_in_policy or None,
+                check_out_policy or None,
+                cancellation_policy or None,
             ]
             if hotel_coordinates and _table_has_column(cur, "hotels", "latitude") and _table_has_column(cur, "hotels", "longitude"):
                 update_clauses.extend(["latitude = %s", "longitude = %s"])
@@ -4481,11 +5894,6 @@ def owner_create_subscription_payment_link():
     conn = None
     cur = None
     try:
-        simulation_mode = _owner_subscription_simulation_enabled()
-        paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
-        if not simulation_mode and (not paymongo_key or 'your_' in paymongo_key):
-            return jsonify({'error': 'PayMongo API key not configured. Please set PAYMONGO_SECRET_KEY in backend/.env file.'}), 503
-
         data = request.get_json(silent=True) or {}
         owner_id = _to_int(data.get("ownerId"), 0)
         package_id = _to_int(data.get("packageId"), 0)
@@ -4518,86 +5926,41 @@ def owner_create_subscription_payment_link():
         if not package_row:
             return jsonify({"error": "Package not found."}), 404
 
-        amount = _package_amount_for_cycle(package_row, billing_cycle)
-        amount_cents = int(round(amount * 100))
-        if amount_cents <= 0:
+        current_subscription = _get_owner_subscription(cur, owner_id)
+        if _serialize_owner_subscription(current_subscription).get("isActive", False):
+            return jsonify({"error": "This owner already has an active subscription. Renewals will occur on the existing schedule."}), 409
+
+        subscription_row = _activate_owner_subscription(cur, owner_id, package_row, billing_cycle)
+        amount = _to_float((subscription_row or {}).get("amount"), 0)
+        if amount <= 0:
             return jsonify({"error": "Invalid subscription amount."}), 400
-
-        cur.execute("SELECT id FROM hotels WHERE owner_id = %s ORDER BY id ASC LIMIT 1", (owner_id,))
-        hotel = cur.fetchone() or {}
-        hotel_id = hotel.get("id")
-        current_subscription = _serialize_owner_subscription(_get_owner_subscription(cur, owner_id))
-        pending_status = 'ACTIVE' if current_subscription.get("isActive") else 'PENDING'
-
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-        success_url = _owner_subscription_checkout_url(frontend_url, 'success', simulation_mode)
-        failed_url = _owner_subscription_checkout_url(frontend_url, 'failed', simulation_mode)
-
-        if simulation_mode:
-            link_id = _owner_subscription_simulated_link_id(owner_id, package_id, billing_cycle)
-            checkout_url = success_url
-        else:
-            payload = {
-                'data': {
-                    'attributes': {
-                        'amount': amount_cents,
-                        'currency': 'PHP',
-                        'description': f'Innova HMS {package_row.get("name")} {billing_cycle.title()} Subscription',
-                        'remarks': f'Owner #{owner_id} subscription',
-                        'redirect': {'success': success_url, 'failed': failed_url},
-                    }
-                }
-            }
-            response = requests.post(
-                'https://api.paymongo.com/v1/links',
-                json=payload,
-                headers=_paymongo_headers(),
-                timeout=15,
-            )
-            result = response.json()
-            if not response.ok:
-                errors = result.get('errors', [{}])
-                msg = errors[0].get('detail', 'PayMongo error') if errors else 'PayMongo error'
-                return jsonify({'error': msg}), 400
-
-            link_data = result.get('data', {})
-            attrs = link_data.get('attributes', {})
-            checkout_url = attrs.get('checkout_url', '')
-            link_id = link_data.get('id', '')
 
         cur.execute(
             """
-            INSERT INTO hotel_package_subscriptions (
-                owner_id, hotel_id, package_id, billing_cycle, amount, status,
-                payment_status, paymongo_payment_id, starts_at, updated_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, 'PENDING', %s, CURRENT_DATE, NOW())
-            ON CONFLICT (owner_id) DO UPDATE SET
-                hotel_id = EXCLUDED.hotel_id,
-                package_id = EXCLUDED.package_id,
-                billing_cycle = EXCLUDED.billing_cycle,
-                amount = EXCLUDED.amount,
-                status = %s,
-                payment_status = 'PENDING',
-                paymongo_payment_id = EXCLUDED.paymongo_payment_id,
-                updated_at = NOW()
-            RETURNING id
+            SELECT o.*, h.hotel_name, h.id as hotel_id, h.hotel_address, h.latitude, h.longitude
+            FROM owners o
+            LEFT JOIN hotels h ON o.id = h.owner_id
+            WHERE o.id = %s
+            LIMIT 1
             """,
-            (owner_id, hotel_id, package_id, billing_cycle, amount, pending_status, link_id, pending_status),
+            (owner_id,),
         )
-        subscription_row = cur.fetchone() or {}
+        owner = cur.fetchone()
+        serialized_subscription = _serialize_owner_subscription(subscription_row)
         conn.commit()
         return jsonify({
-            "checkoutUrl": checkout_url,
-            "linkId": link_id,
-            "subscriptionId": subscription_row.get("id"),
+            "message": f"{package_row.get('name')} {billing_cycle.lower()} subscription activated successfully.",
+            "subscriptionId": (subscription_row or {}).get("id"),
             "amount": amount,
             "packageName": package_row.get("name"),
             "billingCycle": billing_cycle,
-            "isSimulated": simulation_mode,
+            "subscription": serialized_subscription,
+            "session": _owner_session_payload(cur, owner) if owner else None,
+            "checkoutUrl": None,
+            "linkId": None,
+            "isSimulated": True,
+            "autoActivated": True,
         }), 200
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'PayMongo request timed out. Try again.'}), 504
     except Exception as e:
         if conn:
             conn.rollback()
@@ -5740,6 +7103,15 @@ def owner_mark_notification_read(owner_id, notification_id):
         return jsonify({'error': 'Failed to mark notification as read'}), 500
 
 
+@app.route('/api/owner/notifications/<int:owner_id>/read-all', methods=['PATCH'])
+def owner_mark_all_notifications_read(owner_id):
+    """Owner: Mark all notifications as read"""
+    updated_count = _mark_all_notifications_read(owner_id, 'owner')
+    if updated_count is None:
+        return jsonify({'error': 'Failed to mark notifications as read'}), 500
+    return jsonify({'message': 'Notifications marked as read', 'updated_count': updated_count}), 200
+
+
 @app.route('/api/owner/notifications/preferences/<int:owner_id>', methods=['GET'])
 def owner_get_notification_preferences(owner_id):
     """Owner: Get notification preferences"""
@@ -6055,10 +7427,17 @@ def owner_delete_promotion(owner_id, offer_id):
 # --- STAFF LOGIN ---
 @app.route('/api/staff/login', methods=['POST'])
 def staff_login():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-    hotel_code = data.get('hotelCode')
+    data = request.json or {}
+    email = _normalize_email(data.get('email'))
+    password = data.get('password') or ''
+    hotel_code = str(data.get('hotelCode') or '').strip().upper()
+
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid employee email."}), 400
+    if not password:
+        return jsonify({"error": "Password is required."}), 400
+    if not _is_valid_hotel_code(hotel_code):
+        return jsonify({"error": "Enter a valid hotel code."}), 400
 
     try:
         conn = get_db_connection()
@@ -6099,16 +7478,37 @@ def staff_login():
 
 @app.route('/api/staff/register', methods=['POST'])
 def register_staff():
-    data = request.json
-    first_name = data.get('firstName')
-    last_name = data.get('lastName')
-    email = data.get('email')
-    contact_number = data.get('contactNumber')
-    password = data.get('password')
-    role = data.get('role')
-    hotel_code = data.get('hotelCode')
+    data = request.json or {}
+    first_name = str(data.get('firstName') or '').strip()
+    last_name = str(data.get('lastName') or '').strip()
+    email = _normalize_email(data.get('email'))
+    contact_number = str(data.get('contactNumber') or '').strip()
+    password = data.get('password') or ''
+    role = str(data.get('role') or '').strip()
+    hotel_code = str(data.get('hotelCode') or '').strip().upper()
 
-    # FIX 2: Tinanggal ang 'security.' dahil direct import ang generate_password_hash
+    if not all([first_name, last_name, email, contact_number, password, role, hotel_code]):
+        return jsonify({"error": "Please complete all required staff registration fields."}), 400
+    if not _is_valid_name(first_name) or not _is_valid_name(last_name):
+        return jsonify({"error": "Staff name contains invalid characters."}), 400
+    if not _is_valid_email(email):
+        return jsonify({"error": "Enter a valid staff email address."}), 400
+    if not _is_valid_phone(contact_number):
+        return jsonify({"error": "Enter a valid staff contact number."}), 400
+    if role not in {
+        'Hotel Manager',
+        'Front Desk Operations',
+        'Housekeeping & Maintenance',
+        'Inventory & Supplies',
+        'HR/Payroll Staff Management',
+    }:
+        return jsonify({"error": "Select a valid staff role."}), 400
+    if not _is_valid_hotel_code(hotel_code):
+        return jsonify({"error": "Hotel code must follow the INNOVAHMS-123 format."}), 400
+    password_error = _password_strength_message(password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
+
     password_hash = generate_password_hash(password)
 
     try:
@@ -6116,7 +7516,7 @@ def register_staff():
         cur = conn.cursor()
         
         # 1. Hanapin ang hotel_id base sa hotel_code
-        cur.execute("SELECT id FROM hotels WHERE hotel_code = %s", (hotel_code,))
+        cur.execute("SELECT id FROM hotels WHERE UPPER(hotel_code) = %s", (hotel_code,))
         hotel = cur.fetchone()
         
         if not hotel:
@@ -6127,6 +7527,12 @@ def register_staff():
         hotel_id = hotel[0]
 
         # 2. Insert Staff Data
+        cur.execute("SELECT id FROM staff WHERE LOWER(email) = %s LIMIT 1", (email,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "This staff email is already registered."}), 409
+
         cur.execute("""
             INSERT INTO staff (hotel_id, first_name, last_name, email, contact_number, password_hash, role, hotel_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -6439,6 +7845,12 @@ def create_payment_link():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("paymongo", default=True):
+            return _integration_disabled_error(
+                "paymongo",
+                "PayMongo payments are temporarily disabled by the admin.",
+            )
+
         paymongo_key = os.getenv('PAYMONGO_SECRET_KEY', '')
         if not paymongo_key or 'your_' in paymongo_key:
             return jsonify({'error': 'PayMongo API key not configured. Please set PAYMONGO_SECRET_KEY in backend/.env file. Get your key at https://dashboard.paymongo.com/developers'}), 503
@@ -6941,12 +8353,14 @@ def create_reservation():
               (booking_number, customer_id, room_id, hotel_id, check_in_date, check_out_date,
                check_in_time, check_out_time,
                total_nights, total_amount, base_amount, privilege_discount_percent, privilege_discount_amount,
+               subtotal_amount, vat_percent, vat_amount, tax_percent, tax_amount,
                applied_privilege_slug, applied_privilege_name, payment_method, special_requests, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDING')
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDING')
             RETURNING id, booking_number
         """, (booking_number, customer_id, room_id, room.get('hotel_id'),
                check_in, check_out, check_in_time, check_out_time,
                nights, total, pricing["baseAmount"], pricing["discountPercent"], pricing["discountAmount"],
+               pricing["subtotalAmount"], pricing["vatPercent"], pricing["vatAmount"], pricing["taxPercent"], pricing["taxAmount"],
                privilege.get("packageSlug"), privilege.get("packageName"), payment_method, special_requests))
         row = cur.fetchone()
         conn.commit()
@@ -6960,6 +8374,11 @@ def create_reservation():
             'baseAmount': pricing["baseAmount"],
             'privilegeDiscountPercent': pricing["discountPercent"],
             'privilegeDiscountAmount': pricing["discountAmount"],
+            'subtotalAmount': pricing["subtotalAmount"],
+            'vatPercent': pricing["vatPercent"],
+            'vatAmount': pricing["vatAmount"],
+            'taxPercent': pricing["taxPercent"],
+            'taxAmount': pricing["taxAmount"],
             'appliedPrivilege': {
                 'isActive': bool(privilege.get("isActive")),
                 'packageName': privilege.get("packageName"),
@@ -7033,6 +8452,90 @@ def get_all_reservations():
         # Siguraduhing laging isasara ang connection kahit mag-error
         if conn:
             conn.close()
+
+
+@app.route('/api/rooms/<int:room_id>/availability', methods=['GET'])
+def room_availability(room_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT id, booking_number, check_in_date, check_out_date, status
+            FROM reservations
+            WHERE room_id = %s
+              AND status NOT IN ('CANCELLED', 'FAILED', 'CHECKED_OUT', 'cancelled', 'failed', 'checked_out')
+            ORDER BY check_in_date ASC, id ASC
+            """,
+            (room_id,),
+        )
+        rows = cur.fetchall() or []
+        return jsonify({
+            "roomId": room_id,
+            "blockedRanges": [
+                {
+                    "reservationId": row.get("id"),
+                    "bookingNumber": row.get("booking_number"),
+                    "checkIn": _serialize_date(row.get("check_in_date")),
+                    "checkOut": _serialize_date(row.get("check_out_date")),
+                    "status": str(row.get("status") or "").upper(),
+                }
+                for row in rows
+                if row.get("check_in_date") and row.get("check_out_date")
+            ],
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/owners/<int:owner_id>/approval', methods=['PATCH'])
+def admin_update_owner_approval(owner_id):
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        status = str(data.get('status') or 'APPROVED').strip().upper()
+        notes = str(data.get('notes') or '').strip()
+        if status not in {'APPROVED', 'PENDING', 'REJECTED'}:
+            return jsonify({'error': 'Invalid approval status.'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_profile_media_columns(cur)
+        cur.execute(
+            """
+            UPDATE owners
+            SET approval_status = %s,
+                review_notes = %s,
+                reviewed_at = NOW(),
+                approved_at = CASE WHEN %s = 'APPROVED' THEN NOW() ELSE approved_at END
+            WHERE id = %s
+            RETURNING id
+            """,
+            (status, notes or None, status, owner_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            conn.rollback()
+            return jsonify({'error': 'Owner not found.'}), 404
+
+        conn.commit()
+        return jsonify({
+            'message': f'Owner approval status updated to {status}.',
+            'ownerId': owner_id,
+            'approvalStatus': status,
+            'reviewNotes': notes,
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
             
             
 @app.route('/api/hr/dashboard-stats', methods=['GET'])
@@ -7361,6 +8864,7 @@ def get_recommendations():
             first_image = images[0] if images else "https://images.unsplash.com/photo-1611892440504-42a792e24d32"
             max_adults = int(row.get('max_adults') or 0)
             max_children = int(row.get('max_children') or 0)
+            room_tour = _build_tour_payload(cur, row.get('id'))
 
             formatted_rooms.append({
                 "id": row.get('id'),
@@ -7375,7 +8879,7 @@ def get_recommendations():
                 "has_wifi": any('wifi' in a for a in amenities),
                 "has_pool": any('pool' in a for a in amenities),
                 "has_dining": any('breakfast' in a or 'dining' in a for a in amenities),
-                "has_virtual_tour": True
+                "has_virtual_tour": bool((room_tour or {}).get("isInteractive"))
             })
 
         return jsonify(formatted_rooms), 200
@@ -7828,34 +9332,33 @@ def inventory_forecast():
 
 @app.route('/api/integrations/status', methods=['GET'])
 def integrations_status():
-    sendgrid_key = os.getenv("SENDGRID_API_KEY")
-    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
-    paymongo_key = os.getenv("PAYMONGO_SECRET_KEY")
-    currency_key = os.getenv("CURRENCY_API_KEY")
-    rasa_url = os.getenv("RASA_WEBHOOK_URL")
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        integrations = _get_api_integrations(cur)
+        integration_map = {item.get("slug"): item for item in integrations}
 
-    integrations = [
-        {"name": "SendGrid", "module": "Email Notifications", "connected": bool(sendgrid_key)},
-        {"name": "Twilio", "module": "SMS Notifications", "connected": bool(twilio_sid and twilio_token)},
-        {"name": "OpenStreetMap + Leaflet", "module": "Maps & Location", "connected": True},
-        {"name": "Currency API", "module": "Currency Conversion", "connected": bool(currency_key)},
-        {"name": "Plotly + Prophet", "module": "Analytics & Forecasting", "connected": True},
-        {"name": "Rasa", "module": "AI Chatbot", "connected": bool(rasa_url) or True},
-        {"name": "Marzipano", "module": "360 Room Viewer", "connected": True},
-        {"name": "QR Code", "module": "QR Generation", "connected": True},
-        {"name": "JWT", "module": "Authentication & Security", "connected": False},
-        {"name": "PayMongo", "module": "Payment Integration", "connected": bool(paymongo_key)},
-    ]
-
-    return jsonify({
-        "integrations": integrations,
-        "mainApis": {
-            "maps": True,
-            "analytics": True,
-            "chatbot": True,
-        },
-    }), 200
+        return jsonify({
+            "integrations": integrations,
+            "mainApis": {
+                "maps": bool(integration_map.get("openstreetmap", {}).get("isEnabled", True)),
+                "chatbot": bool(integration_map.get("rasa", {}).get("isEnabled", True)),
+                "payments": bool(integration_map.get("paymongo", {}).get("isEnabled", True)),
+            },
+            "providers": {
+                "paymongo": bool(integration_map.get("paymongo", {}).get("isEnabled", True)),
+                "sendgrid": bool(integration_map.get("sendgrid", {}).get("isEnabled", True)),
+                "twilio": bool(integration_map.get("twilio", {}).get("isEnabled", True)),
+                "rasa": bool(integration_map.get("rasa", {}).get("isEnabled", True)),
+                "openstreetmap": bool(integration_map.get("openstreetmap", {}).get("isEnabled", True)),
+            },
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
 
 
 @app.route('/api/customers/resolve', methods=['GET'])
@@ -8130,11 +9633,69 @@ def customer_privileges():
         _safe_close(conn, cur)
 
 
+@app.route('/api/customer/privileges/cancel', methods=['POST'])
+def customer_privileges_cancel():
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(silent=True) or {}
+        customer_id = _to_int(data.get("customerId"), 0)
+        if not customer_id:
+            return jsonify({"error": "customerId is required."}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _seed_customer_privilege_packages(cur)
+
+        current_subscription = _get_customer_privilege_subscription(cur, customer_id)
+        serialized_subscription = _serialize_customer_privilege_subscription(current_subscription)
+        if not serialized_subscription.get("id"):
+            return jsonify({"error": "No privilege tier is linked to this customer."}), 404
+        if not serialized_subscription.get("isActive"):
+            return jsonify({"error": "There is no active privilege tier to cancel."}), 400
+
+        cur.execute(
+            """
+            UPDATE customer_privilege_subscriptions
+            SET status = 'CANCELLED',
+                payment_status = 'CANCELLED',
+                renewal_date = CURRENT_DATE,
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (serialized_subscription.get("id"),),
+        )
+        if not cur.fetchone():
+            conn.rollback()
+            return jsonify({"error": "Unable to cancel the privilege tier right now."}), 400
+
+        conn.commit()
+        refreshed_summary = _build_customer_membership_summary(cur, customer_id)
+        return jsonify({
+            "message": "Privilege tier cancelled successfully.",
+            "summary": refreshed_summary,
+            "subscription": (refreshed_summary or {}).get("privilege") or {},
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
 @app.route('/api/customer/privileges/create-payment-link', methods=['POST'])
 def customer_privileges_create_payment_link():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("paymongo", default=True):
+            return _integration_disabled_error(
+                "paymongo",
+                "PayMongo payments are temporarily disabled by the admin.",
+            )
+
         data = request.get_json(silent=True) or {}
         customer_id = _to_int(data.get("customerId"), 0)
         package_id = _to_int(data.get("packageId"), 0)
@@ -8479,6 +10040,14 @@ def chatbot_rasa_fallback():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("rasa", default=True):
+            return jsonify({
+                "error": "AI assistant is temporarily disabled by the admin.",
+                "messages": ["AI assistant is temporarily unavailable while maintenance is in progress."],
+                "source": "disabled",
+                "disabled": True,
+            }), 503
+
         payload = request.json or {}
         sender = (payload.get("sender") or "website-guest").strip()
         message = (payload.get("message") or "").strip()
@@ -8521,33 +10090,148 @@ def chatbot_rasa_fallback():
 
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_profile_media_columns(cur)
 
-        # Smart matching for questions that need database queries
+        context_path = str(payload.get("context_path") or "").strip().lower()
+        selected_hotel_id = _to_int_or_none(payload.get("hotel_id"))
+        from_date_raw = str(payload.get("from") or payload.get("checkIn") or "").strip()
+        to_date_raw = str(payload.get("to") or payload.get("checkOut") or "").strip()
+        requested_guests = _to_int(payload.get("guests"), 0)
+
+        from_date = to_date = None
+        try:
+            if from_date_raw:
+                from_date = datetime.strptime(from_date_raw, "%Y-%m-%d").date()
+            if to_date_raw:
+                to_date = datetime.strptime(to_date_raw, "%Y-%m-%d").date()
+        except Exception:
+            from_date = to_date = None
+
+        hotel = {}
+        if _table_exists(cur, "hotels"):
+            hotel_select = ["id", "hotel_name", "hotel_address"]
+            for column_name in [
+                "hotel_description",
+                "contact_phone",
+                "check_in_policy",
+                "check_out_policy",
+                "cancellation_policy",
+            ]:
+                if _table_has_column(cur, "hotels", column_name):
+                    hotel_select.append(column_name)
+
+            hotel_query = f"SELECT {', '.join(hotel_select)} FROM hotels"
+            hotel_params = []
+            if selected_hotel_id:
+                hotel_query += " WHERE id = %s"
+                hotel_params.append(selected_hotel_id)
+            hotel_query += " ORDER BY id ASC LIMIT 1"
+            cur.execute(hotel_query, tuple(hotel_params))
+            hotel = cur.fetchone() or {}
+
+        room_rows = []
+        room_type_match = None
+        known_room_types = []
+        if _table_exists(cur, "rooms"):
+            cur.execute("SELECT DISTINCT COALESCE(room_type, '') AS room_type FROM rooms ORDER BY room_type ASC")
+            known_room_types = [str(row.get("room_type") or "").strip() for row in (cur.fetchall() or []) if str(row.get("room_type") or "").strip()]
+            room_type_match = next((room_type for room_type in known_room_types if room_type.lower() in lower_msg), None)
+
+            room_query = """
+                SELECT room_name, room_type, price_per_night, amenities, max_adults, max_children
+                FROM rooms
+                WHERE LOWER(COALESCE(status, '')) = 'available'
+            """
+            room_params = []
+            if selected_hotel_id:
+                room_query += " AND hotel_id = %s"
+                room_params.append(selected_hotel_id)
+            if requested_guests > 0:
+                room_query += " AND (COALESCE(max_adults, 0) + COALESCE(max_children, 0)) >= %s"
+                room_params.append(requested_guests)
+            if room_type_match:
+                room_query += " AND LOWER(COALESCE(room_type, '')) = LOWER(%s)"
+                room_params.append(room_type_match)
+            if from_date and to_date:
+                room_query += """
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM reservations rv
+                        WHERE rv.room_id = r.id
+                          AND UPPER(COALESCE(rv.status, 'PENDING')) NOT IN ('CANCELLED', 'FAILED', 'CHECKED_OUT')
+                          AND rv.check_in_date < %s
+                          AND rv.check_out_date > %s
+                    )
+                """
+                room_params.extend([to_date, from_date])
+            room_query += " ORDER BY price_per_night ASC, id DESC LIMIT 4"
+            cur.execute(room_query, tuple(room_params))
+            room_rows = cur.fetchall() or []
+
         if any(keyword in lower_msg for keyword in ["available", "availability", "room", "suite", "vacant"]):
-            if _table_exists(cur, "rooms"):
-                cur.execute(
-                    """
-                    SELECT room_name, room_type, price_per_night
-                    FROM rooms
-                    WHERE LOWER(COALESCE(status, '')) = 'available'
-                    ORDER BY price_per_night ASC, id DESC
-                    LIMIT 3
-                    """
-                )
-                room_rows = cur.fetchall() or []
-                if room_rows:
-                    room_lines = []
-                    for row in room_rows:
-                        room_lines.append(
-                            f"{row.get('room_name') or row.get('room_type') or 'Suite'} - PHP {int(_to_float(row.get('price_per_night'), 0)):,}/night"
-                        )
-                    replies.append("Current available rooms: " + "; ".join(room_lines))
-                else:
-                    replies.append("I cannot find available rooms right now. Please try again in a moment.")
+            if room_rows:
+                room_lines = []
+                for row in room_rows:
+                    capacity = max(_to_int(row.get("max_adults"), 0) + _to_int(row.get("max_children"), 0), 1)
+                    room_lines.append(
+                        f"{row.get('room_name') or row.get('room_type') or 'Suite'} - PHP {int(_to_float(row.get('price_per_night'), 0)):,}/night for up to {capacity} guest{'s' if capacity != 1 else ''}"
+                    )
+                availability_context = " for your selected dates" if from_date and to_date else ""
+                replies.append(f"Current available rooms{availability_context}: " + "; ".join(room_lines))
             else:
-                replies.append("Room inventory is currently syncing. Please try again shortly.")
+                replies.append("I cannot find an available room that matches that request right now. Try adjusting the dates, guests, or room type.")
 
-        if any(keyword in lower_msg for keyword in ["promo", "offer", "discount", "deal", "special"]):
+        if any(keyword in lower_msg for keyword in ["price", "rate", "rates", "budget", "cheap", "expensive", "cost"]):
+            if room_rows:
+                cheapest = room_rows[0]
+                replies.append(
+                    f"The current starting rate is PHP {int(_to_float(cheapest.get('price_per_night'), 0)):,} per night for {cheapest.get('room_name') or cheapest.get('room_type') or 'an available room'}."
+                )
+            else:
+                replies.append("I cannot confirm a live room rate right now, but the booking page will still show the latest price before checkout.")
+
+        if any(keyword in lower_msg for keyword in ["amenity", "amenities", "facility", "facilities", "feature", "features"]):
+            amenity_labels = []
+            for row in room_rows:
+                for amenity in (_parse_text_array(row.get("amenities")) or [])[:6]:
+                    if amenity not in amenity_labels:
+                        amenity_labels.append(amenity)
+            if amenity_labels:
+                replies.append("Popular room amenities include " + ", ".join(amenity_labels[:6]) + ".")
+            else:
+                replies.append("Amenities vary by room, and you can review each room card in Vision Suites for the latest inclusions.")
+
+        if any(keyword in lower_msg for keyword in ["policy", "check-in", "check in", "check-out", "check out", "cancel", "refund"]):
+            policy_parts = []
+            if hotel.get("check_in_policy"):
+                policy_parts.append(f"Check-in: {hotel.get('check_in_policy')}")
+            if hotel.get("check_out_policy"):
+                policy_parts.append(f"Check-out: {hotel.get('check_out_policy')}")
+            if hotel.get("cancellation_policy"):
+                policy_parts.append(f"Cancellation: {hotel.get('cancellation_policy')}")
+            if policy_parts:
+                replies.append("Hotel policies: " + " | ".join(policy_parts))
+            else:
+                replies.append("Policy details are not fully configured yet, but the booking page will show the latest check-in, check-out, and cancellation rules.")
+
+        if any(keyword in lower_msg for keyword in ["where", "location", "located", "address", "map", "direction", "directions"]):
+            hotel_name = hotel.get("hotel_name") or "the hotel"
+            hotel_address = hotel.get("hotel_address") or "the property address is still being updated"
+            replies.append(f"{hotel_name} is located at {hotel_address}. You can also open Vision Suites for the live map and nearby landmarks.")
+
+        if any(keyword in lower_msg for keyword in ["contact", "phone", "call", "email", "support"]):
+            if hotel.get("contact_phone"):
+                replies.append(f"You can contact the hotel at {hotel.get('contact_phone')}.")
+            else:
+                replies.append("Direct hotel contact details are still being updated in the system. You can continue through the booking page or ask for room guidance here.")
+
+        if any(keyword in lower_msg for keyword in ["about", "hotel", "property", "vision suites", "innova"]):
+            hotel_name = hotel.get("hotel_name") or "Innova Vision Suites"
+            hotel_desc = hotel.get("hotel_description") or "This property is part of the Innova HMS hospitality experience with live room browsing, booking, and guest support."
+            if not replies or "available room" not in " ".join(replies).lower():
+                replies.append(f"{hotel_name}: {hotel_desc}")
+
+        if any(keyword in lower_msg for keyword in ["promo", "offer", "discount", "deal"]):
             if _table_exists(cur, "guest_offers"):
                 cur.execute(
                     """
@@ -8569,44 +10253,29 @@ def chatbot_rasa_fallback():
                                 f"{row.get('title') or 'Special Offer'} (PHP {int(_to_float(row.get('discounted_price'), 0)):,})"
                             )
                     replies.append("Latest offers: " + "; ".join(offer_lines))
+            if not any("Latest offers:" in reply for reply in replies):
+                replies.append("Promo data is limited right now, but I can still help you compare rooms and rates.")
 
-        # For any other question, respond intelligently without filtering
-        # Acknowledge the question and provide helpful guidance
+        if any(keyword in lower_msg for keyword in ["membership", "privilege", "reward", "rewards", "points"]):
+            replies.append("Customer privilege plans add booking discounts, bonus points, and renewal tracking. You can open the Privileges page to compare active tiers.")
+
+        if any(keyword in lower_msg for keyword in ["payment", "pay", "card", "gcash", "maya", "qr", "paymongo"]):
+            replies.append("Current booking payments support cash on arrival, QR Ph, and card checkout. Online payments run through the platform payment gateway when enabled.")
+
+        if any(keyword in lower_msg for keyword in ["360", "tour", "virtual"]):
+            replies.append("You can open a 360 tour from the Home room cards or from Vision Suites using the 'Explore 360' button.")
+
+        if any(keyword in lower_msg for keyword in ["booking", "reserve", "reservation", "book now"]):
+            replies.append("To reserve, open any room card and click Reserve. The booking flow will calculate your room total, VAT, taxes, and any active privilege discount before payment.")
+
         if not replies:
-            # Detect the topic of the question to provide relevant guidance
-            topics_help = {
-                "pet": "For questions about pet policies, please check our Policies page or contact our team directly.",
-                "booking": "You can book a room immediately by opening any room card and clicking Reserve.",
-                "price": "Our room prices vary by type and date. Check available rooms to see current rates.",
-                "wifi": "Yes, we provide free WiFi throughout the hotel.",
-                "parking": "Yes, free parking is available for our guests.",
-                "breakfast": "Our on-site restaurant offers breakfast. Check the Facilities page for details.",
-                "restaurant": "We have an on-site restaurant with local and international cuisine.",
-                "cancel": "We offer free cancellation up to 48 hours before check-in.",
-                "check-in": "Standard check-in is 2:00 PM and check-out is 11:00 AM.",
-                "digital key": "You can access your digital key via QR code from your booking.",
-                "loyalty": "Join our membership program to earn loyalty points on bookings.",
-                "tour": "Explore 360 virtual tours of our rooms from the Home page.",
-                "review": "Check our guest reviews on the Home page to see ratings and feedback.",
-                "contact": "Reach us through the Contact page with your phone and email.",
-                "location": "Find our location and directions on the Neighborhood Map page.",
-            }
-
             greeting = "Hello"
             if customer_id:
                 greeting = f"Hello guest #{customer_id}"
-
-            # Try to match question topic and provide relevant response
-            matched_topic = False
-            for topic, help_text in topics_help.items():
-                if topic in lower_msg:
-                    replies.append(help_text)
-                    matched_topic = True
-                    break
-
-            # If no specific topic matched, give generic open-ended response
-            if not matched_topic:
-                replies.append(f"{greeting}! I'm here to help with any questions about our hotel, booking process, amenities, policies, pricing, and more. Feel free to ask me anything!")
+            page_hint = " on Vision Suites" if "vision-suites" in context_path else ""
+            replies = [
+                f"{greeting}, I can help with hotel details, room availability, prices, amenities, policies, payments, and bookings{page_hint}. What would you like to know?"
+            ]
 
         return jsonify({
             "messages": replies,
@@ -8625,6 +10294,7 @@ def vision_hotel():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_profile_media_columns(cur)
         hotel_id = request.args.get("hotel_id", type=int)
 
         hotel = {
@@ -8632,10 +10302,29 @@ def vision_hotel():
             "name": "Innova Vision Suites",
             "locationLabel": "Innova Smart Hotel",
             "location": {"lat": 14.5995, "lng": 120.9842},
+            "buildingImage": "/images/signup-img.png",
+            "hotelLogo": "",
+            "description": "",
+            "contactPhone": "",
+            "checkInPolicy": "",
+            "checkOutPolicy": "",
+            "cancellationPolicy": "",
         }
 
         if _table_exists(cur, "hotels"):
             select_cols = ["id", "hotel_name", "hotel_address"]
+            optional_cols = [
+                "hotel_building_image",
+                "hotel_logo",
+                "hotel_description",
+                "contact_phone",
+                "check_in_policy",
+                "check_out_policy",
+                "cancellation_policy",
+            ]
+            for column_name in optional_cols:
+                if _table_has_column(cur, "hotels", column_name):
+                    select_cols.append(column_name)
             if _table_has_column(cur, "hotels", "latitude"):
                 select_cols.append("latitude")
             if _table_has_column(cur, "hotels", "longitude"):
@@ -8659,6 +10348,13 @@ def vision_hotel():
                         "lat": _to_float(row.get("latitude"), 14.5995),
                         "lng": _to_float(row.get("longitude"), 120.9842),
                     },
+                    "buildingImage": row.get("hotel_building_image") or row.get("hotel_logo") or "/images/signup-img.png",
+                    "hotelLogo": row.get("hotel_logo") or "",
+                    "description": row.get("hotel_description") or "",
+                    "contactPhone": row.get("contact_phone") or "",
+                    "checkInPolicy": row.get("check_in_policy") or "",
+                    "checkOutPolicy": row.get("check_out_policy") or "",
+                    "cancellationPolicy": row.get("cancellation_policy") or "",
                 }
 
         return jsonify({"hotel": hotel}), 200
@@ -8675,11 +10371,26 @@ def vision_rooms():
     try:
         view_filter = (request.args.get("view") or "").strip()
         hotel_id = request.args.get("hotel_id", type=int)
+        guests = request.args.get("guests", type=int)
+        from_date_raw = (request.args.get("from") or request.args.get("checkIn") or "").strip()
+        to_date_raw = (request.args.get("to") or request.args.get("checkOut") or "").strip()
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         if not _table_exists(cur, "rooms"):
             return jsonify({"rooms": []}), 200
+
+        from_date = to_date = None
+        try:
+            if from_date_raw:
+                from_date = datetime.strptime(from_date_raw, "%Y-%m-%d").date()
+            if to_date_raw:
+                to_date = datetime.strptime(to_date_raw, "%Y-%m-%d").date()
+        except Exception:
+            return jsonify({"error": "Invalid room availability date filter. Use YYYY-MM-DD."}), 400
+
+        if from_date and to_date and to_date <= from_date:
+            return jsonify({"error": "Check-out date must be after check-in date."}), 400
 
         query = """
             SELECT
@@ -8704,6 +10415,10 @@ def vision_rooms():
             query += " AND r.hotel_id = %s"
             params.append(hotel_id)
 
+        if guests and guests > 0:
+            query += " AND (COALESCE(r.max_adults, 0) + COALESCE(r.max_children, 0)) >= %s"
+            params.append(guests)
+
         if view_filter and view_filter.lower() != "all":
             like_term = f"%{view_filter}%"
             query += """
@@ -8714,6 +10429,19 @@ def vision_rooms():
                 )
             """
             params.extend([like_term, like_term, like_term])
+
+        if from_date and to_date:
+            query += """
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM reservations rv
+                    WHERE rv.room_id = r.id
+                      AND UPPER(COALESCE(rv.status, 'PENDING')) NOT IN ('CANCELLED', 'FAILED', 'CHECKED_OUT')
+                      AND rv.check_in_date < %s
+                      AND rv.check_out_date > %s
+                )
+            """
+            params.extend([to_date, from_date])
 
         query += " ORDER BY r.price_per_night ASC, r.id DESC"
         cur.execute(query, tuple(params))
@@ -8727,7 +10455,7 @@ def vision_rooms():
             room_id = row.get("id")
             has_tour = False
             try:
-                has_tour = bool(_build_tour_payload(cur, room_id))
+                has_tour = bool((_build_tour_payload(cur, room_id) or {}).get("isInteractive"))
             except Exception:
                 has_tour = False
 
@@ -8748,6 +10476,7 @@ def vision_rooms():
                 "hasVirtualTour": has_tour,
                 "hotelId": row.get("hotel_id"),
                 "hotelName": row.get("hotel_name") or "",
+                "isAvailableForSelectedDates": True,
             })
 
         return jsonify({"rooms": rooms}), 200
@@ -8762,6 +10491,13 @@ def vision_nearby_hotels():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("openstreetmap", default=True):
+            return jsonify({
+                "hotels": [],
+                "disabled": True,
+                "message": "Map services are temporarily disabled by the admin.",
+            }), 200
+
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -8805,6 +10541,13 @@ def vision_landmarks():
     conn = None
     cur = None
     try:
+        if not _is_integration_enabled("openstreetmap", default=True):
+            return jsonify({
+                "landmarks": [],
+                "disabled": True,
+                "message": "Map services are temporarily disabled by the admin.",
+            }), 200
+
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -9022,6 +10765,11 @@ def serve_room_images(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
+@app.route('/static/uploads/owner-documents/<path:filename>')
+def serve_owner_documents(filename):
+    return send_from_directory(OWNER_DOCUMENT_UPLOAD_FOLDER, filename)
+
+
 @app.route('/api/staff/auto-checkout-overdue', methods=['POST'])
 def auto_checkout_overdue():
     """Auto checkout CHECKED_IN guests whose check_out_date < today."""
@@ -9037,31 +10785,18 @@ def auto_checkout_overdue():
                 special_requests = COALESCE(special_requests,'') || ' [Auto-checked-out: past checkout date]'
             WHERE status = 'CHECKED_IN'
               AND check_out_date < %s
-            RETURNING id, booking_number, check_out_date, room_id, hotel_id
+            RETURNING id, booking_number, check_out_date, room_id
         """, (today,))
         rows = cur.fetchall() or []
-        # Free up rooms and create housekeeping tasks
+        # Free up rooms
         for row in rows:
             if row.get('room_id'):
-                # Get room number
-                cur.execute("SELECT room_number FROM rooms WHERE id = %s", (row['room_id'],))
-                room_row = cur.fetchone()
-                room_label = room_row.get('room_number') if room_row else None
-                
-                # Set room to Cleaning status
-                cur.execute("UPDATE rooms SET status = 'Cleaning' WHERE id = %s", (row['room_id'],))
-                
-                # Create housekeeping task
-                cur.execute("""
-                    INSERT INTO hk_tasks (hotel_id, room_id, room_label, task_type, priority, status, notes, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                """, (row['hotel_id'], row['room_id'], room_label, 'Room Cleaning', 'NORMAL', 'Pending', f'Auto-checkout room cleaning - Booking {row["booking_number"]} (overdue)'))
-        
+                cur.execute("UPDATE rooms SET status = 'Available' WHERE id = %s", (row['room_id'],))
         conn.commit()
         result = [{'id': r['id'], 'bookingNumber': r['booking_number'], 'checkOut': r['check_out_date'].isoformat()} for r in rows]
         if result:
             print(f"[Auto-Checkout] {len(result)} guest(s) auto-checked-out: {[r['bookingNumber'] for r in result]}")
-        return jsonify({'message': f'{len(result)} guest(s) auto-checked out and housekeeping tasks created.', 'checkedOut': result, 'count': len(result)}), 200
+        return jsonify({'message': f'{len(result)} guest(s) auto-checked out.', 'checkedOut': result, 'count': len(result)}), 200
     except Exception as e:
         if conn: conn.rollback()
         return jsonify({'error': str(e)}), 500
@@ -9218,7 +10953,7 @@ def staff_checkout_queue():
 
 @app.route('/api/staff/checkout/<int:reservation_id>', methods=['PUT'])
 def staff_process_checkout(reservation_id):
-    """Process final checkout — sets status to CHECKED_OUT, room to Available, and creates housekeeping task."""
+    """Process final checkout — sets status to CHECKED_OUT, room to Available."""
     conn = None
     cur = None
     try:
@@ -9227,30 +10962,16 @@ def staff_process_checkout(reservation_id):
         cur.execute("""
             UPDATE reservations SET status = 'CHECKED_OUT'
             WHERE id = %s AND status = 'CHECKED_IN'
-            RETURNING id, booking_number, room_id, hotel_id
+            RETURNING id, booking_number, room_id
         """, (reservation_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({'error': 'Reservation not found or not checked in.'}), 404
-        
-        # Get room details for housekeeping task
-        room_label = None
+        # Free up the room
         if row.get('room_id'):
-            cur.execute("SELECT room_number FROM rooms WHERE id = %s", (row['room_id'],))
-            room_row = cur.fetchone()
-            room_label = room_row.get('room_number') if room_row else None
-            
-            # Set room to Cleaning status and create housekeeping task
-            cur.execute("UPDATE rooms SET status = 'Cleaning' WHERE id = %s", (row['room_id'],))
-            
-            # Create housekeeping task for room cleaning
-            cur.execute("""
-                INSERT INTO hk_tasks (hotel_id, room_id, room_label, task_type, priority, status, notes, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            """, (row['hotel_id'], row['room_id'], room_label, 'Room Cleaning', 'NORMAL', 'Pending', f'Room cleaning required after guest checkout - Booking {row["booking_number"]}'))
-        
+            cur.execute("UPDATE rooms SET status = 'Available' WHERE id = %s", (row['room_id'],))
         conn.commit()
-        return jsonify({'message': f"{row['booking_number']} checked out. Room freed and housekeeping task created.", 'bookingNumber': row['booking_number']}), 200
+        return jsonify({'message': f"{row['booking_number']} checked out. Room freed.", 'bookingNumber': row['booking_number']}), 200
     except Exception as e:
         if conn: conn.rollback()
         return jsonify({'error': str(e)}), 500
@@ -9943,7 +11664,7 @@ def staff_check_in(reservation_id):
 
 @app.route('/api/staff/check-out/<int:reservation_id>', methods=['PUT'])
 def staff_check_out(reservation_id):
-    """Process guest check-out — updates status to CHECKED_OUT and creates housekeeping task."""
+    """Process guest check-out — updates status to CHECKED_OUT."""
     conn = None
     cur = None
     try:
@@ -9952,23 +11673,11 @@ def staff_check_out(reservation_id):
         cur.execute("""
             UPDATE reservations SET status = 'CHECKED_OUT'
             WHERE id = %s AND status = 'CHECKED_IN'
-            RETURNING id, booking_number, room_id, hotel_id
+            RETURNING id, booking_number, status
         """, (reservation_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({'error': 'Reservation not found or not checked in.'}), 404
-        
-        # Create housekeeping task if room is assigned
-        if row.get('room_id'):
-            cur.execute("SELECT room_number FROM rooms WHERE id = %s", (row['room_id'],))
-            room_row = cur.fetchone()
-            room_label = room_row.get('room_number') if room_row else None
-            
-            cur.execute("""
-                INSERT INTO hk_tasks (hotel_id, room_id, room_label, task_type, priority, status, notes, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            """, (row['hotel_id'], row['room_id'], room_label, 'Room Cleaning', 'NORMAL', 'Pending', f'Room cleaning required after guest checkout - Booking {row["booking_number"]}'))
-        
         conn.commit()
         return jsonify({'message': 'Guest checked out successfully.', 'bookingNumber': row.get('booking_number'), 'status': row.get('status')}), 200
     except Exception as e:
@@ -10692,10 +12401,6 @@ def hk_update_task_status(task_id):
             """, [status, time_spent, task_id])
             row = cur.fetchone()
             if row:
-                # If this is a room cleaning task and it's completed, set room status to Available
-                if row.get('task_type') == 'Room Cleaning' and row.get('room_id'):
-                    cur.execute("UPDATE rooms SET status = 'Available' WHERE id = %s", (row['room_id'],))
-                
                 cur.execute("""
                     INSERT INTO hk_history (hotel_id, task_id, room_label, task_type, staff_name, status, notes)
                     VALUES (%s,%s,%s,%s,%s,'Completed',%s)
