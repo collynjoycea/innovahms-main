@@ -14,3 +14,87 @@ stories:
       - action: action_check_room_availability
       - intent: ask_loyalty_points
       - action: action_get_loyalty_summary
+
+  - story: greet then ask about amenities
+    steps:
+      - intent: greet
+      - action: utter_greet
+      - intent: ask_amenities
+      - action: action_get_amenities
+
+  - story: ask about hotel then features
+    steps:
+      - intent: ask_about_hotel
+      - action: utter_about_hotel
+      - intent: ask_features
+      - action: utter_features
+
+  - story: virtual tour inquiry
+    steps:
+      - intent: ask_virtual_tour
+      - action: utter_virtual_tour
+
+  - story: check in checkout info
+    steps:
+      - intent: ask_checkin_checkout
+      - action: action_get_checkin_checkout_info
+
+  - story: payment and cancellation policy
+    steps:
+      - intent: ask_payment_methods
+      - action: utter_payment_methods
+      - intent: ask_cancellation_policy
+      - action: utter_cancellation_policy
+
+  - story: contact and location
+    steps:
+      - intent: ask_contact_info
+      - action: utter_contact_info
+      - intent: ask_location
+      - action: utter_location
+
+  - story: restaurant and parking
+    steps:
+      - intent: ask_restaurant
+      - action: utter_restaurant
+      - intent: ask_parking
+      - action: utter_parking
+
+  - story: membership inquiry
+    steps:
+      - intent: ask_membership
+      - action: utter_membership
+
+  - story: special requests
+    steps:
+      - intent: ask_special_requests
+      - action: utter_special_requests
+
+  - story: general information request
+    steps:
+      - intent: ask_information
+      - action: utter_information
+
+  - story: transportation info
+    steps:
+      - intent: ask_transportation
+      - action: utter_transportation
+
+  - story: guest reviews
+    steps:
+      - intent: ask_reviews
+      - action: utter_reviews
+
+  - story: digital key and loyalty
+    steps:
+      - intent: ask_digital_key
+      - action: action_get_digital_key_status
+      - intent: ask_loyalty_points
+      - action: action_get_loyalty_summary
+
+  - story: modify and cancel booking
+    steps:
+      - intent: modify_booking
+      - action: action_get_booking_policy
+      - intent: cancel_booking
+      - action: utter_cancellation_policy

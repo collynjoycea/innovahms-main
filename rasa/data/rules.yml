@@ -53,6 +53,76 @@ rules:
       - intent: cancel_booking
       - action: action_get_booking_policy
 
+  - rule: about hotel
+    steps:
+      - intent: ask_about_hotel
+      - action: utter_about_hotel
+
+  - rule: features
+    steps:
+      - intent: ask_features
+      - action: utter_features
+
+  - rule: virtual tour
+    steps:
+      - intent: ask_virtual_tour
+      - action: utter_virtual_tour
+
+  - rule: reviews
+    steps:
+      - intent: ask_reviews
+      - action: utter_reviews
+
+  - rule: payment methods
+    steps:
+      - intent: ask_payment_methods
+      - action: utter_payment_methods
+
+  - rule: cancellation policy
+    steps:
+      - intent: ask_cancellation_policy
+      - action: utter_cancellation_policy
+
+  - rule: contact info
+    steps:
+      - intent: ask_contact_info
+      - action: utter_contact_info
+
+  - rule: location
+    steps:
+      - intent: ask_location
+      - action: utter_location
+
+  - rule: restaurant
+    steps:
+      - intent: ask_restaurant
+      - action: utter_restaurant
+
+  - rule: parking
+    steps:
+      - intent: ask_parking
+      - action: utter_parking
+
+  - rule: transportation
+    steps:
+      - intent: ask_transportation
+      - action: utter_transportation
+
+  - rule: membership
+    steps:
+      - intent: ask_membership
+      - action: utter_membership
+
+  - rule: special requests
+    steps:
+      - intent: ask_special_requests
+      - action: utter_special_requests
+
+  - rule: general information
+    steps:
+      - intent: ask_information
+      - action: utter_information
+
   - rule: fallback
     steps:
       - intent: out_of_scope

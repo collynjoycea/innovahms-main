@@ -8,6 +8,7 @@ import {
   MapPin,
   MessageCircle,
   RotateCcw,
+  ScanEye,
   Search,
   Send,
   SlidersHorizontal,
@@ -42,22 +43,35 @@ const haversineKm = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(s1 + s2));
 };
 
-function TourModal({ open, onClose, roomName, tour, loading }) {
+function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
-  const [viewerError, setViewerError] = useState(false);
-  const isInteractive = Boolean(tour?.isInteractive);
+  const [tourActive, setTourActive] = useState(false);
+  const [viewerError, setViewerError] = useState("");
+
+  // Resolve panorama URL once — handles relative paths, full URLs, and null
   const panoramaUrl = tour?.panoramaUrl ? resolveImg(tour.panoramaUrl, null) : null;
-  const previewUrl = tour?.previewUrl ? resolveImg(tour.previewUrl, panoramaUrl) : panoramaUrl;
+
+  useEffect(() => {
+    if (!open) {
+      setTourActive(false);
+      setViewerError("");
+      try { viewerRef.current?.destroy?.(); } catch {}
+      viewerRef.current = null;
+      return;
+    }
+
+    setTourActive(false);
+    setViewerError("");
+  }, [open, panoramaUrl]);
 
   useEffect(() => {
     if (!open) return;
+    if (!tourActive) return;
     if (!containerRef.current) return;
-    if (!isInteractive) return;
     if (!panoramaUrl) return;
 
     try {
-      setViewerError(false);
       containerRef.current.innerHTML = "";
       const viewer = new Marzipano.Viewer(containerRef.current, { controls: { mouseViewMode: "drag" } });
       viewerRef.current = viewer;
@@ -74,58 +88,109 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
       scene.switchTo({ transitionDuration: 350 });
     } catch (error) {
       console.error("VisionSuites Marzipano init failed:", error);
-      setViewerError(true);
+      setViewerError("Unable to initialize the 360 tour viewer.");
+      setTourActive(false);
     }
 
     return () => {
       try { viewerRef.current?.destroy?.(); } catch { }
       viewerRef.current = null;
     };
-  }, [open, panoramaUrl, isInteractive]);
+  }, [open, panoramaUrl, tour, tourActive]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] bg-black">
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-6 bg-gradient-to-b from-black/70 to-transparent">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30]">Virtual Tour</p>
-          <h3 className="text-2xl font-black text-white">{roomName}</h3>
+    <div className="fixed inset-0 z-[999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-6xl">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30]">360° Virtual Tour</p>
+            <h3 className="text-2xl font-black text-white">{roomName || "Vision Suite"}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all hover:bg-[#bf9b30] hover:text-[#0d0c0a]"
+            aria-label="Close tour"
+          >
+            <X size={24} />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-[#bf9b30] hover:text-[#0d0c0a] flex items-center justify-center transition-all"
-          aria-label="Close tour"
-        >
-          <X size={24} />
-        </button>
-      </div>
 
-      <div className="h-full w-full">
-        {loading ? (
-          <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
-            Loading 360 tour...
-          </div>
-        ) : isInteractive && panoramaUrl && !viewerError ? (
-          <div ref={containerRef} className="h-full w-full" />
-        ) : previewUrl ? (
-          <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
-            <img
-              src={previewUrl}
-              alt={roomName}
-              className="max-h-[70vh] max-w-full object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <p className="text-white/70 text-sm font-semibold">
-              {viewerError ? "Preview mode loaded because the 360 viewer could not start." : "Preview mode loaded for this room image."}
-            </p>
-          </div>
-        ) : (
-          <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
-            No 360 tour configured for this room yet.
-          </div>
-        )}
+        <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-900" style={{ height: "68vh" }}>
+          <div ref={containerRef} className="absolute inset-0" />
+
+          {loading ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900">
+              <div className="h-8 w-8 rounded-full border-2 border-[#bf9b30] border-t-transparent animate-spin" />
+            </div>
+          ) : null}
+
+          {!loading && !panoramaUrl ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-zinc-900 px-6 text-center">
+              <ScanEye size={40} className="text-white/20" />
+              <p className="text-sm font-bold text-white/70">No 360° tour configured for this room yet.</p>
+              <p className="text-xs text-white/35">{notice || "Add a panorama image to enable the immersive viewer."}</p>
+            </div>
+          ) : null}
+
+          {!loading && panoramaUrl && !tourActive ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/60 px-6 text-center">
+              <ScanEye size={36} className="text-[#bf9b30]" />
+              <p className="text-xs font-bold uppercase tracking-widest text-white/70">360° panorama ready</p>
+              <p className="max-w-md text-sm text-white/45">Drag to look around once the viewer starts.</p>
+              <button
+                type="button"
+                onClick={() => setTourActive(true)}
+                className="rounded-full bg-[#bf9b30] px-8 py-4 text-sm font-black uppercase tracking-widest text-[#0d0c0a] shadow-2xl transition-colors hover:bg-[#d8b454]"
+              >
+                Start 360°
+              </button>
+            </div>
+          ) : null}
+
+          {!loading && viewerError ? (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-zinc-950/90 px-6 text-center">
+              <ScanEye size={36} className="text-white/20" />
+              <p className="text-sm font-bold text-white/75">{viewerError}</p>
+              <p className="text-xs text-white/35">{notice || "Check the uploaded panorama path and try again."}</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/20 px-5 py-3 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-white/10"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onReserve}
+            className="rounded-xl bg-[#bf9b30] px-5 py-3 text-xs font-black uppercase tracking-widest text-[#0d0c0a] transition-colors hover:bg-[#d8b454]"
+          >
+            Reserve This Room
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (panoramaUrl) setTourActive((active) => !active);
+            }}
+            disabled={!panoramaUrl}
+            className={`rounded-xl px-5 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+              panoramaUrl
+                ? tourActive
+                  ? "bg-white text-black"
+                  : "bg-white/10 text-white hover:bg-white/20"
+                : "cursor-not-allowed border border-white/20 bg-white/10 text-white/40"
+            }`}
+          >
+            {tourActive ? "Close 360" : "Start 360"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -163,6 +228,7 @@ export default function VisionSuites() {
   const [tourRoom, setTourRoom] = useState(null);
   const [tourData, setTourData] = useState(null);
   const [tourLoading, setTourLoading] = useState(false);
+  const [tourNotice, setTourNotice] = useState("");
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -273,30 +339,30 @@ export default function VisionSuites() {
   const openTour = async (room) => {
     setTourRoom(room);
     setTourData(null);
+    setTourNotice("");
     setTourOpen(true);
     setTourLoading(true);
-    const fallbackTour = {
-      panoramaUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || "/images/deluxe-room.jpg",
-      previewUrl: room?.imageUrl || (Array.isArray(room?.images) ? room.images[0] : room?.images) || "/images/deluxe-room.jpg",
-      initialYaw: 0,
-      initialPitch: 0,
-      initialFov: Math.PI / 2,
-      isInteractive: false,
-    };
     try {
       const res = await fetch(`/api/vision/rooms/${room.id}/tour`);
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || `Tour load failed (HTTP ${res.status}).`);
-      setTourData(payload?.tour ? {
-        ...fallbackTour,
-        ...payload.tour,
-        previewUrl: payload.tour?.previewUrl || payload.tour?.panoramaUrl || fallbackTour.previewUrl,
-      } : fallbackTour);
-    } catch {
-      setTourData(fallbackTour);
+      if (res.ok && payload?.tour) {
+        setTourData(payload.tour);
+      } else {
+        setTourNotice(payload?.error || "No 360° tour configured for this room yet.");
+      }
+    } catch (error) {
+      setTourNotice(error?.message || "Could not load tour data.");
     } finally {
       setTourLoading(false);
     }
+  };
+
+  const closeTour = () => {
+    setTourOpen(false);
+    setTourRoom(null);
+    setTourData(null);
+    setTourLoading(false);
+    setTourNotice("");
   };
 
   const handleChatSubmit = async () => {
@@ -477,7 +543,19 @@ export default function VisionSuites() {
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-[#0d0c0a] text-[#1a160d] dark:text-[#e8e2d5] transition-colors duration-300">
-      <TourModal open={tourOpen} onClose={() => setTourOpen(false)} roomName={tourRoom?.name} tour={tourData} loading={tourLoading} />
+      <TourModal
+        open={tourOpen}
+        onClose={closeTour}
+        onReserve={() => {
+          const roomId = tourRoom?.id;
+          closeTour();
+          if (roomId) navigate(`/booking?roomId=${roomId}`);
+        }}
+        roomName={tourRoom?.name}
+        tour={tourData}
+        loading={tourLoading}
+        notice={tourNotice}
+      />
 
       <button
         type="button"
@@ -835,7 +913,7 @@ export default function VisionSuites() {
                           onClick={() => openTour(room)}
                           className="flex-1 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
                         >
-                          {room.hasVirtualTour ? "Explore in 360" : "Open Preview"}
+                          {room.hasVirtualTour ? "Explore in 360" : "Open Tour"}
                         </button>
                         <Link
                           to={`/hoteldetail/${room.id}`}

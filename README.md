@@ -27,9 +27,30 @@ Hotel management school project with:
 - `app.py`
   Main Flask backend file and API routes.
 - `database/`
-  SQL setup, schema, and seed files.
+  SQL setup, schema, seed files, and database bootstrap helpers.
 - `static/uploads/`
   Uploaded room images and static file assets served by backend.
+
+## Database Files
+
+The active SQL setup is kept in `backend/database/` and reduced to these five files:
+- `schema.sql`
+- `features.sql`
+- `membership.sql`
+- `notifications.sql`
+- `seed.sql`
+
+Extra database-safe bootstrap helpers now live in `backend/database/bootstrap.py`.
+That keeps `backend/app.py` focused on routes, request handling, and database access instead of schema definitions.
+
+## Folder Rules
+
+To keep debugging simple:
+- SQL files live in `backend/database/`
+- backend Python code lives in `backend/`
+- frontend code lives in `frontend/`
+- Rasa YAML files live in `rasa/` and `rasa/data/`
+- uploaded backend files live in `backend/static/uploads/`
 
 ## Suggested Debugging Flow
 

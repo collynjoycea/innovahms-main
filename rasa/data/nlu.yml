@@ -98,8 +98,161 @@ nlu:
       - [2026-03-25](check_in_date) until [2026-03-27](check_out_date)
       - [double](room_type) room for [4](guest_count)
 
+  - intent: ask_about_hotel
+    examples: |
+      - tell me about Innova
+      - what is this hotel?
+      - about your hotel
+      - who are you?
+      - ano ang Innova-HMS?
+      - saan kayo located?
+
+  - intent: ask_features
+    examples: |
+      - what makes you unique?
+      - what are your main features?
+      - what services do you offer?
+      - bakit kayo proud?
+      - what is special about this hotel?
+
+  - intent: ask_virtual_tour
+    examples: |
+      - can I see a 360 tour?
+      - do you have a virtual tour?
+      - where is the virtual tour button?
+      - how to access 360 view?
+      - pwede ba akong mag-tour ng rooms?
+
+  - intent: ask_reviews
+    examples: |
+      - what do guests say about you?
+      - show me reviews
+      - guest feedback
+      - ano ang rating ninyo?
+      - may good reviews ba kayo?
+
+  - intent: ask_payment_methods
+    examples: |
+      - what payment methods do you accept?
+      - can I pay with credit card?
+      - do you accept [visa](payment_method)?
+      - payment options please
+      - pano magbayad?
+
+  - intent: ask_cancellation_policy
+    examples: |
+      - what is your cancellation policy?
+      - can I cancel my booking?
+      - free cancellation ba?
+      - paano mag-cancel?
+      - hasta kailan pwede mag-cancel?
+
+  - intent: ask_contact_info
+    examples: |
+      - how can I contact you?
+      - what is your phone number?
+      - email address please
+      - how do I reach you?
+      - contact details ninyo?
+
+  - intent: ask_location
+    examples: |
+      - where are you located?
+      - what is your address?
+      - paano pumunta dito?
+      - directions to your hotel
+      - saan exactly ang location?
+
+  - intent: ask_restaurant
+    examples: |
+      - do you have a restaurant?
+      - where can I eat?
+      - anong food options available?
+      - breakfast included ba?
+      - pwede ba akong mag-order ng food?
+
+  - intent: ask_parking
+    examples: |
+      - do you have parking?
+      - parking available ba?
+      - free parking?
+      - pwede mag-park ng sasakyan?
+
+  - intent: ask_transportation
+    examples: |
+      - airport transfer available?
+      - do you have shuttle service?
+      - how to get from airport?
+      - transportation options?
+
+  - intent: ask_membership
+    examples: |
+      - how do I become a member?
+      - membership benefits?
+      - loyalty program details
+      - pwede ba akong mag-sign up?
+      - ano ang member privileges?
+
+  - intent: ask_special_requests
+    examples: |
+      - can I make special requests?
+      - do you accommodate special needs?
+      - pet friendly ba?
+      - pwede ba akong mag-request ng something special?
+
+  - intent: ask_information
+    examples: |
+      - are pets allowed?
+      - do you allow pets?
+      - pwede ba akong mag-dala ng alagang hayop?
+      - what is your pet policy?
+      - can my dog stay with me?
+      - any other information about the hotel?
+      - tell me more about
+      - what can you tell me about
+      - do you have
+      - how much does
+      - what is the price
+      - how much does a room cost
+      - can i bring
+      - is there
+      - what's included
+      - do you offer
+      - what services are available
+      - what can i do
+      - any activities
+      - entertainment options
+      - paano ang
+      - ano ang
+      - pwede ba
+      - meron ba
+      - mayroon ba
+      - saan
+      - kailan
+      - ano ang process
+      - paano ko
+      - how to
+      - how do i
+      - where is
+      - when is
+      - what time
+      - tell me about
+      - information about
+      - details about
+      - anything else about
+      - i want to know about
+
   - intent: out_of_scope
     examples: |
       - tell me a joke
       - what is the capital of france?
       - sing a song
+      - what is 2+2
+      - how many planets are there
+      - what is the weather today
+      - tell me a story
+      - what does the fox say
+      - how tall is the eiffel tower
+      - who is the president
+      - what year is it
+      - how old are you

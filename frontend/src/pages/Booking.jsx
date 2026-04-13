@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, QrCode, Sparkles, Star, X } from 'lucide-react';
 import resolveImg from '../utils/resolveImg';
@@ -188,9 +189,12 @@ function SuccessModal({ open, booking, hasReviewed, onReview, onClose }) {
 
 function DatePickerField({ label, value, onChange, helperText, isDateDisabled, disabled, minMonthValue }) {
   const pickerRef = useRef(null);
+  const buttonRef = useRef(null);
+  const panelRef = useRef(null);
   const fallbackMonth = parseDateValue(value) || parseDateValue(minMonthValue) || new Date();
   const [open, setOpen] = useState(false);
   const [monthCursor, setMonthCursor] = useState(startOfMonth(fallbackMonth));
+  const [panelStyle, setPanelStyle] = useState(null);
   const selectedDate = parseDateValue(value);
 
   useEffect(() => {
@@ -199,21 +203,106 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
 
   useEffect(() => {
     if (!open) return undefined;
-    const onPointerDown = (event) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target)) {
-        setOpen(false);
-      }
+
+    const updatePanelPosition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(320, Math.max(280, viewportWidth - 32));
+      const estimatedHeight = 360;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const top = spaceBelow >= estimatedHeight
+        ? rect.bottom + 12
+        : Math.max(16, rect.top - estimatedHeight - 12);
+      const left = Math.min(Math.max(16, rect.left), viewportWidth - width - 16);
+
+      setPanelStyle({
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+      });
     };
+
+    updatePanelPosition();
+
+    const onPointerDown = (event) => {
+      const clickedTrigger = pickerRef.current?.contains(event.target);
+      const clickedPanel = panelRef.current?.contains(event.target);
+      if (!clickedTrigger && !clickedPanel) setOpen(false);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
     document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', updatePanelPosition);
+    window.addEventListener('scroll', updatePanelPosition, true);
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', updatePanelPosition);
+      window.removeEventListener('scroll', updatePanelPosition, true);
+    };
   }, [open]);
 
   const calendarDays = buildCalendarDays(monthCursor);
+  const calendarPanel = open && !disabled && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        ref={panelRef}
+        style={panelStyle || undefined}
+        className="fixed z-[2200] max-w-[calc(100vw-2rem)] rounded-[1.4rem] border border-[#bf9b30]/25 bg-[#15120d] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.45)]"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronLeft size={16} /></button>
+          <p className="text-sm font-black text-white">{monthFormatter.format(monthCursor)}</p>
+          <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronRight size={16} /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
+          {weekLabels.map((day) => <span key={day}>{day}</span>)}
+        </div>
+        <div className="mt-3 grid grid-cols-7 gap-2">
+          {calendarDays.map((day) => {
+            const isOutsideMonth = day.getMonth() !== monthCursor.getMonth();
+            const isDisabled = isDateDisabled(day);
+            const isSelected = selectedDate ? sameDate(day, selectedDate) : false;
+            const baseClasses = isSelected
+              ? 'border-[#bf9b30] bg-[#bf9b30] text-[#0d0c0a]'
+              : isDisabled
+                ? 'cursor-not-allowed border-white/5 bg-white/[0.03] text-white/18'
+                : 'border-white/10 bg-white/[0.06] text-white transition hover:border-[#bf9b30]/40 hover:text-[#f2d485]';
+
+            return (
+              <button
+                key={formatDateValue(day)}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => {
+                  onChange(formatDateValue(day));
+                  setOpen(false);
+                }}
+                className={`aspect-square rounded-xl border text-sm font-bold ${baseClasses} ${isOutsideMonth && !isSelected ? 'opacity-50' : ''}`}
+              >
+                {day.getDate()}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-4 text-[11px] text-white/35">Past dates and booked days are automatically locked.</p>
+      </div>,
+      document.body,
+    )
+    : null;
 
   return (
     <div ref={pickerRef} className="relative">
       <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">{label}</label>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
@@ -223,47 +312,7 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
         <CalendarDays size={16} className="text-[#bf9b30]" />
       </button>
       {helperText ? <p className="mt-2 text-[11px] leading-relaxed text-white/45">{helperText}</p> : null}
-
-      {open && !disabled ? (
-        <div className="absolute left-0 z-30 mt-3 w-[320px] max-w-[calc(100vw-2rem)] rounded-[1.4rem] border border-[#bf9b30]/25 bg-[#15120d] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
-          <div className="mb-4 flex items-center justify-between">
-            <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronLeft size={16} /></button>
-            <p className="text-sm font-black text-white">{monthFormatter.format(monthCursor)}</p>
-            <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronRight size={16} /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
-            {weekLabels.map((day) => <span key={day}>{day}</span>)}
-          </div>
-          <div className="mt-3 grid grid-cols-7 gap-2">
-            {calendarDays.map((day) => {
-              const isOutsideMonth = day.getMonth() !== monthCursor.getMonth();
-              const isDisabled = isDateDisabled(day);
-              const isSelected = selectedDate ? sameDate(day, selectedDate) : false;
-              const baseClasses = isSelected
-                ? 'border-[#bf9b30] bg-[#bf9b30] text-[#0d0c0a]'
-                : isDisabled
-                  ? 'cursor-not-allowed border-white/5 bg-white/[0.03] text-white/18'
-                  : 'border-white/10 bg-white/[0.06] text-white transition hover:border-[#bf9b30]/40 hover:text-[#f2d485]';
-
-              return (
-                <button
-                  key={formatDateValue(day)}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => {
-                    onChange(formatDateValue(day));
-                    setOpen(false);
-                  }}
-                  className={`aspect-square rounded-xl border text-sm font-bold ${baseClasses} ${isOutsideMonth && !isSelected ? 'opacity-50' : ''}`}
-                >
-                  {day.getDate()}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-[11px] text-white/35">Past dates and booked days are automatically locked.</p>
-        </div>
-      ) : null}
+      {calendarPanel}
     </div>
   );
 }
