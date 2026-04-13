@@ -5188,6 +5188,10 @@ def owner_login():
         """, (email,))
         owner = cur.fetchone()
         if owner and check_password_hash(owner['password_hash'], password):
+            approval_status = _owner_approval_status(cur, owner.get("id"))
+            if approval_status != "APPROVED":
+                conn.rollback()
+                return _owner_approval_required_response(approval_status)
             owner_payload = _owner_session_payload(cur, owner)
             conn.commit()
             return jsonify({

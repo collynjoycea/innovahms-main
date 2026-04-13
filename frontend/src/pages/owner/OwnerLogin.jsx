@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, ArrowRight, Globe, AlertCircle, Landmark, Sparkles } from 'lucide-react';
 import ForgotPasswordModal from '../../components/ForgotPasswordModal';
 import { isValidEmail, normalizeEmail } from '../../utils/authValidation';
@@ -37,6 +37,7 @@ const InputField = ({ label, type, icon, placeholder, value, onChange, isFocused
 
 const OwnerLogin = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [focused, setFocused] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -52,8 +53,19 @@ const OwnerLogin = () => {
   }, []);
 
   useEffect(() => {
-    if (readOwnerSession()?.email) navigate('/owner');
+    const session = readOwnerSession();
+    if (session?.email && session?.isApproved) navigate('/owner');
   }, [navigate]);
+
+  useEffect(() => {
+    const approvalState = location.state;
+    if (!approvalState?.approvalRequired) return;
+    if (approvalState?.approvalStatus === 'REJECTED') {
+      setFeedback('Your owner account was reviewed but not approved. Please contact the admin team.');
+      return;
+    }
+    setFeedback('Your owner account is still waiting for admin approval. Owner tools stay locked until you are approved.');
+  }, [location.state]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -95,6 +107,12 @@ const OwnerLogin = () => {
       } else {
         if (response.status === 401) {
           setFeedback(data?.error || 'Invalid email or password');
+        } else if (response.status === 403 && data?.code === 'OWNER_APPROVAL_REQUIRED') {
+          setFeedback(
+            data?.approvalStatus === 'REJECTED'
+              ? 'Your owner account was reviewed but not approved. Please contact the admin team.'
+              : (data?.error || 'Your owner account is still waiting for admin approval.')
+          );
         } else if (response.status >= 500) {
           setFeedback(data?.error || 'Server error. Ensure Flask is running.');
         } else {

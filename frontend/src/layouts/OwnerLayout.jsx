@@ -110,6 +110,21 @@ const OwnerLayout = () => {
   }, [navigate]);
 
   useEffect(() => {
+    if (!session?.email) return;
+    const approvalStatus = String(session?.approvalStatus || '').toUpperCase();
+    if (session?.isApproved || approvalStatus === 'APPROVED') return;
+
+    clearOwnerSession();
+    navigate('/owner/login', {
+      replace: true,
+      state: {
+        approvalRequired: true,
+        approvalStatus: approvalStatus || 'PENDING',
+      },
+    });
+  }, [navigate, session?.approvalStatus, session?.email, session?.isApproved]);
+
+  useEffect(() => {
     const sync = () => {
       setSession(readOwnerSession());
     };
