@@ -37,7 +37,6 @@ except Exception:
 
 app = Flask(__name__, static_folder='static')
 
-# FIX 1: Mas malawak na CORS configuration para sa Vite (5173 at 5174) at Localhost
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://localhost:3000"]}})
 
 # --- CONFIGURATION ---
