@@ -131,6 +131,19 @@ def _table_has_column(cur, table_name, column_name):
     return cur.fetchone() is not None
 
 
+def _table_columns(cur, table_name):
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row.get("column_name") for row in (cur.fetchall() or []) if row.get("column_name")}
+
+
 def _allowed_owner_document(filename):
     ext = str(filename or '').rsplit('.', 1)[-1].lower()
     return ext in OWNER_DOCUMENT_ALLOWED_EXTENSIONS
@@ -8008,59 +8021,725 @@ def admin_update_owner_approval(owner_id):
     finally:
         _safe_close(conn, cur)
             
-            
+
+def _hr_role_salary(role):
+    label = str(role or "").strip().lower()
+    if any(token in label for token in ("manager", "payroll", "hr")):
+        return 35000.0
+    if "front" in label or "desk" in label or "reception" in label:
+        return 28000.0
+    if "house" in label or "clean" in label:
+        return 22000.0
+    if "maintenance" in label or "engineer" in label:
+        return 25000.0
+    if "security" in label:
+        return 21000.0
+    if "finance" in label or "account" in label:
+        return 30000.0
+    if "food" in label or "kitchen" in label or "f&b" in label:
+        return 24000.0
+    return 23000.0
+
+
+def _hr_department_label(role):
+    label = str(role or "Staff").strip()
+    lowered = label.lower()
+    if "front" in lowered or "desk" in lowered or "reception" in lowered:
+        return "Front Desk"
+    if "house" in lowered or "clean" in lowered:
+        return "Housekeeping"
+    if "maintenance" in lowered or "engineer" in lowered:
+        return "Maintenance"
+    if "payroll" in lowered or "finance" in lowered or "account" in lowered:
+        return "Finance"
+    if "hr" in lowered or "human" in lowered:
+        return "HR"
+    if "security" in lowered:
+        return "Security"
+    if "food" in lowered or "kitchen" in lowered or "f&b" in lowered:
+        return "F&B"
+    return label or "Staff"
+
+
+def _hr_task_capacity(role):
+    dept = _hr_department_label(role).lower()
+    if dept == "housekeeping":
+        return 8
+    if dept == "front desk":
+        return 7
+    if dept == "maintenance":
+        return 5
+    if dept in {"hr", "finance"}:
+        return 6
+    return 6
+
+
+def _hr_attendance_status(raw_status, clock_in=None, clock_out=None):
+    raw = str(raw_status or "").strip()
+    if raw:
+        return raw
+    if clock_out:
+        return "Completed"
+    if clock_in:
+        return "Present"
+    return "Not Clocked In"
+
+
+def _merge_nested_dicts(base, overrides):
+    merged = dict(base or {})
+    for key, value in (overrides or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_nested_dicts(merged.get(key), value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _ensure_hr_settings_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS hr_settings (
+            hotel_id INTEGER PRIMARY KEY,
+            settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+
+def _build_hr_default_settings(cur, hotel_id=None, hotel_name=""):
+    manager_name = "HR Manager"
+    manager_email = ""
+    if _table_exists(cur, "staff"):
+        staff_cols = _table_columns(cur, "staff")
+        filters = [
+            "(LOWER(COALESCE(role, '')) LIKE %s OR LOWER(COALESCE(role, '')) LIKE %s OR LOWER(COALESCE(role, '')) LIKE %s)"
+        ]
+        params = ["%hr%", "%manager%", "%payroll%"]
+        if hotel_id and "hotel_id" in staff_cols:
+            filters.insert(0, "hotel_id = %s")
+            params.insert(0, hotel_id)
+        cur.execute(
+            f"""
+            SELECT first_name, last_name, email
+            FROM staff
+            WHERE {' AND '.join(filters)}
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            tuple(params),
+        )
+        row = cur.fetchone() or {}
+        resolved_name = f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
+        manager_name = resolved_name or manager_name
+        manager_email = row.get("email") or ""
+
+    return {
+        "payroll": {
+            "payPeriod": "Monthly (1st-End)",
+            "payDay": "Last Day of Month",
+            "overtimeRate": "125% (Regular OT)",
+            "nightDifferential": "10",
+        },
+        "leave": {
+            "sick": "15",
+            "vacation": "15",
+            "emergency": "3",
+            "maternity": "105",
+            "paternity": "7",
+        },
+        "notifications": {
+            "deadlineReminder": True,
+            "emailPayslips": True,
+            "absenceAlert": True,
+            "leaveApproval": True,
+            "monthlySummary": False,
+        },
+        "hotel": {
+            "hotelName": hotel_name or "Innova Property",
+            "hotelCode": f"HOTEL-{hotel_id or 0:03d}",
+            "hrManager": manager_name,
+            "hrEmail": manager_email,
+        },
+    }
+
+
+def _get_hr_settings_payload(cur, hotel_id=None, hotel_name=""):
+    _ensure_hr_settings_table(cur)
+    defaults = _build_hr_default_settings(cur, hotel_id, hotel_name)
+    lookup_hotel_id = hotel_id or 0
+    cur.execute("SELECT settings FROM hr_settings WHERE hotel_id = %s", (lookup_hotel_id,))
+    row = cur.fetchone() or {}
+    saved = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+    return _merge_nested_dicts(defaults, saved)
+
+
+def _build_hr_overview_payload(cur, hotel_id=None):
+    today = datetime.now().date()
+    lookback_date = today - timedelta(days=30)
+    hotel_name = ""
+    total_rooms = 0
+    occupied_rooms = 0
+
+    if hotel_id and _table_exists(cur, "hotels"):
+        hotel_cols = _table_columns(cur, "hotels")
+        select_cols = ["id"]
+        if "hotel_name" in hotel_cols:
+            select_cols.append("hotel_name")
+        cur.execute(f"SELECT {', '.join(select_cols)} FROM hotels WHERE id = %s LIMIT 1", (hotel_id,))
+        hotel_row = cur.fetchone() or {}
+        hotel_name = hotel_row.get("hotel_name") or ""
+
+    if _table_exists(cur, "rooms"):
+        room_cols = _table_columns(cur, "rooms")
+        params = []
+        query = "SELECT id, status FROM rooms"
+        if hotel_id and "hotel_id" in room_cols:
+            query += " WHERE hotel_id = %s"
+            params.append(hotel_id)
+        cur.execute(query, tuple(params))
+        room_rows = cur.fetchall() or []
+        total_rooms = len(room_rows)
+        occupied_rooms = sum(1 for row in room_rows if _normalize_room_status(row.get("status")) == "occupied")
+
+    staff_payload = []
+    staff_lookup = {}
+    name_to_staff_id = {}
+    if _table_exists(cur, "staff"):
+        staff_cols = _table_columns(cur, "staff")
+        select_cols = [
+            "s.id",
+            "s.first_name",
+            "s.last_name",
+            "s.email",
+            "s.contact_number",
+            "s.role",
+            "s.status",
+        ]
+        for col in [
+            "employee_id",
+            "date_hired",
+            "created_at",
+            "profile_image",
+            "is_on_duty",
+            "hotel_id",
+            "salary",
+            "monthly_salary",
+            "base_salary",
+            "pay_rate",
+        ]:
+            if col in staff_cols:
+                select_cols.append(f"s.{col}")
+        query = f"""
+            SELECT {', '.join(select_cols)}, h.hotel_name
+            FROM staff s
+            LEFT JOIN hotels h ON h.id = s.hotel_id
+        """
+        params = []
+        if hotel_id and "hotel_id" in staff_cols:
+            query += " WHERE s.hotel_id = %s"
+            params.append(hotel_id)
+        query += " ORDER BY s.id DESC"
+        cur.execute(query, tuple(params))
+        for row in cur.fetchall() or []:
+            name = f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() or "Staff"
+            role = row.get("role") or "Staff"
+            salary_candidates = [row.get("salary"), row.get("monthly_salary"), row.get("base_salary")]
+            base_salary = next((float(value) for value in salary_candidates if value not in (None, "")), _hr_role_salary(role))
+            if row.get("pay_rate") not in (None, "") and base_salary <= 0:
+                base_salary = round(_to_float(row.get("pay_rate"), 0) * 22 * 8, 2)
+            staff_item = {
+                "id": row.get("id"),
+                "employeeId": row.get("employee_id") or f"EMP-{hotel_id or row.get('hotel_id') or 0}-{row.get('id'):04d}",
+                "name": name,
+                "email": row.get("email") or "",
+                "contactNumber": row.get("contact_number") or "",
+                "role": role,
+                "department": _hr_department_label(role),
+                "status": row.get("status") or "Active",
+                "dateHired": _serialize_date(row.get("date_hired") or row.get("created_at")),
+                "image": row.get("profile_image") or "",
+                "isOnDuty": _is_truthy(row.get("is_on_duty")) or str(row.get("status") or "").strip().lower() in {"active", "on duty", "on_duty"},
+                "hotelName": row.get("hotel_name") or hotel_name or "Innova Property",
+                "salary": round(base_salary, 2),
+                "todayAttendance": {"clockIn": None, "clockOut": None, "status": "Not Clocked In"},
+                "attendanceMetrics": {"presentDays": 0, "recordedDays": 0, "lateCount": 0, "attendanceRate": 0, "hoursWorked": 0.0, "overtimeHours": 0.0},
+                "leaveMetrics": {"pending": 0, "approved": 0, "onLeave": False},
+                "taskMetrics": {"assigned": 0, "completed": 0, "overdue": 0, "avgCompletionMins": 0, "completionRate": 0, "capacityPct": 0, "notableTask": "No task assigned yet"},
+            }
+            staff_payload.append(staff_item)
+            staff_lookup[staff_item["id"]] = staff_item
+            name_to_staff_id[name.strip().lower()] = staff_item["id"]
+            if not hotel_name:
+                hotel_name = staff_item["hotelName"]
+
+    attendance_rows = []
+    if _table_exists(cur, "attendance") and staff_lookup:
+        staff_cols = _table_columns(cur, "staff") if _table_exists(cur, "staff") else set()
+        params = [lookback_date]
+        query = """
+            SELECT a.staff_id, a.date, a.clock_in, a.clock_out, a.status
+            FROM attendance a
+            JOIN staff s ON s.id = a.staff_id
+            WHERE a.date >= %s
+        """
+        if hotel_id and "hotel_id" in staff_cols:
+            query += " AND s.hotel_id = %s"
+            params.append(hotel_id)
+        query += " ORDER BY a.date DESC, a.clock_in DESC NULLS LAST, a.id DESC"
+        cur.execute(query, tuple(params))
+        attendance_rows = cur.fetchall() or []
+
+    attendance_history = defaultdict(list)
+    attendance_logs = []
+    for row in attendance_rows:
+        staff_id = row.get("staff_id")
+        if staff_id not in staff_lookup:
+            continue
+        attendance_history[staff_id].append(row)
+        if row.get("date") == today:
+            clock_in = row.get("clock_in")
+            clock_out = row.get("clock_out")
+            staff_lookup[staff_id]["todayAttendance"] = {
+                "clockIn": clock_in.strftime("%H:%M:%S") if clock_in else None,
+                "clockOut": clock_out.strftime("%H:%M:%S") if clock_out else None,
+                "status": _hr_attendance_status(row.get("status"), clock_in, clock_out),
+            }
+
+    for staff_id, history in attendance_history.items():
+        present_days = 0
+        late_count = 0
+        recorded_days = len(history)
+        total_hours = 0.0
+        overtime_hours = 0.0
+        for row in history:
+            clock_in = row.get("clock_in")
+            clock_out = row.get("clock_out")
+            if clock_in:
+                present_days += 1
+            if str(row.get("status") or "").strip().lower() == "late":
+                late_count += 1
+            if clock_in and clock_out:
+                worked_hours = round((clock_out - clock_in).total_seconds() / 3600, 2)
+                total_hours += worked_hours
+                overtime_hours += max(worked_hours - 8, 0)
+        staff_lookup[staff_id]["attendanceMetrics"] = {
+            "presentDays": present_days,
+            "recordedDays": recorded_days,
+            "lateCount": late_count,
+            "attendanceRate": round((present_days / max(recorded_days, 1)) * 100) if recorded_days else 0,
+            "hoursWorked": round(total_hours, 2),
+            "overtimeHours": round(overtime_hours, 2),
+        }
+        today_attendance = staff_lookup[staff_id]["todayAttendance"]
+        if today_attendance.get("clockIn") or today_attendance.get("clockOut"):
+            attendance_logs.append({
+                "staffId": staff_id,
+                "name": staff_lookup[staff_id]["name"],
+                "dept": staff_lookup[staff_id]["department"],
+                "time": today_attendance.get("clockIn") or today_attendance.get("clockOut") or "--",
+                "status": today_attendance.get("status"),
+                "clockOut": today_attendance.get("clockOut"),
+            })
+
+    leave_requests = []
+    if _table_exists(cur, "leave_requests"):
+        leave_cols = _table_columns(cur, "leave_requests")
+        if "staff_id" in leave_cols:
+            requested_at_col = next(
+                (
+                    col
+                    for col in (
+                        "created_at",
+                        "requested_at",
+                        "submitted_at",
+                        "applied_at",
+                        "filed_at",
+                        "request_date",
+                        "date_requested",
+                        "updated_at",
+                        "start_date",
+                        "end_date",
+                    )
+                    if col in leave_cols
+                ),
+                None,
+            )
+            select_cols = ["lr.staff_id"]
+            for col in ("id", "leave_type", "status", "start_date", "end_date", "reason", "hotel_id"):
+                if col in leave_cols:
+                    select_cols.append(f"lr.{col}")
+            if requested_at_col:
+                select_cols.append(f"lr.{requested_at_col} AS requested_at_value")
+            query = f"SELECT {', '.join(select_cols)} FROM leave_requests lr"
+            joins = ""
+            params = []
+            conditions = []
+            if hotel_id and "hotel_id" in leave_cols:
+                conditions.append("lr.hotel_id = %s")
+                params.append(hotel_id)
+            elif hotel_id and _table_exists(cur, "staff") and "hotel_id" in _table_columns(cur, "staff"):
+                joins = " JOIN staff s ON s.id = lr.staff_id "
+                conditions.append("s.hotel_id = %s")
+                params.append(hotel_id)
+            if conditions:
+                query += joins + " WHERE " + " AND ".join(conditions)
+            elif joins:
+                query += joins
+            if requested_at_col:
+                query += f" ORDER BY lr.{requested_at_col} DESC NULLS LAST, lr.id DESC"
+            else:
+                query += " ORDER BY lr.id DESC"
+            cur.execute(query, tuple(params))
+            for row in cur.fetchall() or []:
+                staff_id = row.get("staff_id")
+                if staff_id not in staff_lookup:
+                    continue
+                status = str(row.get("status") or "PENDING").upper()
+                leave_requests.append({
+                    "id": row.get("id"),
+                    "staffId": staff_id,
+                    "employee": staff_lookup[staff_id]["name"],
+                    "leaveType": row.get("leave_type") or "Leave",
+                    "status": status,
+                    "startDate": _serialize_date(row.get("start_date")),
+                    "endDate": _serialize_date(row.get("end_date")),
+                    "reason": row.get("reason") or "",
+                    "requestedAt": _serialize_date(row.get("requested_at_value")),
+                })
+                if status == "PENDING":
+                    staff_lookup[staff_id]["leaveMetrics"]["pending"] += 1
+                if status == "APPROVED":
+                    staff_lookup[staff_id]["leaveMetrics"]["approved"] += 1
+                    start_date = row.get("start_date")
+                    end_date = row.get("end_date")
+                    if start_date and end_date and start_date <= today <= end_date:
+                        staff_lookup[staff_id]["leaveMetrics"]["onLeave"] = True
+
+    task_rows = []
+    if _table_exists(cur, "hk_tasks"):
+        task_cols = _table_columns(cur, "hk_tasks")
+        select_cols = ["id"]
+        for col in ("hotel_id", "assigned_to", "staff_name", "task_type", "status", "priority", "notes", "scheduled_time", "completed_at", "time_spent_mins", "created_at"):
+            if col in task_cols:
+                select_cols.append(col)
+        query = f"SELECT {', '.join(select_cols)} FROM hk_tasks"
+        params = []
+        if hotel_id and "hotel_id" in task_cols:
+            query += " WHERE hotel_id = %s"
+            params.append(hotel_id)
+        query += " ORDER BY created_at DESC NULLS LAST, id DESC"
+        cur.execute(query, tuple(params))
+        task_rows = cur.fetchall() or []
+
+    dept_completion_minutes = defaultdict(list)
+    for row in task_rows:
+        staff_id = row.get("assigned_to")
+        if staff_id not in staff_lookup and row.get("staff_name"):
+            staff_id = name_to_staff_id.get(str(row.get("staff_name")).strip().lower())
+        if staff_id not in staff_lookup:
+            continue
+        status = str(row.get("status") or "Pending").strip()
+        metrics = staff_lookup[staff_id]["taskMetrics"]
+        metrics["assigned"] += 1
+        metrics["notableTask"] = metrics["notableTask"] if metrics["notableTask"] != "No task assigned yet" else (row.get("task_type") or row.get("notes") or f"Task #{row.get('id')}")
+        if status.lower() == "completed":
+            metrics["completed"] += 1
+            mins = _to_int(row.get("time_spent_mins"), 0)
+            if mins > 0:
+                dept_completion_minutes[staff_lookup[staff_id]["department"]].append(mins)
+        else:
+            scheduled = row.get("scheduled_time")
+            if status.lower() == "overdue" or (scheduled and hasattr(scheduled, "date") and scheduled.date() <= today):
+                metrics["overdue"] += 1
+
+    for staff_item in staff_payload:
+        metrics = staff_item["taskMetrics"]
+        assigned = metrics["assigned"]
+        completed = metrics["completed"]
+        metrics["completionRate"] = round((completed / max(assigned, 1)) * 100) if assigned else 0
+        capacity_limit = _hr_task_capacity(staff_item["role"])
+        metrics["capacityPct"] = round((assigned / max(capacity_limit, 1)) * 100) if assigned else 0
+        dept_minutes = dept_completion_minutes.get(staff_item["department"], [])
+        metrics["avgCompletionMins"] = round(sum(dept_minutes) / len(dept_minutes)) if dept_minutes else 0
+
+    performance_rows = []
+    payroll_rows = []
+    contract_rows = []
+    workload_rows = []
+    task_log_rows = []
+    payroll_breakdown_counter = defaultdict(float)
+    role_counter = Counter()
+    load_counter = Counter()
+    for staff_item in staff_payload:
+        role_counter[staff_item["department"]] += 1
+        attendance = staff_item["attendanceMetrics"]
+        tasks = staff_item["taskMetrics"]
+        base_score = (attendance["attendanceRate"] * 0.55) + (tasks["completionRate"] * 0.45 if tasks["assigned"] else attendance["attendanceRate"] * 0.35)
+        score = max(0, min(99, round(base_score)))
+        rating = "Excellent" if score >= 90 else ("Good" if score >= 75 else "Needs Improvement")
+
+        overtime_pay = round(attendance["overtimeHours"] * max((staff_item["salary"] / 22 / 8) * 1.25, 120), 2)
+        deductions = round((staff_item["salary"] * 0.12) + (attendance["lateCount"] * 150), 2)
+        net_pay = round(max(staff_item["salary"] + overtime_pay - deductions, 0), 2)
+
+        contract_type = "Employment"
+        expiry = None
+        if staff_item.get("dateHired"):
+            try:
+                parsed_hire = datetime.fromisoformat(str(staff_item["dateHired"]).replace("Z", "+00:00"))
+                tenure_days = (today - parsed_hire.date()).days
+                contract_type = "Full-Time" if tenure_days >= 365 else ("Probationary" if tenure_days < 180 else "Regular")
+                expiry_days = 730 if contract_type == "Full-Time" else 180
+                expiry = _serialize_date(parsed_hire.date() + timedelta(days=expiry_days))
+            except Exception:
+                contract_type = "Regular"
+        contract_status = "Active" if str(staff_item["status"]).strip().lower() == "active" else "Inactive"
+
+        load_status = "Optimal"
+        if tasks["capacityPct"] >= 100:
+            load_status = "Overloaded"
+        elif tasks["capacityPct"] >= 75:
+            load_status = "High Capacity"
+        elif tasks["assigned"] == 0 or tasks["capacityPct"] <= 30:
+            load_status = "Underutilized"
+        load_counter[load_status] += 1
+
+        performance_rows.append({
+            "staffId": staff_item["id"],
+            "name": staff_item["name"],
+            "dept": staff_item["department"],
+            "tasks": tasks["completed"],
+            "attendance": f"{attendance['attendanceRate']}%",
+            "punctuality": f"{max(0, 100 - (attendance['lateCount'] * 5))}%",
+            "score": score,
+            "rating": rating,
+        })
+        payroll_rows.append({
+            "staffId": staff_item["id"],
+            "name": staff_item["name"],
+            "dept": staff_item["department"],
+            "basic": round(staff_item["salary"], 2),
+            "ot": overtime_pay,
+            "ded": deductions,
+            "net": net_pay,
+        })
+        payroll_breakdown_counter[staff_item["department"]] += net_pay
+        contract_rows.append({
+            "id": staff_item["id"],
+            "staffId": staff_item["id"],
+            "staff": staff_item["name"],
+            "type": contract_type,
+            "status": contract_status,
+            "signedDate": staff_item.get("dateHired"),
+            "expiry": expiry,
+        })
+        workload_rows.append({
+            "staffId": staff_item["id"],
+            "name": staff_item["name"],
+            "dept": staff_item["department"],
+            "assigned": tasks["assigned"],
+            "completed": tasks["completed"],
+            "overdue": tasks["overdue"],
+            "capacity": tasks["capacityPct"],
+            "status": load_status,
+        })
+        task_log_rows.append({
+            "staffId": staff_item["id"],
+            "name": staff_item["name"],
+            "dept": staff_item["department"],
+            "attendance": staff_item["todayAttendance"]["status"],
+            "shift": staff_item["todayAttendance"]["clockIn"] or "--",
+            "done": tasks["completed"],
+            "assigned": tasks["assigned"],
+            "rate": tasks["completionRate"],
+            "task": tasks["notableTask"],
+            "status": "Completed" if tasks["assigned"] and tasks["completed"] == tasks["assigned"] else ("Overdue" if tasks["overdue"] else "Pending"),
+        })
+
+    performance_rows.sort(key=lambda item: (-item["score"], item["name"]))
+    payroll_rows.sort(key=lambda item: (-item["net"], item["name"]))
+    contract_rows.sort(key=lambda item: (item.get("expiry") or "9999-12-31", item["staff"]))
+    workload_rows.sort(key=lambda item: (-item["capacity"], item["name"]))
+    task_log_rows.sort(key=lambda item: (-item["rate"], item["name"]))
+    attendance_logs.sort(key=lambda item: item.get("time") or "", reverse=True)
+
+    total_employees = len(staff_payload)
+    active_employees = sum(1 for item in staff_payload if str(item.get("status") or "").strip().lower() == "active")
+    present_today = sum(1 for item in staff_payload if item["todayAttendance"]["clockIn"])
+    absent_today = total_employees - present_today
+    late_today = sum(1 for item in staff_payload if str(item["todayAttendance"]["status"]).strip().lower() == "late")
+    on_leave_today = sum(1 for item in staff_payload if item["leaveMetrics"]["onLeave"])
+    pending_leaves = sum(1 for item in leave_requests if item["status"] == "PENDING")
+
+    total_gross = round(sum(item["basic"] + item["ot"] for item in payroll_rows), 2)
+    total_deductions = round(sum(item["ded"] for item in payroll_rows), 2)
+    total_net = round(sum(item["net"] for item in payroll_rows), 2)
+    occupancy_rate = round((occupied_rooms / max(total_rooms, 1)) * 100, 2) if total_rooms else 0
+
+    dept_breakdown = [{"dept": label, "amount": round(amount, 2)} for label, amount in sorted(payroll_breakdown_counter.items(), key=lambda entry: entry[1], reverse=True)]
+    max_breakdown = max([item["amount"] for item in dept_breakdown], default=1)
+    for item in dept_breakdown:
+        item["width"] = round((item["amount"] / max_breakdown) * 100) if max_breakdown else 0
+
+    baseline_rooms = total_rooms or max(total_employees * 2, 20)
+    dept_factors = {"Front Desk": 0.08, "Housekeeping": 0.18, "Maintenance": 0.07, "Finance": 0.05, "HR": 0.04, "Security": 0.06, "F&B": 0.12}
+    departments = []
+    for label in [entry[0] for entry in role_counter.most_common()] or ["Front Desk", "Housekeeping", "Maintenance"]:
+        current = role_counter.get(label, 0)
+        normal = max(current, round(baseline_rooms * dept_factors.get(label, 0.06)))
+        peak = max(normal, round(normal * (1.25 if occupancy_rate >= 80 else 1.15)))
+        departments.append({"name": label, "current": current, "normal": normal, "peak": peak})
+
+    forecast_seed = occupancy_rate or min(100, 55 + (total_employees * 2))
+    day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    waves = [2, 5, 0, 3, 7, 10, 6]
+    daily_forecast = []
+    for idx, day in enumerate(day_labels):
+        occupancy_value = max(35, min(99, round(forecast_seed + waves[idx] - 4)))
+        daily_forecast.append({
+            "day": day,
+            "occupancy": occupancy_value,
+            "departments": [{"name": item["name"], "required": item["peak"] if occupancy_value >= 85 else item["normal"]} for item in departments],
+        })
+
+    return {
+        "hotelId": hotel_id,
+        "hotelName": hotel_name or "Innova Property",
+        "staff": staff_payload,
+        "dashboard": {
+            "totalEmployees": total_employees,
+            "activeEmployees": active_employees,
+            "presentToday": present_today,
+            "absentToday": absent_today,
+            "lateToday": late_today,
+            "onLeaveToday": on_leave_today,
+            "pendingLeaves": pending_leaves,
+            "monthlyPayroll": total_net,
+            "attendanceLogs": attendance_logs[:12],
+        },
+        "attendance": {"stats": {"present": present_today, "absent": absent_today, "late": late_today, "onLeave": on_leave_today}, "logs": attendance_logs},
+        "payroll": {
+            "periodLabel": today.strftime("%B %Y"),
+            "totals": {"employees": total_employees, "gross": total_gross, "deductions": total_deductions, "net": total_net},
+            "rows": payroll_rows,
+            "departmentBreakdown": dept_breakdown,
+        },
+        "performance": {
+            "averageScore": round(sum(item["score"] for item in performance_rows) / max(len(performance_rows), 1)) if performance_rows else 0,
+            "excellent": sum(1 for item in performance_rows if item["rating"] == "Excellent"),
+            "good": sum(1 for item in performance_rows if item["rating"] == "Good"),
+            "needsImprovement": sum(1 for item in performance_rows if item["rating"] == "Needs Improvement"),
+            "reviews": performance_rows,
+        },
+        "contracts": {
+            "totalActive": sum(1 for item in contract_rows if item["status"] == "Active"),
+            "expiringSoon": sum(1 for item in contract_rows if item.get("expiry") and item["expiry"] <= _serialize_date(today + timedelta(days=45))),
+            "rows": contract_rows,
+        },
+        "workload": {
+            "summary": {
+                "totalTasks": sum(item["assigned"] for item in workload_rows),
+                "completed": sum(item["completed"] for item in workload_rows),
+                "overloaded": load_counter.get("Overloaded", 0),
+                "underutilized": load_counter.get("Underutilized", 0),
+                "loadStatus": [
+                    {"label": "Optimal Range", "count": load_counter.get("Optimal", 0)},
+                    {"label": "High Capacity", "count": load_counter.get("High Capacity", 0)},
+                    {"label": "Overloaded", "count": load_counter.get("Overloaded", 0)},
+                    {"label": "Underutilized", "count": load_counter.get("Underutilized", 0)},
+                ],
+            },
+            "rows": workload_rows,
+        },
+        "taskLogs": {
+            "summary": {
+                "totalLogs": len(task_log_rows),
+                "onTime": sum(1 for item in task_log_rows if item["status"] == "Completed"),
+                "late": sum(1 for item in task_log_rows if item["status"] == "Pending"),
+                "overdue": sum(1 for item in task_log_rows if item["status"] == "Overdue"),
+                "avgCompletionTime": [{"dept": label, "minutes": round(sum(values) / len(values)) if values else 0} for label, values in dept_completion_minutes.items()],
+            },
+            "rows": task_log_rows,
+        },
+        "staffing": {
+            "occupancyRate": occupancy_rate,
+            "totalRooms": total_rooms,
+            "currentActiveStaff": active_employees,
+            "departments": departments,
+            "dailyForecast": daily_forecast,
+        },
+        "settings": _get_hr_settings_payload(cur, hotel_id, hotel_name or "Innova Property"),
+        "leaveRequests": leave_requests,
+    }
+
+
+@app.route('/api/hr/overview', methods=['GET'])
+def get_hr_overview():
+    conn = None
+    cur = None
+    try:
+        hotel_id = request.args.get('hotel_id', type=int)
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        return jsonify(_build_hr_overview_payload(cur, hotel_id)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
 @app.route('/api/hr/dashboard-stats', methods=['GET'])
 def get_hr_dashboard_stats():
     conn = None
+    cur = None
     try:
+        hotel_id = request.args.get('hotel_id', type=int)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        today = datetime.now().date()
-
-        # 1. Fetch Today's Attendance Logs
-        # Ginagamit ang JOIN para makuha ang pangalan at role mula sa staff table
-        cur.execute("""
-            SELECT 
-                s.first_name || ' ' || s.last_name as name,
-                s.role as dept,
-                to_char(a.clock_in, 'HH:MI AM') as time,
-                a.status
-            FROM attendance a
-            JOIN staff s ON a.staff_id = s.id
-            WHERE a.date = %s
-            ORDER BY a.clock_in DESC;
-        """, (today,))
-        logs = cur.fetchall()
-
-        # 2. Fetch Present Count
-        cur.execute("SELECT COUNT(*) FROM attendance WHERE date = %s AND status IN ('Present', 'Late')", (today,))
-        present_count = cur.fetchone()['count']
-
-        # 3. Fetch Pending Leave Requests
-        cur.execute("SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING'")
-        pending_leaves = cur.fetchone()['count']
-
-        # 4. Fetch Total Active Employees
-        cur.execute("SELECT COUNT(*) FROM staff WHERE status = 'Active'")
-        total_employees = cur.fetchone()['count']
-
-        cur.close()
-        
-        # Siguraduhin na ang keys dito ay tugma sa React (data.totalEmployees, etc.)
+        dashboard = _build_hr_overview_payload(cur, hotel_id).get("dashboard", {})
         return jsonify({
-            "attendanceLogs": logs,
-            "presentToday": present_count,
-            "pendingLeaves": pending_leaves,
-            "totalEmployees": total_employees,
-            "monthlyPayroll": "450,000.00" # Static muna or compute-in sa DB
+            "attendanceLogs": dashboard.get("attendanceLogs", []),
+            "presentToday": dashboard.get("presentToday", 0),
+            "pendingLeaves": dashboard.get("pendingLeaves", 0),
+            "totalEmployees": dashboard.get("totalEmployees", 0),
+            "monthlyPayroll": dashboard.get("monthlyPayroll", 0),
         }), 200
-
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
     finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/hr/settings', methods=['PUT'])
+def update_hr_settings():
+    conn = None
+    cur = None
+    try:
+        hotel_id = request.args.get('hotel_id', type=int) or 0
+        incoming = request.get_json() or {}
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_hr_settings_table(cur)
+        merged = _merge_nested_dicts(_get_hr_settings_payload(cur, hotel_id), incoming)
+        cur.execute(
+            """
+            INSERT INTO hr_settings (hotel_id, settings, updated_at)
+            VALUES (%s, %s::jsonb, NOW())
+            ON CONFLICT (hotel_id)
+            DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+            """,
+            (hotel_id, json.dumps(merged)),
+        )
+        conn.commit()
+        return jsonify({"message": "HR settings updated.", "settings": merged}), 200
+    except Exception as e:
         if conn:
-            conn.close()
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
 
 
 @app.route('/api/rooms', methods=['GET'])
@@ -11338,6 +12017,27 @@ def hk_update_room_status(room_number):
 
 # ── INVENTORY MANAGEMENT ENDPOINTS ──────────────────────────────────────────
 
+def _ensure_inventory_settings_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS inventory_settings (
+            hotel_id INTEGER PRIMARY KEY REFERENCES hotels(id) ON DELETE CASCADE,
+            critical_threshold INTEGER DEFAULT 15,
+            low_threshold INTEGER DEFAULT 30,
+            overstock_threshold INTEGER DEFAULT 95,
+            auto_po_enabled BOOLEAN DEFAULT TRUE,
+            email_alerts BOOLEAN DEFAULT TRUE,
+            sms_alerts BOOLEAN DEFAULT FALSE,
+            storage_location VARCHAR(200) DEFAULT '',
+            capacity_sqm INTEGER DEFAULT 280,
+            manager_name VARCHAR(200) DEFAULT '',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+
 @app.route('/api/inventory/items', methods=['GET'])
 def inv_items():
     conn = None; cur = None
@@ -11561,23 +12261,34 @@ def inv_purchase_orders():
     try:
         hotel_id = request.args.get('hotel_id', type=int)
         conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        hf = "WHERE po.hotel_id = %s" if hotel_id else ""
-        hp = [hotel_id] if hotel_id else []
-        cur.execute(f"""
-            SELECT po.*, COUNT(poi.id) AS item_count
-            FROM purchase_orders po
-            LEFT JOIN purchase_order_items poi ON poi.po_id = po.id
-            {hf} GROUP BY po.id ORDER BY po.created_at DESC
-        """, hp)
+        po_cols = _table_columns(cur, "purchase_orders")
+        has_po_items = _table_exists(cur, "purchase_order_items")
+        select_cols = ["po.id", "po.po_number", "po.supplier", "po.status"]
+        for col in ("total_amount", "notes", "created_at", "created_by", "staff_id", "expected_date", "expected_delivery", "received_date", "received_at"):
+            if col in po_cols:
+                select_cols.append(f"po.{col}")
+        item_count_sql = "COUNT(poi.id) AS item_count" if has_po_items else "0 AS item_count"
+        query = f"SELECT {', '.join(select_cols)}, {item_count_sql} FROM purchase_orders po"
+        params = []
+        if has_po_items:
+            query += " LEFT JOIN purchase_order_items poi ON poi.po_id = po.id"
+        if hotel_id and "hotel_id" in po_cols:
+            query += " WHERE po.hotel_id = %s"
+            params.append(hotel_id)
+        if has_po_items:
+            query += " GROUP BY " + ", ".join(select_cols)
+        order_col = "po.created_at" if "created_at" in po_cols else "po.id"
+        query += f" ORDER BY {order_col} DESC"
+        cur.execute(query, tuple(params))
         rows = cur.fetchall() or []
         orders = [{
             'id': r['id'], 'poNumber': r['po_number'], 'supplier': r['supplier'],
             'status': r['status'], 'totalAmount': _to_float(r.get('total_amount'),0),
-            'expectedDate': _serialize_date(r.get('expected_date')),
-            'receivedDate': _serialize_date(r.get('received_date')),
+            'expectedDate': _serialize_date(r.get('expected_date') or r.get('expected_delivery')),
+            'receivedDate': _serialize_date(r.get('received_date') or r.get('received_at')),
             'itemCount': _to_int(r.get('item_count'),0),
             'notes': r.get('notes') or '', 'createdBy': r.get('created_by') or '',
-            'createdAt': _serialize_date(r['created_at']),
+            'createdAt': _serialize_date(r.get('created_at')),
         } for r in rows]
         return jsonify({'orders': orders, 'total': len(orders)}), 200
     except Exception as e: return jsonify({'error': str(e)}), 500
@@ -11592,11 +12303,37 @@ def inv_create_po():
         import random, string
         po_num = 'PO-' + ''.join(random.choices(string.digits, k=8))
         conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            INSERT INTO purchase_orders (hotel_id,po_number,supplier,status,total_amount,expected_date,notes,created_by,staff_id)
-            VALUES (%s,%s,%s,'PENDING',%s,%s,%s,%s,%s) RETURNING id,po_number
-        """, (d.get('hotelId'), po_num, d.get('supplier'), _to_float(d.get('totalAmount'),0),
-               d.get('expectedDate'), d.get('notes',''), d.get('createdBy','Staff'), d.get('staffId')))
+        po_cols = _table_columns(cur, "purchase_orders")
+        insert_cols = []
+        params = []
+
+        def add_po_value(column_name, value):
+            if column_name in po_cols:
+                insert_cols.append(column_name)
+                params.append(value)
+
+        add_po_value("hotel_id", d.get('hotelId'))
+        add_po_value("po_number", po_num)
+        add_po_value("supplier", d.get('supplier'))
+        add_po_value("status", 'PENDING')
+        add_po_value("total_amount", _to_float(d.get('totalAmount'), 0))
+        if "expected_date" in po_cols:
+            add_po_value("expected_date", d.get('expectedDate'))
+        elif "expected_delivery" in po_cols:
+            add_po_value("expected_delivery", d.get('expectedDate'))
+        add_po_value("notes", d.get('notes', ''))
+        add_po_value("created_by", d.get('createdBy', 'Staff'))
+        add_po_value("staff_id", d.get('staffId'))
+
+        placeholders = ", ".join(["%s"] * len(insert_cols))
+        cur.execute(
+            f"""
+            INSERT INTO purchase_orders ({', '.join(insert_cols)})
+            VALUES ({placeholders})
+            RETURNING id, po_number
+            """,
+            tuple(params),
+        )
         row = cur.fetchone(); conn.commit()
         return jsonify({'message': 'Purchase order created.', 'id': row['id'], 'poNumber': row['po_number']}), 201
     except Exception as e:
@@ -11612,7 +12349,23 @@ def inv_receive_po(po_id):
     try:
         d = request.json or {}
         conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("UPDATE purchase_orders SET status='RECEIVED', received_date=NOW(), updated_at=NOW() WHERE id=%s RETURNING id,po_number,hotel_id", (po_id,))
+        po_cols = _table_columns(cur, "purchase_orders")
+        updates = []
+        if "status" in po_cols:
+            updates.append("status='RECEIVED'")
+        if "received_date" in po_cols:
+            updates.append("received_date=NOW()")
+        elif "received_at" in po_cols:
+            updates.append("received_at=NOW()")
+        if "updated_at" in po_cols:
+            updates.append("updated_at=NOW()")
+        return_cols = ["id", "po_number"]
+        if "hotel_id" in po_cols:
+            return_cols.append("hotel_id")
+        cur.execute(
+            f"UPDATE purchase_orders SET {', '.join(updates)} WHERE id=%s RETURNING {', '.join(return_cols)}",
+            (po_id,),
+        )
         po = cur.fetchone()
         if not po: return jsonify({'error': 'PO not found'}), 404
         # Update stock for each item in the PO
@@ -11622,7 +12375,7 @@ def inv_receive_po(po_id):
             cur.execute("""
                 INSERT INTO stock_movements (hotel_id,item_id,movement_type,quantity,po_number,performed_by)
                 VALUES (%s,%s,'IN',%s,%s,%s)
-            """, (po['hotel_id'], item.get('itemId'), _to_int(item.get('quantity'),0), po['po_number'], d.get('receivedBy','Staff')))
+            """, (po.get('hotel_id'), item.get('itemId'), _to_int(item.get('quantity'),0), po['po_number'], d.get('receivedBy','Staff')))
         conn.commit()
         return jsonify({'message': f"PO {po['po_number']} received. Stock updated."}), 200
     except Exception as e:
@@ -11637,6 +12390,9 @@ def inv_get_settings():
     try:
         hotel_id = request.args.get('hotel_id', type=int)
         conn = get_db_connection(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_inventory_settings_table(cur)
+        if not hotel_id:
+            return jsonify({'criticalThreshold':15,'lowThreshold':30,'overstockThreshold':95,'autoPo':True,'emailAlerts':True,'smsAlerts':False,'storageLocation':'Basement Level B1','capacitySqm':280,'managerName':''}), 200
         cur.execute("SELECT * FROM inventory_settings WHERE hotel_id=%s", (hotel_id,))
         row = cur.fetchone()
         if not row:
@@ -11657,7 +12413,10 @@ def inv_save_settings():
     conn = None; cur = None
     try:
         d = request.json or {}; hotel_id = d.get('hotelId')
+        if not hotel_id:
+            return jsonify({'error': 'hotelId is required.'}), 400
         conn = get_db_connection(); cur = conn.cursor()
+        _ensure_inventory_settings_table(cur)
         cur.execute("""
             INSERT INTO inventory_settings (hotel_id,critical_threshold,low_threshold,overstock_threshold,auto_po_enabled,email_alerts,sms_alerts,storage_location,capacity_sqm,manager_name)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)

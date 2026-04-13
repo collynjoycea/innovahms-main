@@ -93,7 +93,7 @@ export default function CheckIn() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
         <div>
           <h1 className={`text-4xl font-black italic uppercase tracking-tighter leading-none ${text}`}>
-            Arrivals <span className="text-[#b3903c]">Manager</span>
+            Arrivals <span className="text-[#b3903c]">Guest</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
             <span className="w-2 h-2 rounded-full bg-[#b3903c] animate-pulse" />

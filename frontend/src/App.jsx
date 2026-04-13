@@ -31,7 +31,6 @@ import EmployeeDirectory from "./pages/Staff/HrPayrollStaff/EmployeeDirectory";
 import AttendanceTracking from "./pages/Staff/HrPayrollStaff/AttendanceTracking";
 import PayrollProcessing from "./pages/Staff/HrPayrollStaff/PayrollProcessing";
 import PerformanceReviews from "./pages/Staff/HrPayrollStaff/PerformanceReviews";
-import EmploymentContracts from "./pages/Staff/HrPayrollStaff/EmploymentContracts";
 import HrSettings from "./pages/Staff/HrPayrollStaff/HrSettings";
 import WorkloadTracking from "./pages/Staff/HrPayrollStaff/WorkloadTracking";
 import StaffingEstimator from "./pages/Staff/HrPayrollStaff/StaffingEstimator";
@@ -259,7 +258,7 @@ function App() {
           <Route path="attendance" element={<AttendanceTracking isDarkMode={isDarkMode} />} />
           <Route path="performance" element={<PerformanceReviews isDarkMode={isDarkMode} />} />
           <Route path="payroll" element={<PayrollProcessing isDarkMode={isDarkMode} />} />
-          <Route path="contracts" element={<EmploymentContracts isDarkMode={isDarkMode} />} />
+          <Route path="contracts" element={<Navigate to="/hr/dashboard" replace />} />
           <Route path="workload" element={<WorkloadTracking isDarkMode={isDarkMode} />} />
           <Route path="task-logs" element={<TaskCompletionLogs isDarkMode={isDarkMode} />} />
           <Route path="staffing-estimator" element={<StaffingEstimator isDarkMode={isDarkMode} />} />

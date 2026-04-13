@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Clock, 
-  Activity, Zap, TrendingDown, 
+  Activity, Zap,
   LineChart, Database, BrainCircuit, 
   Settings, LogOut
 } from 'lucide-react';
@@ -43,8 +43,7 @@ const HrPayrollStaffSidebar = ({ isDarkMode }) => {
     {
       title: "PAYROLL & LEGAL",
       items: [
-        { name: "Run Payroll", path: "/hr/payroll", icon: <Zap />, badge: "DUE" },
-        { name: "Contracts", path: "/hr/contracts", icon: <TrendingDown /> }
+        { name: "Run Payroll", path: "/hr/payroll", icon: <Zap />, badge: "DUE" }
       ]
     },
     {

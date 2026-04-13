@@ -53,7 +53,7 @@ const InventorySidebar = ({ isDarkMode }) => {
           name: "Low-Stock Alerts", 
           path: "/inventory/alerts", 
           icon: <AlertCircle />, 
-          badge: lowStockCount > 0 ? lowStockCount.toString() : null 
+          badge: "AUTO"
         },
       ]
     },

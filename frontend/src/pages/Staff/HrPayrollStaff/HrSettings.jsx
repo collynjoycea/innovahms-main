@@ -1,150 +1,163 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { 
-  Save, Settings, Bell, Building2, 
-  Calendar, Clock, Percent, ClipboardList,
-  Mail, ShieldCheck
-} from 'lucide-react';
+import { Bell, Building2, Calendar, Percent, Save } from 'lucide-react';
+import useHrOverview from '../../../hooks/useHrOverview';
+import useStaffSession from '../../../hooks/useStaffSession';
+import { HrErrorState, HrLoadingState, HrPageHeader, HrSection, getHrTheme } from './hrShared';
 
 const HrSettings = () => {
   const [isDarkMode] = useOutletContext();
+  const theme = getHrTheme(isDarkMode);
+  const { qs } = useStaffSession();
+  const { data, loading, error, refresh } = useHrOverview();
+  const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  const theme = {
-    container: isDarkMode ? "bg-[#050505]" : "bg-zinc-50",
-    card: isDarkMode 
-      ? "bg-[#0a0a0a] border-zinc-900 shadow-[0_0_20px_rgba(0,0,0,0.5)]" 
-      : "bg-white border-zinc-200 shadow-sm",
-    input: isDarkMode
-      ? "bg-[#050505] border-zinc-800 text-zinc-100 focus:border-[#b3903c]"
-      : "bg-zinc-50 border-zinc-200 text-zinc-900 focus:border-[#b3903c]",
-    textMain: isDarkMode ? "text-zinc-100" : "text-zinc-900",
-    textSub: isDarkMode ? "text-zinc-500" : "text-zinc-400",
-    accent: "#b3903c"
+  useEffect(() => {
+    if (data?.settings) {
+      setForm(data.settings);
+    }
+  }, [data]);
+
+  if (loading && !data) {
+    return <HrLoadingState theme={theme} label="Loading HR settings..." />;
+  }
+
+  const updateField = (section, key, value) => {
+    setForm((current) => ({
+      ...current,
+      [section]: {
+        ...(current?.[section] || {}),
+        [key]: value,
+      },
+    }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
-    setTimeout(() => setSaving(false), 1500); // Simulate API call
+    setSaveError('');
+    try {
+      const response = await fetch(`/api/hr/settings${qs}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.error || 'Failed to save HR settings.');
+      }
+      setForm(body.settings || form);
+      refresh();
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save HR settings.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const SectionHeader = ({ icon: Icon, title }) => (
-    <div className="flex items-center gap-3 mb-6">
-      <div className="p-2 rounded-lg bg-[#b3903c]/10 text-[#b3903c]">
+  const SectionTitle = ({ icon: Icon, title }) => (
+    <div className="mb-5 flex items-center gap-3">
+      <div className="rounded-xl border border-[#b3903c]/20 bg-[#b3903c]/10 p-2 text-[#b3903c]">
         <Icon size={18} />
       </div>
-      <h2 className={`text-sm font-black uppercase tracking-[0.2em] ${theme.textMain}`}>
-        {title}
-      </h2>
+      <h2 className={`text-sm font-black uppercase tracking-[0.2em] ${theme.textMain}`}>{title}</h2>
     </div>
   );
 
-  const InputField = ({ label, type = "text", placeholder, defaultValue }) => (
+  const Field = ({ label, value, onChange, type = 'text' }) => (
     <div className="space-y-2">
-      <label className={`text-[10px] font-black uppercase tracking-widest ${theme.textSub}`}>
-        {label}
-      </label>
-      <input 
+      <label className={`text-[10px] font-black uppercase tracking-widest ${theme.textSub}`}>{label}</label>
+      <input
         type={type}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        className={`w-full px-4 py-3 rounded-xl border outline-none transition-all font-bold text-[12px] ${theme.input}`}
+        value={value || ''}
+        onChange={(event) => onChange(event.target.value)}
+        className={`w-full rounded-xl border px-4 py-3 text-[12px] font-bold outline-none ${theme.input}`}
       />
     </div>
   );
 
-  const ToggleSwitch = ({ label, defaultChecked }) => (
+  const Toggle = ({ label, value, onChange }) => (
     <div className="flex items-center justify-between py-2">
       <span className={`text-[11px] font-bold ${theme.textMain}`}>{label}</span>
-      <label className="relative inline-flex items-center cursor-pointer">
-        <input type="checkbox" defaultChecked={defaultChecked} className="sr-only peer" />
-        <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#b3903c]"></div>
-      </label>
+      <button
+        type="button"
+        onClick={() => onChange(!value)}
+        className={`relative h-6 w-11 rounded-full transition-colors ${value ? 'bg-[#b3903c]' : isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}`}
+      >
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      </button>
     </div>
   );
 
   return (
-    <div className={`p-6 space-y-8 animate-in fade-in duration-700 ${theme.container} min-h-screen`}>
-      
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="flex h-2 w-2 rounded-full bg-[#b3903c]"></span>
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#b3903c]">System Configuration</p>
-          </div>
-          <h1 className={`text-3xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-            HR <span className="text-[#b3903c]">Settings</span>
-          </h1>
-        </div>
-        
-        <button 
-          onClick={handleSave}
-          className="flex items-center gap-2 px-8 py-3 bg-[#b3903c] text-black font-black uppercase text-[11px] rounded-xl hover:bg-[#967932] transition-all shadow-[0_0_15px_rgba(179,144,60,0.3)]"
-        >
-          {saving ? <Settings className="animate-spin" size={16} /> : <Save size={16} />}
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
-      </div>
+    <div className={`min-h-screen space-y-8 p-4 ${theme.container}`}>
+      <HrPageHeader
+        theme={theme}
+        eyebrow="System configuration"
+        title="HR"
+        accent="Settings"
+        actions={
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !form}
+            className="flex items-center gap-2 rounded-xl bg-[#b3903c] px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-60"
+          >
+            <Save size={14} />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* PAYROLL CONFIGURATION */}
-        <div className={`p-8 rounded-[2rem] border ${theme.card}`}>
-          <SectionHeader icon={Percent} title="Payroll Configuration" />
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InputField label="Pay Period" defaultValue="Monthly (1st-End)" />
-              <InputField label="Pay Day" defaultValue="Last Day of Month" />
+      {error ? <HrErrorState message={error} /> : null}
+      {saveError ? <HrErrorState message={saveError} /> : null}
+
+      {form ? (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <HrSection theme={theme}>
+            <SectionTitle icon={Percent} title="Payroll Configuration" />
+            <div className="space-y-4">
+              <Field label="Pay Period" value={form.payroll?.payPeriod} onChange={(value) => updateField('payroll', 'payPeriod', value)} />
+              <Field label="Pay Day" value={form.payroll?.payDay} onChange={(value) => updateField('payroll', 'payDay', value)} />
+              <Field label="Overtime Rate" value={form.payroll?.overtimeRate} onChange={(value) => updateField('payroll', 'overtimeRate', value)} />
+              <Field label="Night Differential" value={form.payroll?.nightDifferential} onChange={(value) => updateField('payroll', 'nightDifferential', value)} />
             </div>
-            <InputField label="Overtime Rate (%)" defaultValue="125% (Regular OT)" />
-            <div className="space-y-2">
-              <InputField label="Night Differential (%)" defaultValue="10" />
-              <p className="text-[9px] font-bold text-zinc-500 italic">% additional for 10PM-6AM shifts</p>
+          </HrSection>
+
+          <HrSection theme={theme}>
+            <SectionTitle icon={Calendar} title="Leave Policy" />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="Sick Leave" value={form.leave?.sick} onChange={(value) => updateField('leave', 'sick', value)} />
+              <Field label="Vacation Leave" value={form.leave?.vacation} onChange={(value) => updateField('leave', 'vacation', value)} />
+              <Field label="Emergency Leave" value={form.leave?.emergency} onChange={(value) => updateField('leave', 'emergency', value)} />
+              <Field label="Maternity Leave" value={form.leave?.maternity} onChange={(value) => updateField('leave', 'maternity', value)} />
+              <Field label="Paternity Leave" value={form.leave?.paternity} onChange={(value) => updateField('leave', 'paternity', value)} />
             </div>
-          </div>
-        </div>
+          </HrSection>
 
-        {/* LEAVE POLICY */}
-        <div className={`p-8 rounded-[2rem] border ${theme.card}`}>
-          <SectionHeader icon={Calendar} title="Leave Policy" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputField label="Annual Sick Leave (Days)" defaultValue="15" />
-            <InputField label="Annual Vacation Leave (Days)" defaultValue="15" />
-            <InputField label="Emergency Leave (Days)" defaultValue="3" />
-            <InputField label="Maternity Leave (Days)" defaultValue="105" />
-            <div className="md:col-span-2">
-              <InputField label="Paternity Leave (Days)" defaultValue="7" />
+          <HrSection theme={theme}>
+            <SectionTitle icon={Bell} title="Notifications" />
+            <div className="space-y-3">
+              <Toggle label="Payroll deadline reminder" value={!!form.notifications?.deadlineReminder} onChange={(value) => updateField('notifications', 'deadlineReminder', value)} />
+              <Toggle label="Email payslips on pay day" value={!!form.notifications?.emailPayslips} onChange={(value) => updateField('notifications', 'emailPayslips', value)} />
+              <Toggle label="Alert on repeated absences" value={!!form.notifications?.absenceAlert} onChange={(value) => updateField('notifications', 'absenceAlert', value)} />
+              <Toggle label="Notify manager for leave approval" value={!!form.notifications?.leaveApproval} onChange={(value) => updateField('notifications', 'leaveApproval', value)} />
+              <Toggle label="Monthly HR summary" value={!!form.notifications?.monthlySummary} onChange={(value) => updateField('notifications', 'monthlySummary', value)} />
             </div>
-          </div>
-        </div>
+          </HrSection>
 
-        {/* NOTIFICATIONS */}
-        <div className={`p-8 rounded-[2rem] border ${theme.card}`}>
-          <SectionHeader icon={Bell} title="Notifications" />
-          <div className="space-y-4">
-            <ToggleSwitch label="Payroll deadline reminder (3 days before)" defaultChecked={true} />
-            <ToggleSwitch label="Email payslips on pay day" defaultChecked={true} />
-            <ToggleSwitch label="Alert for 2+ consecutive absences" defaultChecked={true} />
-            <ToggleSwitch label="Notify manager for leave approval" defaultChecked={true} />
-            <ToggleSwitch label="Monthly HR summary to manager" defaultChecked={false} />
-          </div>
-        </div>
-
-        {/* HOTEL INFORMATION */}
-        <div className={`p-8 rounded-[2rem] border ${theme.card}`}>
-          <SectionHeader icon={Building2} title="Hotel Information" />
-          <div className="space-y-6">
-            <InputField label="Hotel Name" defaultValue="Obsidian Sanctuary" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InputField label="Hotel Code" defaultValue="OBS-2026" />
-              <InputField label="HR Manager" defaultValue="Diana Cruz" />
+          <HrSection theme={theme}>
+            <SectionTitle icon={Building2} title="Hotel Information" />
+            <div className="space-y-4">
+              <Field label="Hotel Name" value={form.hotel?.hotelName} onChange={(value) => updateField('hotel', 'hotelName', value)} />
+              <Field label="Hotel Code" value={form.hotel?.hotelCode} onChange={(value) => updateField('hotel', 'hotelCode', value)} />
+              <Field label="HR Manager" value={form.hotel?.hrManager} onChange={(value) => updateField('hotel', 'hrManager', value)} />
+              <Field label="HR Email" value={form.hotel?.hrEmail} onChange={(value) => updateField('hotel', 'hrEmail', value)} type="email" />
             </div>
-            <InputField label="HR Contact Email" defaultValue="diana@obsidian.ph" type="email" />
-          </div>
+          </HrSection>
         </div>
-
-      </div>
+      ) : null}
     </div>
   );
 };

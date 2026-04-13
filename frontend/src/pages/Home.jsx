@@ -507,7 +507,7 @@ export default function LandingPage() {
     >
       <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Our Properties</p>
       <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
-        Our <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Hotels</span>
+         <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Hotels</span>
       </h2>
       <p className="text-[#7a6f5e] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
         Discover our collection of smart hotels powered by Innova HMS.
@@ -590,9 +590,7 @@ export default function LandingPage() {
       <h2 className="text-5xl md:text-6xl font-black text-[#1a160d] dark:text-white uppercase tracking-tighter leading-none">
         Featured <span className="font-serif italic font-light text-[#bf9b30] normal-case tracking-normal">Rooms</span>
       </h2>
-      <p className="text-[#7a6f5e] dark:text-gray-400 text-xs mt-4 max-w-md font-light leading-relaxed">
-        Live room inventory connected to your database with quick access to room details and booking.
-      </p>
+     
     </motion.div>
     <button
       type="button"
