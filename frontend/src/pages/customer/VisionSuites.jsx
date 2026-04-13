@@ -43,6 +43,19 @@ const haversineKm = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(s1 + s2));
 };
 
+const getRoomPreviewImage = (value, fallback = null) => {
+  const rawImage =
+    value?.previewUrl ||
+    value?.imageUrl ||
+    value?.image_url ||
+    value?.image ||
+    (Array.isArray(value?.images) ? value.images.find(Boolean) : value?.images) ||
+    value?.panoramaUrl ||
+    "";
+
+  return rawImage ? resolveImg(rawImage, fallback) : fallback;
+};
+
 function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -51,6 +64,8 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
 
   // Resolve panorama URL once — handles relative paths, full URLs, and null
   const panoramaUrl = tour?.panoramaUrl ? resolveImg(tour.panoramaUrl, null) : null;
+  const previewUrl = getRoomPreviewImage(tour, null);
+  const hasTour = Boolean(panoramaUrl);
 
   useEffect(() => {
     if (!open) {
@@ -127,7 +142,7 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
             </div>
           ) : null}
 
-          {!loading && !panoramaUrl ? (
+          {!loading && !previewUrl ? (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-zinc-900 px-6 text-center">
               <ScanEye size={40} className="text-white/20" />
               <p className="text-sm font-bold text-white/70">No 360° tour configured for this room yet.</p>
@@ -135,18 +150,25 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
             </div>
           ) : null}
 
-          {!loading && panoramaUrl && !tourActive ? (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/60 px-6 text-center">
-              <ScanEye size={36} className="text-[#bf9b30]" />
+          {!loading && previewUrl && !tourActive ? (
+            <div className="absolute inset-0 z-10">
+              <img src={previewUrl} alt={roomName || "Room preview"} className="h-full w-full object-cover" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/50 px-6 text-center">
+                <ScanEye size={36} className="text-[#bf9b30]" />
               <p className="text-xs font-bold uppercase tracking-widest text-white/70">360° panorama ready</p>
-              <p className="max-w-md text-sm text-white/45">Drag to look around once the viewer starts.</p>
-              <button
+              <p className="max-w-md text-sm text-white/45">
+                Drag to look around once the viewer starts.
+              </p>
+              {hasTour ? (
+                <button
                 type="button"
                 onClick={() => setTourActive(true)}
                 className="rounded-full bg-[#bf9b30] px-8 py-4 text-sm font-black uppercase tracking-widest text-[#0d0c0a] shadow-2xl transition-colors hover:bg-[#d8b454]"
               >
                 Start 360°
-              </button>
+                </button>
+              ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -177,18 +199,18 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
           <button
             type="button"
             onClick={() => {
-              if (panoramaUrl) setTourActive((active) => !active);
+              if (hasTour) setTourActive((active) => !active);
             }}
-            disabled={!panoramaUrl}
+            disabled={!hasTour}
             className={`rounded-xl px-5 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
-              panoramaUrl
+              hasTour
                 ? tourActive
                   ? "bg-white text-black"
                   : "bg-white/10 text-white hover:bg-white/20"
                 : "cursor-not-allowed border border-white/20 bg-white/10 text-white/40"
             }`}
           >
-            {tourActive ? "Close 360" : "Start 360"}
+            {hasTour ? (tourActive ? "Close 360" : "Start 360") : "Preview Only"}
           </button>
         </div>
       </div>
@@ -337,8 +359,26 @@ export default function VisionSuites() {
   }, [location.hash, loading]);
 
   const openTour = async (room) => {
+    const roomPreview =
+      room?.imageUrl ||
+      room?.image_url ||
+      room?.image ||
+      (Array.isArray(room?.images) ? room.images.find(Boolean) : room?.images) ||
+      null;
+    const fallbackTour = roomPreview
+      ? {
+          roomId: room.id,
+          panoramaUrl: roomPreview,
+          previewUrl: roomPreview,
+          initialYaw: 0,
+          initialPitch: 0,
+          initialFov: Math.PI / 2,
+          isInteractive: false,
+        }
+      : null;
+
     setTourRoom(room);
-    setTourData(null);
+    setTourData(fallbackTour);
     setTourNotice("");
     setTourOpen(true);
     setTourLoading(true);
@@ -346,11 +386,18 @@ export default function VisionSuites() {
       const res = await fetch(`/api/vision/rooms/${room.id}/tour`);
       const payload = await res.json().catch(() => ({}));
       if (res.ok && payload?.tour) {
-        setTourData(payload.tour);
+        setTourData({
+          ...fallbackTour,
+          ...payload.tour,
+          previewUrl: payload.tour.previewUrl || fallbackTour?.previewUrl || null,
+          panoramaUrl: payload.tour.panoramaUrl || fallbackTour?.panoramaUrl || null,
+        });
       } else {
+        setTourData(fallbackTour);
         setTourNotice(payload?.error || "No 360° tour configured for this room yet.");
       }
     } catch (error) {
+      setTourData(fallbackTour);
       setTourNotice(error?.message || "Could not load tour data.");
     } finally {
       setTourLoading(false);
@@ -858,9 +905,9 @@ export default function VisionSuites() {
                 >
                   <div className="relative h-52 overflow-hidden">
                     <img
-                      src={resolveImg(room.imageUrl)}
+                      src={getRoomPreviewImage(room, undefined)}
                       alt={room.name}
-                      onError={(e) => { e.currentTarget.src = "/images/room1.jpg"; }}
+                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
