@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const OwnerSidebar = ({ isDarkMode = false }) => {
+const OwnerSidebar = () => {
   const location = useLocation();
   const planFeatures = {
     starter: ['dashboard', 'rooms', 'reservations', 'customers', 'reviews'],
@@ -48,7 +48,7 @@ const OwnerSidebar = ({ isDarkMode = false }) => {
   );
 
   return (
-    <aside className={`w-72 border-r flex flex-col h-screen sticky top-0 overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-[#0b0d12] border-white/10' : 'bg-[#faf9f6] border-black/5'}`}>
+    <aside className="w-72 bg-[#faf9f6] border-r border-black/5 flex flex-col h-screen sticky top-0 overflow-hidden">
       {/* Brand Header */}
       <div className="px-8 pt-8 pb-4">
         <img src="/images/logo.png" alt="Innova Logo" className="w-full max-w-[160px] drop-shadow-sm" />
@@ -57,7 +57,7 @@ const OwnerSidebar = ({ isDarkMode = false }) => {
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-6 space-y-1.5 overflow-hidden">
-        <p className={`mb-2 px-2 text-[10px] font-bold tracking-[0.2em] uppercase ${isDarkMode ? 'text-white/45' : 'text-black/60'}`}>Owner Portal</p>
+        <p className="text-[10px] font-bold tracking-[0.2em] text-black/60 uppercase mb-2 px-2">Owner Portal</p>
         
         {navItems.map((item) => {
           const active = location.pathname === item.path;
@@ -68,22 +68,16 @@ const OwnerSidebar = ({ isDarkMode = false }) => {
           );
           const classes = `group flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 relative ${
             active 
-              ? isDarkMode
-                ? "bg-[#141923] text-[#e6c36a] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/20"
-                : "bg-white text-[#9a7a20] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/15" 
+              ? "bg-white text-[#9a7a20] shadow-[0_10px_20px_rgba(191,155,48,0.08)] ring-1 ring-[#bf9b30]/15" 
               : lockedByPlan
-                ? isDarkMode
-                  ? "text-white/40 hover:bg-amber-500/10 hover:text-amber-300"
-                  : "text-black/45 hover:bg-amber-50/80 hover:text-amber-700"
-                : isDarkMode
-                  ? "text-white/70 hover:text-[#f5d37e] hover:bg-white/5"
-                  : "text-black/70 hover:text-[#bf9b30] hover:bg-white/60"
+                ? "text-black/45 hover:bg-amber-50/80 hover:text-amber-700"
+                : "text-black/70 hover:text-[#bf9b30] hover:bg-white/60"
           }`;
 
           const content = (
             <>
               <svg 
-                className={`w-5 h-5 transition-colors ${active ? "text-[#bf9b30]" : isDarkMode ? "text-white/60 group-hover:text-[#bf9b30]" : "text-black/80 group-hover:text-[#bf9b30]"}`} 
+                className={`w-5 h-5 transition-colors ${active ? "text-[#bf9b30]" : "text-black/80 group-hover:text-[#bf9b30]"}`} 
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               >
                 {item.icon}
