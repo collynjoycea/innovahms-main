@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Facebook } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Facebook, AlertCircle, Building2, CheckCircle2 } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import FacebookLogin from "react-facebook-login/dist/facebook-login-render-props";
 import ForgotPasswordModal from "../components/ForgotPasswordModal";
@@ -22,28 +22,86 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [error, setError] = useState("");
+
+  // Validation States
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [serverError, setServerError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
+
+  const validateField = (name, value) => {
+    let errorMsg = "";
+    if (name === "email") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        errorMsg = "Email address is required.";
+      } else if (!isValidEmail(trimmed)) {
+        errorMsg = "Please enter a valid email address.";
+      }
+    } else if (name === "password") {
+      if (!value) {
+        errorMsg = "Password is required.";
+      } else if (value.length < 6) {
+        errorMsg = "Password must be at least 6 characters.";
+      }
+    }
+    return errorMsg;
+  };
+
+  const validateForm = () => {
+    const errors = {
+      email: validateField("email", email),
+      password: validateField("password", password),
+    };
+    setFieldErrors(errors);
+    return !errors.email && !errors.password;
+  };
+
+  const handleBlur = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const val = field === "email" ? email : password;
+    setFieldErrors((prev) => ({ ...prev, [field]: validateField(field, val) }));
+  };
+
+  const handleEmailChange = (e) => {
+    const val = e.target.value;
+    setEmail(val);
+    setServerError("");
+    if (touched.email) {
+      setFieldErrors((prev) => ({ ...prev, email: validateField("email", val) }));
+    }
+  };
+
+  const handlePasswordChange = (e) => {
+    const val = e.target.value;
+    setPassword(val);
+    setServerError("");
+    if (touched.password) {
+      setFieldErrors((prev) => ({ ...prev, password: validateField("password", val) }));
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError("");
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      setError("Enter a valid email address.");
+    setServerError("");
+    setTouched({ email: true, password: true });
+
+    if (!validateForm()) {
       return;
     }
-    if (!password) {
-      setError("Password is required.");
-      return;
-    }
+
     setIsLoading(true);
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch("/api/login", {
         method: "POST",
@@ -57,16 +115,17 @@ export default function Login() {
         window.dispatchEvent(new Event("userUpdated"));
         navigate(getPostLoginRedirect());
       } else {
-        setError(data.error || "Invalid email or password.");
+        setServerError(data.error || "Invalid email or password.");
       }
     } catch {
-      setError("Cannot connect to server.");
+      setServerError("Unable to connect to the server.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleSuccess = async (credentialResponse) => {
+    setServerError("");
     try {
       const res = await fetch("/api/google-login", {
         method: "POST",
@@ -80,15 +139,16 @@ export default function Login() {
         window.dispatchEvent(new Event("userUpdated"));
         navigate(getPostLoginRedirect());
       } else {
-        setError(data.error || "Google login failed.");
+        setServerError(data.error || "Google sign-in failed.");
       }
     } catch {
-      setError("Failed to connect to Google login server.");
+      setServerError("Failed to connect to authentication server.");
     }
   };
 
   const responseFacebook = async (response) => {
     if (!response.accessToken) return;
+    setServerError("");
     try {
       const res = await fetch("/api/facebook-login", {
         method: "POST",
@@ -102,171 +162,205 @@ export default function Login() {
         window.dispatchEvent(new Event("userUpdated"));
         navigate(getPostLoginRedirect());
       } else {
-        setError(data.error || "Facebook login failed.");
+        setServerError(data.error || "Facebook sign-in failed.");
       }
     } catch {
-      setError("Server connection error.");
+      setServerError("Server connection error during Facebook login.");
     }
   };
 
   return (
-    <div
-      className="login-page-shell fixed inset-0 flex items-center justify-center overflow-hidden font-sans pt-20"
-    >
-      {/* Dark overlay */}
-      <div className="absolute inset-0 bg-black/55" />
-      {/* Gold radial glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(191,155,48,0.18)_0%,transparent_70%)]" />
+    <div className="min-h-[calc(100vh-80px)] w-full flex items-center justify-center bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans">
+      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
+        
+        {/* LEFT BRAND PANEL (Balanced Layout) */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-teal-800 via-teal-900 to-slate-900 p-8 sm:p-10 text-white flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2.5 text-teal-400 mb-8">
+              <Building2 size={28} />
+              <span className="font-bold tracking-wider text-sm uppercase">INNOVA HMS</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold leading-tight">
+              Seamless Guest Experience & Management
+            </h2>
+            <p className="text-xs text-teal-100/70 mt-3 leading-relaxed">
+              Access room bookings, guest services, and account privileges in one integrated portal.
+            </p>
+          </div>
 
-      {/* CARD */}
-      <div className="relative z-10 w-full max-w-[420px] px-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-        <div className="rounded-[2rem] border border-[#bf9b30]/40 bg-white/10 backdrop-blur-2xl shadow-[0_32px_80px_rgba(0,0,0,0.5)] overflow-hidden">
+          <div className="space-y-3 my-8">
+            <div className="flex items-center gap-3 text-xs text-slate-200">
+              <CheckCircle2 size={16} className="text-teal-400 shrink-0" />
+              <span>Real-time room availability & instant reservation</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-slate-200">
+              <CheckCircle2 size={16} className="text-teal-400 shrink-0" />
+              <span>Secure authentication & guest data privacy</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-slate-200">
+              <CheckCircle2 size={16} className="text-teal-400 shrink-0" />
+              <span>Direct access to Vision Suites booking status</span>
+            </div>
+          </div>
 
-          {/* TOP GOLD ACCENT BAR */}
-          <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#bf9b30] to-transparent" />
+          <p className="text-[11px] text-teal-200/50">
+            © INNOVA HMS Portal. All rights reserved.
+          </p>
+        </div>
 
-          <div className="px-8 py-10">
-
-            {/* LOGO + TITLE */}
-            <div className="text-center mb-8">
-              <img src="/images/logo.png" alt="Innova HMS" className="h-10 w-auto mx-auto mb-5 brightness-0 invert" />
-              <h2 className="text-2xl font-black tracking-tight text-white">
-                Welcome <span className="text-[#bf9b30]">Back</span>
-              </h2>
-              <p className="mt-1 text-[10px] font-bold text-white/50 uppercase tracking-[0.25em]">
-                Sign in to your HMS Portal
+        {/* RIGHT LOGIN FORM PANEL */}
+        <div className="lg:col-span-7 p-8 sm:p-12 bg-white flex flex-col justify-center">
+          <div className="max-w-md mx-auto w-full">
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-slate-900">Sign In to Your Account</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Please enter your credentials to proceed.
               </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              {/* EMAIL */}
+            {/* SERVER ERROR ALERT */}
+            {serverError && (
+              <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                <AlertCircle size={16} className="shrink-0 text-rose-500 mt-0.5" />
+                <span>{serverError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4" noValidate>
+              {/* EMAIL FIELD */}
               <div>
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="email"
-                    required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={handleEmailChange}
+                    onBlur={() => handleBlur("email")}
                     placeholder="guest@innovahms.com"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 py-3.5 pl-11 pr-4 text-sm font-semibold text-white placeholder:text-white/25 outline-none focus:border-[#bf9b30]/70 focus:bg-white/15 transition-all"
+                    className={`w-full rounded-lg border bg-slate-50 py-2.5 pl-10 pr-3 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition-all ${
+                      touched.email && fieldErrors.email
+                        ? "border-rose-400 bg-rose-50/50 focus:border-rose-500"
+                        : "border-slate-300 focus:border-teal-600 focus:bg-white focus:ring-1 focus:ring-teal-600"
+                    }`}
                   />
                 </div>
+                {touched.email && fieldErrors.email && (
+                  <p className="mt-1 text-[11px] font-medium text-rose-500">{fieldErrors.email}</p>
+                )}
               </div>
 
-              {/* PASSWORD */}
+              {/* PASSWORD FIELD */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Password
                   </label>
                   <button
                     type="button"
                     onClick={() => setShowForgotPassword(true)}
-                    className="text-[9px] font-bold text-white/40 hover:text-[#bf9b30] transition-colors uppercase tracking-widest"
+                    className="text-xs font-medium text-teal-600 hover:text-teal-700 hover:underline"
                   >
-                    Forgot?
+                    Forgot password?
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                  <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type={showPassword ? "text" : "password"}
-                    required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={handlePasswordChange}
+                    onBlur={() => handleBlur("password")}
                     placeholder="••••••••"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 py-3.5 pl-11 pr-12 text-sm font-semibold text-white placeholder:text-white/25 outline-none focus:border-[#bf9b30]/70 focus:bg-white/15 transition-all"
+                    className={`w-full rounded-lg border bg-slate-50 py-2.5 pl-10 pr-10 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition-all ${
+                      touched.password && fieldErrors.password
+                        ? "border-rose-400 bg-rose-50/50 focus:border-rose-500"
+                        : "border-slate-300 focus:border-teal-600 focus:bg-white focus:ring-1 focus:ring-teal-600"
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                {touched.password && fieldErrors.password && (
+                  <p className="mt-1 text-[11px] font-medium text-rose-500">{fieldErrors.password}</p>
+                )}
               </div>
 
-              {/* ERROR */}
-              {error && (
-                <div className="flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-500/15 px-4 py-3">
-                  <span className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-black text-white flex-shrink-0">!</span>
-                  <p className="text-[11px] font-bold text-red-300 uppercase tracking-tight">{error}</p>
-                </div>
-              )}
-
-              {/* SUBMIT */}
+              {/* SUBMIT BUTTON */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group w-full flex items-center justify-center gap-2 rounded-xl bg-[#bf9b30] py-4 text-[11px] font-black uppercase tracking-[0.25em] text-[#0d0c0a] shadow-[0_8px_32px_rgba(191,155,48,0.4)] hover:bg-[#d4ac37] hover:-translate-y-0.5 active:scale-[0.98] transition-all disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-700 active:bg-teal-800 py-2.5 text-xs font-semibold text-white shadow-md shadow-teal-600/10 transition-all disabled:opacity-50 mt-2"
               >
-                {isLoading ? "Authenticating..." : "Sign In"}
-                {!isLoading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
+                {isLoading ? (
+                  <span>Signing in...</span>
+                ) : (
+                  <>
+                    <span>Sign In</span>
+                    <ArrowRight size={15} />
+                  </>
+                )}
               </button>
             </form>
 
             {/* DIVIDER */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-white/15" />
+                <span className="w-full border-t border-slate-200" />
               </div>
-              <div className="relative flex justify-center">
-                <span className="bg-transparent px-4 text-[9px] font-black uppercase tracking-[0.2em] text-white/30">
-                  or continue with
-                </span>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white px-3 text-slate-400">or sign in with</span>
               </div>
             </div>
 
-            {/* SOCIAL */}
-            <div className="flex flex-col gap-3 items-center">
+            {/* SOCIAL LOGINS */}
+            <div className="space-y-2.5">
               <div className="w-full flex justify-center">
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
-                  onError={() => setError("Google Login Failed")}
-                  theme="filled_black"
-                  shape="pill"
-                  width="320px"
+                  onError={() => setServerError("Google Login failed.")}
+                  theme="outline"
+                  shape="rectangular"
+                  width="384"
                 />
               </div>
+
               <FacebookLogin
                 appId="1986409515302523"
                 autoLoad={false}
                 callback={responseFacebook}
                 render={(renderProps) => (
                   <button
+                    type="button"
                     onClick={renderProps.onClick}
-                    className="flex items-center justify-center gap-3 w-full max-w-[320px] h-[40px] rounded-full border border-white/20 bg-white/10 hover:bg-white/20 transition-all"
+                    className="flex items-center justify-center gap-2 w-full h-[38px] rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors"
                   >
-                    <Facebook size={17} className="text-[#1877F2] fill-[#1877F2]" />
-                    <span className="text-white/80 text-sm font-medium">Continue with Facebook</span>
+                    <Facebook size={15} className="text-[#1877F2] fill-[#1877F2]" />
+                    <span>Facebook</span>
                   </button>
                 )}
               />
             </div>
 
-            {/* REGISTER LINK */}
-            <p className="mt-8 text-center text-[11px] font-bold text-white/35 uppercase tracking-widest">
-              New here?{" "}
-              <Link to="/signup" className="font-black text-[#bf9b30] hover:text-[#d4ac37] transition-colors underline underline-offset-4">
-                Register Now
+            {/* FOOTER LINK */}
+            <p className="mt-8 text-center text-xs text-slate-500">
+              Don't have an account?{" "}
+              <Link to="/signup" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
+                Create an account
               </Link>
             </p>
           </div>
         </div>
+
       </div>
-      <style>{`
-        .login-page-shell {
-          background-image: url("/images/herobg.jpg");
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
-        }
-      `}</style>
+
       <ForgotPasswordModal
         isOpen={showForgotPassword}
         onClose={() => setShowForgotPassword(false)}

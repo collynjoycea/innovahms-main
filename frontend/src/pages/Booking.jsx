@@ -11,6 +11,7 @@ const TAX_PERCENT = 5;
 const weekLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 const buttonDateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
 const getSession = () => {
   try {
     const raw = localStorage.getItem('user') || localStorage.getItem('customerSession');
@@ -66,6 +67,7 @@ const buildCalendarDays = (monthCursor) => {
 
 function QrModal({ open, data, onPaid, onClose }) {
   const [paid, setPaid] = useState(false);
+
   useEffect(() => {
     if (!open || !data?.intentId) return undefined;
     setPaid(false);
@@ -82,30 +84,38 @@ function QrModal({ open, data, onPaid, onClose }) {
     }, 4000);
     return () => clearInterval(id);
   }, [open, data?.intentId, onPaid]);
+
   if (!open) return null;
+
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-[2rem] border border-[#bf9b30]/40 bg-[#15120d]/95 shadow-[0_32px_80px_rgba(0,0,0,0.5)]">
-        <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#bf9b30] to-transparent" />
-        <div className="p-8 text-center text-white">
-          <button type="button" onClick={onClose} className="absolute right-5 top-5 text-white/40 hover:text-white"><X size={18} /></button>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-900 text-slate-100 shadow-2xl">
+        <div className="h-1.5 w-full bg-emerald-500" />
+        <div className="p-6 text-center">
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 text-slate-400 hover:text-slate-200">
+            <X size={18} />
+          </button>
           {paid ? (
             <>
-              <CheckCircle2 size={52} className="mx-auto mb-4 text-[#bf9b30]" />
-              <h3 className="text-xl font-black">Payment Confirmed!</h3>
+              <CheckCircle2 size={48} className="mx-auto mb-3 text-emerald-400" />
+              <h3 className="text-xl font-bold">Payment Confirmed</h3>
             </>
           ) : (
             <>
-              <QrCode size={28} className="mx-auto mb-3 text-[#bf9b30]" />
-              <h3 className="text-xl font-black">Scan to Pay</h3>
-              <p className="mb-5 mt-1 text-xs uppercase tracking-widest text-white/50">QR Ph · {peso(data?.amount || 0)}</p>
+              <QrCode size={28} className="mx-auto mb-2 text-emerald-400" />
+              <h3 className="text-xl font-bold">Scan to Pay</h3>
+              <p className="mb-4 mt-1 text-xs text-slate-400">QR Ph • {peso(data?.amount || 0)}</p>
               {data?.qrCodeUrl ? (
-                <div className="mx-auto mb-5 w-fit rounded-2xl bg-white p-4"><img src={data.qrCodeUrl} alt="QR Code" className="h-48 w-48 object-contain" /></div>
+                <div className="mx-auto mb-4 w-fit rounded-xl bg-white p-3 shadow-inner">
+                  <img src={data.qrCodeUrl} alt="QR Code" className="h-44 w-44 object-contain" />
+                </div>
               ) : (
-                <div className="mx-auto mb-5 flex h-48 w-48 items-center justify-center rounded-2xl bg-white/10"><Loader2 size={32} className="animate-spin text-[#bf9b30]" /></div>
+                <div className="mx-auto mb-4 flex h-44 w-44 items-center justify-center rounded-xl bg-slate-800">
+                  <Loader2 size={28} className="animate-spin text-emerald-400" />
+                </div>
               )}
-              <p className="text-[11px] text-white/45">Open your banking app and scan the QR code above.</p>
+              <p className="text-xs text-slate-400">Open your banking app and scan the QR code above.</p>
             </>
           )}
         </div>
@@ -121,34 +131,121 @@ function ReviewModal({ open, booking, user, onClose }) {
   const [comment, setComment] = useState('');
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  useEffect(() => { if (!open) { setRating(0); setHover(0); setTitle(''); setComment(''); setDone(false); setSubmitting(false); } }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setRating(0);
+      setHover(0);
+      setTitle('');
+      setComment('');
+      setDone(false);
+      setSubmitting(false);
+    }
+  }, [open]);
+
   if (!open) return null;
+
   const submit = async (e) => {
     e.preventDefault();
     if (!rating || !comment.trim()) return;
     setSubmitting(true);
     try {
-      await fetch('/api/reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId: user?.id, roomId: booking?.roomId || null, hotelId: booking?.hotelId || null, rating, title, comment }) });
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: user?.id,
+          roomId: booking?.roomId || null,
+          hotelId: booking?.hotelId || null,
+          rating,
+          title,
+          comment,
+        }),
+      });
       setDone(true);
-    } catch {} finally { setSubmitting(false); }
+    } catch {} finally {
+      setSubmitting(false);
+    }
   };
+
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-[2rem] border border-[#bf9b30]/40 bg-[#15120d]/95 shadow-[0_32px_80px_rgba(0,0,0,0.5)]">
-        <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#bf9b30] to-transparent" />
-        <div className="p-8 text-white">
-          <button type="button" onClick={onClose} className="absolute right-5 top-5 text-white/40 hover:text-white"><X size={18} /></button>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-900 text-slate-100 shadow-2xl">
+        <div className="h-1.5 w-full bg-emerald-500" />
+        <div className="p-6">
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 text-slate-400 hover:text-slate-200">
+            <X size={18} />
+          </button>
           {done ? (
-            <div className="py-6 text-center"><CheckCircle2 size={48} className="mx-auto mb-4 text-[#bf9b30]" /><h3 className="text-xl font-black">Thank You!</h3><p className="mb-6 mt-2 text-sm text-white/60">Your review has been submitted.</p><button type="button" onClick={onClose} className="rounded-xl bg-[#bf9b30] px-8 py-3 text-[11px] font-black uppercase tracking-widest text-[#0d0c0a]">Close</button></div>
+            <div className="py-4 text-center">
+              <CheckCircle2 size={44} className="mx-auto mb-3 text-emerald-400" />
+              <h3 className="text-xl font-bold">Thank You</h3>
+              <p className="mb-5 mt-1 text-sm text-slate-400">Your review has been submitted.</p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg bg-emerald-600 px-6 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500"
+              >
+                Close
+              </button>
+            </div>
           ) : (
             <>
-              <div className="mb-6 text-center"><Sparkles size={28} className="mx-auto mb-3 text-[#bf9b30]" /><h3 className="text-xl font-black">Share Your Experience</h3></div>
+              <div className="mb-5 text-center">
+                <Sparkles size={24} className="mx-auto mb-2 text-emerald-400" />
+                <h3 className="text-xl font-bold">Share Your Experience</h3>
+              </div>
               <form onSubmit={submit} className="space-y-4">
-                <div><label className="mb-2 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">Rating</label><div className="flex gap-2">{[1,2,3,4,5].map((n) => <button key={n} type="button" onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)} onClick={() => setRating(n)}><Star size={24} fill={(hover || rating) >= n ? '#bf9b30' : 'transparent'} className={(hover || rating) >= n ? 'text-[#bf9b30]' : 'text-white/30'} /></button>)}</div></div>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Summarize your stay..." className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#bf9b30]/70" />
-                <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Tell future guests about your experience..." className="w-full resize-none rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#bf9b30]/70" />
-                <div className="flex gap-3"><button type="button" onClick={onClose} className="flex-1 rounded-xl border border-white/20 py-3 text-[11px] font-black uppercase tracking-widest text-white/60">Skip</button><button type="submit" disabled={submitting || !rating || !comment.trim()} className="flex-1 rounded-xl bg-[#bf9b30] py-3 text-[11px] font-black uppercase tracking-widest text-[#0d0c0a] disabled:opacity-40">{submitting ? 'Submitting...' : 'Submit'}</button></div>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold text-slate-300">Rating</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onMouseEnter={() => setHover(n)}
+                        onMouseLeave={() => setHover(0)}
+                        onClick={() => setRating(n)}
+                      >
+                        <Star
+                          size={22}
+                          fill={(hover || rating) >= n ? '#10b981' : 'transparent'}
+                          className={(hover || rating) >= n ? 'text-emerald-500' : 'text-slate-600'}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Summarize your stay..."
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <textarea
+                  rows={3}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Tell future guests about your experience..."
+                  className="w-full resize-none rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 rounded-lg border border-slate-700 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-800"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || !rating || !comment.trim()}
+                    className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {submitting ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
               </form>
             </>
           )}
@@ -161,25 +258,45 @@ function ReviewModal({ open, booking, user, onClose }) {
 function SuccessModal({ open, booking, hasReviewed, onReview, onClose }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[1900] flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-[2rem] border border-[#bf9b30]/40 bg-[#15120d]/95 shadow-[0_32px_80px_rgba(0,0,0,0.5)]">
-        <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#bf9b30] to-transparent" />
-        <div className="p-10 text-center text-white">
-          <CheckCircle2 size={56} className="mx-auto mb-5 text-[#bf9b30]" />
-          <h3 className="text-2xl font-black">Booking Confirmed!</h3>
-          <div className="mb-8 mt-6 space-y-2 rounded-xl border border-white/15 bg-white/5 p-5 text-left">
-            <div className="flex justify-between text-sm"><span className="text-white/50">Booking #</span><span className="font-black text-[#bf9b30]">{booking?.bookingNumber}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-white/50">Nights</span><span className="font-bold">{booking?.totalNights}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-white/50">Subtotal</span><span className="font-bold">{peso(booking?.subtotalAmount || booking?.baseAmount || 0)}</span></div>
-            {!!Number(booking?.privilegeDiscountAmount || 0) && <div className="flex justify-between text-sm"><span className="text-white/50">Privilege savings</span><span className="font-bold text-emerald-300">-{peso(booking?.privilegeDiscountAmount || 0)}</span></div>}
-            <div className="flex justify-between text-sm"><span className="text-white/50">VAT ({booking?.vatPercent || VAT_PERCENT}%)</span><span className="font-bold">{peso(booking?.vatAmount || 0)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-white/50">Tax ({booking?.taxPercent || TAX_PERCENT}%)</span><span className="font-bold">{peso(booking?.taxAmount || 0)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-white/50">Total</span><span className="font-black">{peso(booking?.totalAmount || 0)}</span></div>
+    <div className="fixed inset-0 z-[1900] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-900 text-slate-100 shadow-2xl">
+        <div className="h-1.5 w-full bg-emerald-500" />
+        <div className="p-8 text-center">
+          <CheckCircle2 size={52} className="mx-auto mb-3 text-emerald-400" />
+          <h3 className="text-2xl font-bold">Booking Confirmed</h3>
+          <div className="my-6 space-y-2 rounded-xl border border-slate-800 bg-slate-800/50 p-4 text-left text-sm">
+            <div className="flex justify-between"><span className="text-slate-400">Booking #</span><span className="font-semibold text-emerald-400">{booking?.bookingNumber}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Nights</span><span className="font-medium">{booking?.totalNights}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Subtotal</span><span className="font-medium">{peso(booking?.subtotalAmount || booking?.baseAmount || 0)}</span></div>
+            {!!Number(booking?.privilegeDiscountAmount || 0) && (
+              <div className="flex justify-between"><span className="text-slate-400">Privilege savings</span><span className="font-medium text-emerald-400">-{peso(booking?.privilegeDiscountAmount || 0)}</span></div>
+            )}
+            <div className="flex justify-between"><span className="text-slate-400">VAT ({booking?.vatPercent || VAT_PERCENT}%)</span><span className="font-medium">{peso(booking?.vatAmount || 0)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Tax ({booking?.taxPercent || TAX_PERCENT}%)</span><span className="font-medium">{peso(booking?.taxAmount || 0)}</span></div>
+            <div className="flex justify-between border-t border-slate-700/60 pt-2 font-bold"><span className="text-slate-300">Total</span><span className="text-slate-100">{peso(booking?.totalAmount || 0)}</span></div>
           </div>
-          <div className="flex flex-col gap-3">
-            {hasReviewed ? <div className="flex items-center justify-center gap-2 rounded-xl bg-green-600 py-3.5 text-[11px] font-black uppercase tracking-widest"><CheckCircle2 size={14} />Review Submitted</div> : <button type="button" onClick={onReview} className="flex items-center justify-center gap-2 rounded-xl bg-[#bf9b30] py-3.5 text-[11px] font-black uppercase tracking-widest text-[#0d0c0a]"><Star size={14} />Leave a Review</button>}
-            <button type="button" onClick={onClose} className="rounded-xl border border-white/20 py-3.5 text-[11px] font-black uppercase tracking-widest text-white/60">Back to Home</button>
+          <div className="flex flex-col gap-2.5">
+            {hasReviewed ? (
+              <div className="flex items-center justify-center gap-2 rounded-lg bg-emerald-800/40 py-3 text-xs font-semibold text-emerald-300">
+                <CheckCircle2 size={14} /> Review Submitted
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onReview}
+                className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-500"
+              >
+                <Star size={14} /> Leave a Review
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-700 py-3 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+            >
+              Back to Home
+            </button>
           </div>
         </div>
       </div>
@@ -213,15 +330,11 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
       const estimatedHeight = 360;
       const spaceBelow = viewportHeight - rect.bottom;
       const top = spaceBelow >= estimatedHeight
-        ? rect.bottom + 12
-        : Math.max(16, rect.top - estimatedHeight - 12);
+        ? rect.bottom + 8
+        : Math.max(16, rect.top - estimatedHeight - 8);
       const left = Math.min(Math.max(16, rect.left), viewportWidth - width - 16);
 
-      setPanelStyle({
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${width}px`,
-      });
+      setPanelStyle({ left: `${left}px`, top: `${top}px`, width: `${width}px` });
     };
 
     updatePanelPosition();
@@ -255,26 +368,38 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
       <div
         ref={panelRef}
         style={panelStyle || undefined}
-        className="fixed z-[2200] max-w-[calc(100vw-2rem)] rounded-[1.4rem] border border-[#bf9b30]/25 bg-[#15120d] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.45)]"
+        className="fixed z-[2200] rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-800 dark:bg-slate-900"
       >
-        <div className="mb-4 flex items-center justify-between">
-          <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronLeft size={16} /></button>
-          <p className="text-sm font-black text-white">{monthFormatter.format(monthCursor)}</p>
-          <button type="button" onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} className="rounded-full border border-white/10 p-2 text-white/60 transition hover:border-[#bf9b30]/40 hover:text-white"><ChevronRight size={16} /></button>
+        <div className="mb-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{monthFormatter.format(monthCursor)}</p>
+          <button
+            type="button"
+            onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
-        <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-400">
           {weekLabels.map((day) => <span key={day}>{day}</span>)}
         </div>
-        <div className="mt-3 grid grid-cols-7 gap-2">
+        <div className="mt-2 grid grid-cols-7 gap-1">
           {calendarDays.map((day) => {
             const isOutsideMonth = day.getMonth() !== monthCursor.getMonth();
             const isDisabled = isDateDisabled(day);
             const isSelected = selectedDate ? sameDate(day, selectedDate) : false;
             const baseClasses = isSelected
-              ? 'border-[#bf9b30] bg-[#bf9b30] text-[#0d0c0a]'
+              ? 'bg-emerald-600 text-white font-bold'
               : isDisabled
-                ? 'cursor-not-allowed border-white/5 bg-white/[0.03] text-white/18'
-                : 'border-white/10 bg-white/[0.06] text-white transition hover:border-[#bf9b30]/40 hover:text-[#f2d485]';
+                ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
+                : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-slate-200 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400';
 
             return (
               <button
@@ -285,14 +410,14 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
                   onChange(formatDateValue(day));
                   setOpen(false);
                 }}
-                className={`aspect-square rounded-xl border text-sm font-bold ${baseClasses} ${isOutsideMonth && !isSelected ? 'opacity-50' : ''}`}
+                className={`aspect-square rounded-lg text-xs transition ${baseClasses} ${isOutsideMonth && !isSelected ? 'opacity-40' : ''}`}
               >
                 {day.getDate()}
               </button>
             );
           })}
         </div>
-        <p className="mt-4 text-[11px] text-white/35">Past dates and booked days are automatically locked.</p>
+        <p className="mt-3 text-[11px] text-slate-400">Booked or past dates are unavailable.</p>
       </div>,
       document.body,
     )
@@ -300,18 +425,18 @@ function DatePickerField({ label, value, onChange, helperText, isDateDisabled, d
 
   return (
     <div ref={pickerRef} className="relative">
-      <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">{label}</label>
+      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</label>
       <button
         ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center justify-between rounded-xl border border-white/20 bg-white/10 px-4 py-3.5 text-left text-sm font-semibold text-white outline-none transition hover:border-[#bf9b30]/50 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm text-slate-800 shadow-sm transition hover:border-emerald-500 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900"
       >
         <span>{dateButtonLabel(value)}</span>
-        <CalendarDays size={16} className="text-[#bf9b30]" />
+        <CalendarDays size={16} className="text-emerald-600 dark:text-emerald-400" />
       </button>
-      {helperText ? <p className="mt-2 text-[11px] leading-relaxed text-white/45">{helperText}</p> : null}
+      {helperText ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helperText}</p> : null}
       {calendarPanel}
     </div>
   );
@@ -323,6 +448,7 @@ export default function Booking() {
   const roomId = params.get('roomId');
   const today = formatDateValue(new Date());
   const tomorrow = formatDateValue(addDays(new Date(), 1));
+
   const [room, setRoom] = useState(null);
   const [sessionUser, setSessionUser] = useState(getSession());
   const [membership, setMembership] = useState(null);
@@ -345,9 +471,16 @@ export default function Booking() {
   const [showReview, setShowReview] = useState(false);
   const [qrData, setQrData] = useState(null);
   const [hasReviewed, setHasReviewed] = useState(false);
-  const [isDark, setIsDark] = useState(() => { const t = localStorage.getItem('theme'); return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches; });
+  const [isDark, setIsDark] = useState(() => {
+    const t = localStorage.getItem('theme');
+    return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
   useEffect(() => {
-    const syncTheme = () => { const t = localStorage.getItem('theme'); setIsDark(t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches); };
+    const syncTheme = () => {
+      const t = localStorage.getItem('theme');
+      setIsDark(t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+    };
     const syncUser = () => setSessionUser(getSession());
     window.addEventListener('themeChanged', syncTheme);
     window.addEventListener('storage', syncTheme);
@@ -360,13 +493,25 @@ export default function Booking() {
       window.removeEventListener('storage', syncUser);
     };
   }, []);
+
   useEffect(() => {
     if (!roomId) return undefined;
     let dead = false;
     setLoadingRoom(true);
-    fetch('/api/rooms').then((r) => r.json()).then((d) => { if (!dead) setRoom((d.rooms || []).find((x) => String(x.id) === String(roomId)) || null); }).catch(() => { if (!dead) setRoom(null); }).finally(() => { if (!dead) setLoadingRoom(false); });
+    fetch('/api/rooms')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!dead) setRoom((d.rooms || []).find((x) => String(x.id) === String(roomId)) || null);
+      })
+      .catch(() => {
+        if (!dead) setRoom(null);
+      })
+      .finally(() => {
+        if (!dead) setLoadingRoom(false);
+      });
     return () => { dead = true; };
   }, [roomId]);
+
   useEffect(() => {
     if (!room?.id) {
       setBlockedRanges([]);
@@ -374,32 +519,46 @@ export default function Booking() {
     }
     let dead = false;
     setAvailabilityLoading(true);
-    fetch(`/api/rooms/${room.id}/availability`).then((r) => r.json().catch(() => ({})).then((body) => ({ ok: r.ok, body }))).then(({ ok, body }) => {
-      if (!dead) setBlockedRanges(ok ? (body.blockedRanges || []) : []);
-    }).catch(() => {
-      if (!dead) setBlockedRanges([]);
-    }).finally(() => {
-      if (!dead) setAvailabilityLoading(false);
-    });
+    fetch(`/api/rooms/${room.id}/availability`)
+      .then((r) => r.json().catch(() => ({})).then((body) => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (!dead) setBlockedRanges(ok ? (body.blockedRanges || []) : []);
+      })
+      .catch(() => {
+        if (!dead) setBlockedRanges([]);
+      })
+      .finally(() => {
+        if (!dead) setAvailabilityLoading(false);
+      });
     return () => { dead = true; };
   }, [room?.id]);
+
   useEffect(() => {
     if (!sessionUser?.id) { setMembership(null); return undefined; }
     let dead = false;
     setMembershipLoading(true);
-    fetch(`/api/innova/summary/${sessionUser.id}`).then((r) => r.json().catch(() => ({})).then((body) => ({ ok: r.ok, body }))).then(({ ok, body }) => { if (!dead) setMembership(ok ? body : null); }).catch(() => { if (!dead) setMembership(null); }).finally(() => { if (!dead) setMembershipLoading(false); });
+    fetch(`/api/innova/summary/${sessionUser.id}`)
+      .then((r) => r.json().catch(() => ({})).then((body) => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => { if (!dead) setMembership(ok ? body : null); })
+      .catch(() => { if (!dead) setMembership(null); })
+      .finally(() => { if (!dead) setMembershipLoading(false); });
     return () => { dead = true; };
   }, [sessionUser?.id]);
+
   useEffect(() => {
     if (!sessionUser?.id || !room?.id) { setHasReviewed(false); return undefined; }
     let dead = false;
-    fetch('/api/reviews').then((r) => r.json().catch(() => ({}))).then((body) => {
-      if (dead) return;
-      const reviews = body.reviews || [];
-      setHasReviewed(reviews.some((review) => review.customerId === sessionUser.id && (review.roomId === room.id || (review.roomId == null && review.roomName?.toLowerCase().includes(room.roomName?.toLowerCase())))));
-    }).catch(() => { if (!dead) setHasReviewed(false); });
+    fetch('/api/reviews')
+      .then((r) => r.json().catch(() => ({})))
+      .then((body) => {
+        if (dead) return;
+        const reviews = body.reviews || [];
+        setHasReviewed(reviews.some((review) => review.customerId === sessionUser.id && (review.roomId === room.id || (review.roomId == null && review.roomName?.toLowerCase().includes(room.roomName?.toLowerCase())))));
+      })
+      .catch(() => { if (!dead) setHasReviewed(false); });
     return () => { dead = true; };
   }, [sessionUser?.id, room?.id, room?.roomName]);
+
   const blockedNightKeys = new Set();
   blockedRanges.forEach((range) => {
     let cursor = parseDateValue(range.checkIn);
@@ -409,20 +568,24 @@ export default function Booking() {
       cursor = addDays(cursor, 1);
     }
   });
+
   const hasBookingConflict = (startValue, endValue) => blockedRanges.some((range) => {
     if (!range?.checkIn || !range?.checkOut) return false;
     return startValue < range.checkOut && endValue > range.checkIn;
   });
+
   const isCheckInDateDisabled = (date) => {
     const key = formatDateValue(date);
     return !key || key < today || blockedNightKeys.has(key);
   };
+
   const isCheckOutDateDisabled = (date, startValue = checkIn) => {
     const key = formatDateValue(date);
     if (!key || !startValue) return true;
     if (key <= startValue) return true;
     return hasBookingConflict(startValue, key);
   };
+
   const findNextAvailableCheckIn = (startValue = today) => {
     for (let offset = 0; offset < 370; offset += 1) {
       const candidateDate = addDays(startValue, offset);
@@ -430,6 +593,7 @@ export default function Booking() {
     }
     return startValue;
   };
+
   const findNextAvailableCheckOut = (startValue) => {
     for (let offset = 1; offset < 370; offset += 1) {
       const candidateDate = addDays(startValue, offset);
@@ -437,6 +601,7 @@ export default function Booking() {
     }
     return formatDateValue(addDays(startValue, 1));
   };
+
   useEffect(() => {
     if (!room?.id) return;
     const parsedCheckIn = parseDateValue(checkIn);
@@ -451,6 +616,7 @@ export default function Booking() {
       if (nextCheckOut !== checkOut) setCheckOut(nextCheckOut);
     }
   }, [room?.id, blockedRanges, checkIn, checkOut, today]);
+
   const nights = Math.max(0, Math.ceil((new Date(checkOut) - new Date(checkIn)) / 86400000));
   const baseTotal = room ? nights * Number(room.price || 0) : 0;
   const activePrivilege = membership?.privilege?.isActive ? membership.privilege : null;
@@ -460,31 +626,62 @@ export default function Booking() {
   const vatAmount = Number((subtotalAfterDiscount * (VAT_PERCENT / 100)).toFixed(2));
   const taxAmount = Number((subtotalAfterDiscount * (TAX_PERCENT / 100)).toFixed(2));
   const total = Number((subtotalAfterDiscount + vatAmount + taxAmount).toFixed(2));
+
   const togglePref = (value) => setPreferences((prev) => prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]);
-  const inputCls = 'w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3.5 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#bf9b30]/70';
-  const selectCls = `w-full appearance-none rounded-xl border border-white/20 px-4 py-3.5 text-sm font-semibold outline-none focus:border-[#bf9b30]/70 ${isDark ? 'bg-[#1a1208] text-white' : 'bg-[#2a1f08] text-white'}`;
+
+  const inputCls = 'w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 placeholder:text-slate-400';
+  const selectCls = 'w-full appearance-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
+
   const nextOpenDate = findNextAvailableCheckIn(today);
   const shownBlockedRanges = blockedRanges.slice(0, 3);
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!sessionUser?.id) { sessionStorage.setItem('returnTo', window.location.pathname + window.location.search); navigate('/login'); return; }
+    if (!sessionUser?.id) {
+      sessionStorage.setItem('returnTo', window.location.pathname + window.location.search);
+      navigate('/login');
+      return;
+    }
     if (!room) { setError('No room selected.'); return; }
     if (nights < 1) { setError('Check-out must be after check-in.'); return; }
     if (isCheckInDateDisabled(parseDateValue(checkIn))) { setError('Selected check-in date is no longer available.'); return; }
     if (isCheckOutDateDisabled(parseDateValue(checkOut), checkIn)) { setError('Selected stay overlaps an existing booking. Please choose different dates.'); return; }
+
     setSubmitting(true);
     try {
-      const res = await fetch('/api/reservations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId: sessionUser.id, roomId: room.id, checkIn, checkOut, checkInTime, checkOutTime, guests, paymentMethod, specialRequests: [preferences.join(', '), specialRequests].filter(Boolean).join(' | ') }) });
+      const res = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: sessionUser.id,
+          roomId: room.id,
+          checkIn,
+          checkOut,
+          checkInTime,
+          checkOutTime,
+          guests,
+          paymentMethod,
+          specialRequests: [preferences.join(', '), specialRequests].filter(Boolean).join(' | '),
+        }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Booking failed.');
       setBooking(body);
+
       if (['card', 'gcash', 'maya', 'qrph', 'online'].includes(paymentMethod)) {
-        const payRes = await fetch('/api/payment/create-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reservationId: body.bookingId, paymentMethod }) });
+        const payRes = await fetch('/api/payment/create-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reservationId: body.bookingId, paymentMethod }),
+        });
         const pay = await payRes.json().catch(() => ({}));
-        if (payRes.status === 503) throw new Error('PayMongo is not configured yet. Please use Cash on Arrival or contact support.');
+        if (payRes.status === 503) throw new Error('Payment gateway is not configured. Please choose Cash on Arrival.');
         if (!payRes.ok) throw new Error(pay.error || 'Payment link creation failed.');
-        if (pay.isQrPayment && pay.qrCodeUrl) { setQrData({ qrCodeUrl: pay.qrCodeUrl, intentId: pay.intentId, amount: pay.amount, bookingNumber: pay.bookingNumber }); return; }
+        if (pay.isQrPayment && pay.qrCodeUrl) {
+          setQrData({ qrCodeUrl: pay.qrCodeUrl, intentId: pay.intentId, amount: pay.amount, bookingNumber: pay.bookingNumber });
+          return;
+        }
         window.location.href = pay.checkoutUrl;
         return;
       }
@@ -495,44 +692,278 @@ export default function Booking() {
       setSubmitting(false);
     }
   };
+
   return (
     <>
-      <SuccessModal open={showSuccess} booking={booking} hasReviewed={hasReviewed} onReview={() => { setShowSuccess(false); setShowReview(true); }} onClose={() => { setShowSuccess(false); navigate('/'); }} />
-      <ReviewModal open={showReview} booking={booking} user={sessionUser} onClose={() => { setShowReview(false); navigate('/'); }} />
-      <QrModal open={!!qrData} data={qrData} onPaid={() => { setQrData(null); setShowSuccess(true); }} onClose={() => setQrData(null)} />
-      <div className="booking-page-shell relative min-h-screen">
-        <div className="pointer-events-none fixed inset-0 bg-black/60" />
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(191,155,48,0.12)_0%,transparent_60%)]" />
-        <div className="relative z-10 mx-auto max-w-5xl px-4 py-24">
-          <div className="mb-12 text-center"><p className="mb-3 text-[10px] font-black uppercase tracking-[0.4em] text-[#bf9b30]">Innova HMS</p><h1 className="text-5xl font-black tracking-tighter text-white md:text-6xl">Reserve Your <span className="font-serif font-light italic text-[#bf9b30]">Room Now</span></h1><p className="mt-4 text-sm text-white/50">Privilege-aware pricing, payment, and booking in one flow.</p></div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="space-y-4 lg:col-span-2">
-              {loadingRoom ? <div className="flex items-center gap-3 rounded-[1.5rem] border border-white/15 bg-white/8 p-6 backdrop-blur-xl"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[#bf9b30] border-t-transparent" /><span className="text-sm text-white/50">Loading room...</span></div> : room ? <div className="overflow-hidden rounded-[1.5rem] border border-[#bf9b30]/30 bg-white/8 backdrop-blur-xl"><div className="flex gap-4 p-5"><img src={resolveImg(room.images?.[0])} alt={room.roomName} onError={(e) => { e.currentTarget.src = '/images/room1.jpg'; }} className="h-20 w-24 rounded-xl object-cover" /><div className="min-w-0 flex-1"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#bf9b30]">{room.roomType}</p><h3 className="truncate text-lg font-black text-white">{room.roomName}</h3><p className="mt-1 flex items-center gap-1 text-xs text-white/50"><MapPin size={10} className="text-[#bf9b30]" />{room.location_description || 'Innova HMS'}</p>{discountPercent > 0 && <p className="mt-3 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">{activePrivilege?.packageName || 'Privilege'} saves you {discountPercent}%</p>}</div><div className="text-right"><p className="text-xl font-black text-[#bf9b30]">{peso(room.price || 0)}</p><p className="text-[9px] uppercase tracking-widest text-white/40">/ night</p></div></div></div> : <div className="rounded-[1.5rem] border border-white/15 bg-white/8 p-6 text-center text-sm text-white/40 backdrop-blur-xl">No room selected. <button type="button" onClick={() => navigate('/recommendations')} className="text-[#bf9b30] underline">Browse rooms</button></div>}
-              <form onSubmit={submit}>
-                <div className="mb-4 rounded-[1.5rem] border border-white/15 bg-white/8 p-6 backdrop-blur-xl">
-                  <div className="mb-5 flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#bf9b30] text-[11px] font-black text-[#0d0c0a]">1</span><h2 className="text-sm font-black uppercase tracking-widest text-white">Stay Duration & Arrival Time</h2></div>
-                  <div className="mb-4 rounded-2xl border border-[#bf9b30]/20 bg-[#bf9b30]/8 px-4 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#f1d27b]">{availabilityLoading ? 'Checking room availability...' : 'Calendar auto-lock enabled'}</p>
-                    <p className="mt-2 text-[11px] leading-relaxed text-white/70">Past dates and booked days are disabled automatically.{nextOpenDate ? ` Next available check-in is ${dateButtonLabel(nextOpenDate)}.` : ''}</p>
-                    {shownBlockedRanges.length ? <div className="mt-3 flex flex-wrap gap-2">{shownBlockedRanges.map((range) => <span key={`${range.bookingNumber}-${range.checkIn}`} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">{dateButtonLabel(range.checkIn)} to {dateButtonLabel(addDays(range.checkOut, -1) || range.checkOut)}</span>)}</div> : null}
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <DatePickerField label="Check-In Date" value={checkIn} onChange={setCheckIn} minMonthValue={today} isDateDisabled={isCheckInDateDisabled} helperText="Unavailable days are already disabled in the calendar." />
-                    <DatePickerField label="Check-Out Date" value={checkOut} onChange={setCheckOut} minMonthValue={checkIn || today} isDateDisabled={(date) => isCheckOutDateDisabled(date, checkIn)} helperText="Only valid checkout dates after your selected arrival stay clickable." disabled={!checkIn} />
-                    <div><label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">Expected Arrival Time</label><input type="time" value={checkInTime} onChange={(e) => setCheckInTime(e.target.value)} className={inputCls} /></div>
-                    <div><label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">Expected Check-Out Time</label><input type="time" value={checkOutTime} onChange={(e) => setCheckOutTime(e.target.value)} className={inputCls} /></div>
+      <SuccessModal
+        open={showSuccess}
+        booking={booking}
+        hasReviewed={hasReviewed}
+        onReview={() => { setShowSuccess(false); setShowReview(true); }}
+        onClose={() => { setShowSuccess(false); navigate('/'); }}
+      />
+      <ReviewModal
+        open={showReview}
+        booking={booking}
+        user={sessionUser}
+        onClose={() => { setShowReview(false); navigate('/'); }}
+      />
+      <QrModal
+        open={!!qrData}
+        data={qrData}
+        onPaid={() => { setQrData(null); setShowSuccess(true); }}
+        onClose={() => setQrData(null)}
+      />
+
+      <div className="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+        <div className="mx-auto max-w-5xl px-4 py-12">
+          <div className="mb-8 text-center">
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Innova HMS</span>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Room Reservation</h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Select dates, manage preferences, and complete your booking.</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              {loadingRoom ? (
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <Loader2 size={20} className="animate-spin text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm text-slate-500">Loading room details...</span>
+                </div>
+              ) : room ? (
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex gap-4 p-5">
+                    <img
+                      src={resolveImg(room.images?.[0])}
+                      alt={room.roomName}
+                      onError={(e) => { e.currentTarget.src = '/images/room1.jpg'; }}
+                      className="h-20 w-24 rounded-lg object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{room.roomType}</span>
+                      <h3 className="truncate text-lg font-bold text-slate-900 dark:text-slate-100">{room.roomName}</h3>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                        <MapPin size={12} className="text-emerald-600 dark:text-emerald-400" />
+                        {room.location_description || 'Innova HMS'}
+                      </p>
+                      {discountPercent > 0 && (
+                        <span className="mt-2 inline-block rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+                          {activePrivilege?.packageName || 'Privilege'} saved {discountPercent}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{peso(room.price || 0)}</p>
+                      <p className="text-xs text-slate-400">/ night</p>
+                    </div>
                   </div>
                 </div>
-                <div className="mb-4 rounded-[1.5rem] border border-white/15 bg-white/8 p-6 backdrop-blur-xl"><div className="mb-5 flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#bf9b30] text-[11px] font-black text-[#0d0c0a]">2</span><h2 className="text-sm font-black uppercase tracking-widest text-white">Guests & Payment</h2></div><div className="grid grid-cols-2 gap-4"><div><label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">Number of Guests</label><div className="flex items-center overflow-hidden rounded-xl border border-white/20 bg-white/10"><button type="button" onClick={() => setGuests((v) => Math.max(1, v - 1))} className="px-4 py-3.5 text-lg font-black text-white/60">-</button><span className="flex-1 text-center text-sm font-black text-white">{guests}</span><button type="button" onClick={() => setGuests((v) => Math.min(10, v + 1))} className="px-4 py-3.5 text-lg font-black text-white/60">+</button></div></div><div><label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-[#bf9b30]">Payment Method</label><div className="relative"><select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={selectCls}><option value="cash">Cash on Arrival</option><option value="qrph">QR Ph (QR Code Payment)</option><option value="card">Credit / Debit Card</option><option value="gcash" disabled>GCash (needs account activation)</option><option value="maya" disabled>Maya (needs account activation)</option></select><div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/40"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 8L1 3h10z" /></svg></div></div></div></div></div>
-                <div className="mb-4 rounded-[1.5rem] border border-white/15 bg-white/8 p-6 backdrop-blur-xl"><div className="mb-5 flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#bf9b30] text-[11px] font-black text-[#0d0c0a]">3</span><h2 className="text-sm font-black uppercase tracking-widest text-white">Smart Preferences</h2></div><div className="mb-4 flex flex-wrap gap-2">{prefs.map((item) => <button key={item} type="button" onClick={() => togglePref(item)} className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${preferences.includes(item) ? 'border-[#bf9b30] bg-[#bf9b30] text-[#0d0c0a]' : 'border-white/20 text-white/60'}`}>{item}</button>)}</div><textarea rows={3} value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} placeholder="e.g., traveling with seniors, need extra desk space..." className={`${inputCls} resize-none`} /></div>
-                {error && <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-500/15 px-4 py-3"><span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white">!</span><p className="text-[11px] font-bold uppercase tracking-tight text-red-300">{error}</p></div>}
-                <button type="submit" disabled={submitting || !room || availabilityLoading} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#bf9b30] py-4 text-[11px] font-black uppercase tracking-[0.25em] text-[#0d0c0a] shadow-[0_8px_32px_rgba(191,155,48,0.4)] disabled:opacity-50">{submitting ? 'Processing...' : sessionUser?.id ? 'Confirm Reservation' : 'Sign In to Reserve'} {!submitting && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}</button>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  No room selected.{' '}
+                  <button type="button" onClick={() => navigate('/recommendations')} className="text-emerald-600 hover:underline dark:text-emerald-400">
+                    Browse rooms
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={submit} className="space-y-6">
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">1</span>
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Dates & Times</h2>
+                  </div>
+
+                  <div className="mb-5 rounded-lg bg-emerald-50/60 p-3.5 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <p className="font-semibold">{availabilityLoading ? 'Checking room availability...' : 'Calendar Availability'}</p>
+                    <p className="mt-0.5 leading-relaxed text-emerald-700/80 dark:text-emerald-400/80">
+                      Unavailable dates are automatically disabled.{nextOpenDate ? ` Next open check-in is ${dateButtonLabel(nextOpenDate)}.` : ''}
+                    </p>
+                    {shownBlockedRanges.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {shownBlockedRanges.map((range) => (
+                          <span key={`${range.bookingNumber}-${range.checkIn}`} className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            {dateButtonLabel(range.checkIn)} to {dateButtonLabel(addDays(range.checkOut, -1) || range.checkOut)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <DatePickerField label="Check-In Date" value={checkIn} onChange={setCheckIn} minMonthValue={today} isDateDisabled={isCheckInDateDisabled} helperText="Unavailable dates are disabled." />
+                    <DatePickerField label="Check-Out Date" value={checkOut} onChange={setCheckOut} minMonthValue={checkIn || today} isDateDisabled={(date) => isCheckOutDateDisabled(date, checkIn)} helperText="Valid stay durations only." disabled={!checkIn} />
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Check-In Time</label>
+                      <input type="time" value={checkInTime} onChange={(e) => setCheckInTime(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Check-Out Time</label>
+                      <input type="time" value={checkOutTime} onChange={(e) => setCheckOutTime(e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">2</span>
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Guests & Payment</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Number of Guests</label>
+                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-800">
+                        <button type="button" onClick={() => setGuests((v) => Math.max(1, v - 1))} className="px-3.5 py-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">-</button>
+                        <span className="flex-1 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">{guests}</span>
+                        <button type="button" onClick={() => setGuests((v) => Math.min(10, v + 1))} className="px-3.5 py-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">+</button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Payment Method</label>
+                      <div className="relative">
+                        <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={selectCls}>
+                          <option value="cash">Cash on Arrival</option>
+                          <option value="qrph">QR Ph (QR Code Payment)</option>
+                          <option value="card">Credit / Debit Card</option>
+                          <option value="gcash" disabled>GCash (Maintenance)</option>
+                          <option value="maya" disabled>Maya (Maintenance)</option>
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 8L1 3h10z" /></svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">3</span>
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Preferences</h2>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {prefs.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => togglePref(item)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                          preferences.includes(item)
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={specialRequests}
+                    onChange={(e) => setSpecialRequests(e.target.value)}
+                    placeholder="Additional requests (e.g. accessibility needs, quiet room)..."
+                    className={`${inputCls} resize-none`}
+                  />
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting || !room || availabilityLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {submitting ? 'Processing...' : sessionUser?.id ? 'Confirm Reservation' : 'Sign In to Reserve'}
+                  {!submitting && <ArrowRight size={16} />}
+                </button>
               </form>
             </div>
-            <div className="space-y-4"><div className="sticky top-24 rounded-[1.5rem] border border-[#bf9b30]/30 bg-white/8 p-6 backdrop-blur-xl"><h3 className="mb-5 text-[10px] font-black uppercase tracking-[0.25em] text-[#bf9b30]">Booking Summary</h3>{sessionUser?.id && <div className="mb-5 rounded-2xl border border-[#bf9b30]/25 bg-[#bf9b30]/10 px-4 py-3"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#f2d485]">{membershipLoading ? 'Checking customer privileges...' : (activePrivilege?.packageName ? `${activePrivilege.packageName} privilege active` : 'Standard customer access')}</p><p className="mt-2 text-[11px] leading-relaxed text-white/70">{discountPercent > 0 ? `${discountPercent}% booking discount will be applied automatically before VAT and tax are added.` : 'Upgrade your customer privilege plan to unlock paid booking discounts and bonus points.'}</p></div>}<div className="mb-5 space-y-3">{[{ label: 'Room', value: room?.roomName || '--' }, { label: 'Check-in', value: checkIn ? `${checkIn} at ${checkInTime}` : '--' }, { label: 'Check-out', value: checkOut ? `${checkOut} at ${checkOutTime}` : '--' }, { label: 'Nights', value: nights > 0 ? `${nights} night${nights > 1 ? 's' : ''}` : '--' }, { label: 'Guests', value: guests }, { label: 'Payment', value: paymentMethod }].map((item) => <div key={item.label} className="flex items-start justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{item.label}</span><span className="text-right text-[11px] font-bold text-white">{item.value}</span></div>)}</div><div className="mb-5 rounded-2xl border border-white/10 bg-black/15 px-4 py-4"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">Availability</p><p className="mt-2 text-sm font-black text-white">{availabilityLoading ? 'Refreshing...' : `${blockedRanges.length} blocked booking range${blockedRanges.length === 1 ? '' : 's'} found`}</p><p className="mt-1 text-[11px] leading-relaxed text-white/55">The picker already prevents past dates and booked stay windows from being selected.</p></div><div className="border-t border-white/10 pt-4"><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Base room total</span><span className="text-[11px] font-bold text-white">{baseTotal > 0 ? peso(baseTotal) : '--'}</span></div>{discountPercent > 0 && <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">{activePrivilege?.packageName || 'Privilege'} discount</span><span className="text-[11px] font-bold text-emerald-300">-{peso(discountAmount)} ({discountPercent}%)</span></div>}<div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Subtotal</span><span className="text-[11px] font-bold text-white">{subtotalAfterDiscount > 0 ? peso(subtotalAfterDiscount) : '--'}</span></div><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-white/40">VAT ({VAT_PERCENT}%)</span><span className="text-[11px] font-bold text-white">{subtotalAfterDiscount > 0 ? peso(vatAmount) : '--'}</span></div><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Tax ({TAX_PERCENT}%)</span><span className="text-[11px] font-bold text-white">{subtotalAfterDiscount > 0 ? peso(taxAmount) : '--'}</span></div><div className="flex items-center justify-between"><span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total</span><span className="text-2xl font-black text-[#bf9b30]">{total > 0 ? peso(total) : '--'}</span></div>{room && nights > 0 && <p className="mt-1 text-right text-[9px] text-white/30">{peso(room.price || 0)} x {nights} night{nights > 1 ? 's' : ''}</p>}</div>{!sessionUser?.id && <div className="mt-5 rounded-xl border border-[#bf9b30]/25 bg-[#bf9b30]/8 p-3 text-center"><p className="mb-2 text-[10px] text-white/50">Sign in to complete your booking</p><button type="button" onClick={() => { sessionStorage.setItem('returnTo', window.location.pathname + window.location.search); navigate('/login'); }} className="text-[10px] font-black uppercase tracking-widest text-[#bf9b30] underline underline-offset-2">Sign In</button></div>}</div></div>
+
+            <div className="space-y-6">
+              <div className="sticky top-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-slate-100">Booking Summary</h3>
+
+                {sessionUser?.id && (
+                  <div className="mb-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">
+                      {membershipLoading ? 'Checking status...' : (activePrivilege?.packageName ? `${activePrivilege.packageName} Member` : 'Standard Guest')}
+                    </p>
+                    <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                      {discountPercent > 0 ? `${discountPercent}% discount active.` : 'No active booking discounts.'}
+                    </p>
+                  </div>
+                )}
+
+                <div className="mb-4 space-y-2.5 text-xs">
+                  {[
+                    { label: 'Room', value: room?.roomName || '--' },
+                    { label: 'Check-in', value: checkIn ? `${checkIn} at ${checkInTime}` : '--' },
+                    { label: 'Check-out', value: checkOut ? `${checkOut} at ${checkOutTime}` : '--' },
+                    { label: 'Duration', value: nights > 0 ? `${nights} night${nights > 1 ? 's' : ''}` : '--' },
+                    { label: 'Guests', value: guests },
+                    { label: 'Payment', value: paymentMethod },
+                  ].map((item) => (
+                    <div key={item.label} className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-slate-200 pt-4 text-xs dark:border-slate-800">
+                  <div className="mb-2 flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Base total</span>
+                    <span className="text-slate-800 dark:text-slate-200">{baseTotal > 0 ? peso(baseTotal) : '--'}</span>
+                  </div>
+                  {discountPercent > 0 && (
+                    <div className="mb-2 flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>{activePrivilege?.packageName || 'Privilege'} discount</span>
+                      <span>-{peso(discountAmount)} ({discountPercent}%)</span>
+                    </div>
+                  )}
+                  <div className="mb-2 flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Subtotal</span>
+                    <span className="text-slate-800 dark:text-slate-200">{subtotalAfterDiscount > 0 ? peso(subtotalAfterDiscount) : '--'}</span>
+                  </div>
+                  <div className="mb-2 flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">VAT ({VAT_PERCENT}%)</span>
+                    <span className="text-slate-800 dark:text-slate-200">{subtotalAfterDiscount > 0 ? peso(vatAmount) : '--'}</span>
+                  </div>
+                  <div className="mb-2 flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Tax ({TAX_PERCENT}%)</span>
+                    <span className="text-slate-800 dark:text-slate-200">{subtotalAfterDiscount > 0 ? peso(taxAmount) : '--'}</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-base font-bold dark:border-slate-800">
+                    <span>Total</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">{total > 0 ? peso(total) : '--'}</span>
+                  </div>
+                </div>
+
+                {!sessionUser?.id && (
+                  <div className="mt-4 rounded-lg bg-slate-50 p-3 text-center text-xs dark:bg-slate-800">
+                    <p className="text-slate-500 dark:text-slate-400">Sign in to complete your booking</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sessionStorage.setItem('returnTo', window.location.pathname + window.location.search);
+                        navigate('/login');
+                      }}
+                      className="mt-1 font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-        <style>{`.booking-page-shell{background-attachment:fixed;background-image:url("/images/herobg.jpg");background-position:center;background-repeat:no-repeat;background-size:cover;}`}</style>
       </div>
     </>
   );

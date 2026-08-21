@@ -215,38 +215,40 @@ export default function CustomerBookings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#faf6ee] px-6 py-20">
-        <div className="mx-auto max-w-6xl rounded-[2rem] border border-[#ece2d1] bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#bf9b30] border-t-transparent" />
-          <p className="mt-4 text-sm font-semibold text-slate-500">Loading your bookings...</p>
+      <div className="min-h-screen bg-emerald-950/5 px-6 py-20 font-sans">
+        <div className="mx-auto max-w-6xl rounded-2xl border border-emerald-900/10 bg-white p-12 text-center shadow-sm">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+          <p className="mt-4 text-xs font-medium tracking-wide text-zinc-500">Retrieving your reservations...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#faf6ee] text-[#1a160d]">
-      <div className="mx-auto max-w-6xl px-6 py-14">
+    <div className="min-h-screen bg-emerald-950/5 text-zinc-800 font-sans">
+      <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="text-center">
-          <h1 className="text-4xl font-black tracking-tight md:text-5xl">My Bookings</h1>
-          <p className="mt-4 text-lg text-slate-500">View your stay details and billing information</p>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">My Stays</h1>
+          <p className="mt-2 text-sm text-zinc-500">Manage your active reservations, past visits, and billing details</p>
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-4">
-          <div className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-[#e8decc] bg-[#f1eee7] p-1.5">
+          <div className="inline-flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-emerald-900/10 bg-white/80 p-1.5 backdrop-blur">
             {BOOKING_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-full px-6 py-3 text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
+                className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
                   activeTab === tab.id
-                    ? "bg-[#c8a33a] text-white shadow-[0_8px_20px_rgba(199,159,60,0.18)]"
-                    : "text-slate-500 hover:text-[#9e7b23]"
+                    ? "bg-emerald-700 text-white shadow-sm"
+                    : "text-zinc-600 hover:text-emerald-800"
                 }`}
               >
                 {tab.label}
-                <span className="ml-2 opacity-70">{tabCounts[tab.id] || 0}</span>
+                <span className={`ml-2 text-[11px] ${activeTab === tab.id ? "text-emerald-200" : "text-zinc-400"}`}>
+                  {tabCounts[tab.id] || 0}
+                </span>
               </button>
             ))}
           </div>
@@ -254,15 +256,15 @@ export default function CustomerBookings() {
           <button
             type="button"
             onClick={() => fetchBookings(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-[#e3d7bf] bg-white px-4 py-2 text-sm font-semibold text-[#8a6d27] transition-all hover:bg-[#fbf6ec]"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 transition-colors hover:text-emerald-950"
           >
-            <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+            Refresh data
           </button>
         </div>
 
         {loadError ? (
-          <div className="mt-8 rounded-[1.6rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-xs text-red-700">
             {loadError}
           </div>
         ) : null}
@@ -287,10 +289,10 @@ export default function CustomerBookings() {
               return (
                 <article
                   key={booking.bookingId}
-                  className="overflow-hidden rounded-[1.7rem] border border-[#e7dcc8] bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)]"
+                  className="overflow-hidden rounded-2xl border border-emerald-900/10 bg-white shadow-sm transition-all hover:border-emerald-900/20"
                 >
                   <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-                    <div className="border-b border-[#efe7d9] p-5 lg:border-b-0 lg:border-r">
+                    <div className="border-b border-zinc-100 p-6 lg:border-b-0 lg:border-r">
                       <div className="flex flex-col gap-4 sm:flex-row">
                         <img
                           src={image}
@@ -298,44 +300,44 @@ export default function CustomerBookings() {
                           onError={(e) => {
                             e.currentTarget.src = "/images/room1.jpg";
                           }}
-                          className="h-28 w-full rounded-[1.3rem] object-cover sm:w-36"
+                          className="h-32 w-full rounded-xl object-cover sm:w-36"
                         />
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#bf9b30]">
+                          <p className="text-[11px] font-semibold tracking-wider text-emerald-700 uppercase">
                             {booking.hotelName || "Innova HMS"}
                           </p>
-                          <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#1f1d22]">
+                          <h2 className="mt-1 text-lg font-bold text-zinc-900">
                             {booking.roomType}
                           </h2>
-                          <div className="mt-2 flex items-center gap-2 text-[13px] text-slate-500">
-                            <MapPin size={15} className="text-[#bf9b30]" />
+                          <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
+                            <MapPin size={14} className="text-emerald-600" />
                             <span>{room.location_description || "Hotel destination available on confirmation"}</span>
                           </div>
 
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Check In</p>
-                              <p className="mt-1.5 flex items-center gap-2 text-base font-bold text-[#1f1d22]">
-                                <CalendarDays size={16} className="text-[#bf9b30]" />
+                              <p className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">Check In</p>
+                              <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+                                <CalendarDays size={14} className="text-emerald-600" />
                                 {formatBookingDate(booking.checkInDate)}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Check Out</p>
-                              <p className="mt-1.5 flex items-center gap-2 text-base font-bold text-[#1f1d22]">
-                                <CalendarDays size={16} className="text-[#bf9b30]" />
+                              <p className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">Check Out</p>
+                              <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+                                <CalendarDays size={14} className="text-emerald-600" />
                                 {formatBookingDate(booking.checkOutDate)}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Booking No.</p>
-                              <p className="mt-1.5 text-sm font-bold text-[#1f1d22]">{booking.bookingNumber}</p>
+                              <p className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">Reference</p>
+                              <p className="mt-1 text-xs font-medium text-zinc-700">{booking.bookingNumber}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Duration</p>
-                              <p className="mt-1.5 flex items-center gap-2 text-sm font-bold text-[#1f1d22]">
-                                <Clock3 size={16} className="text-[#bf9b30]" />
+                              <p className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">Duration</p>
+                              <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
+                                <Clock3 size={14} className="text-emerald-600" />
                                 {nights} Night{nights > 1 ? "s" : ""}
                               </p>
                             </div>
@@ -344,51 +346,51 @@ export default function CustomerBookings() {
                       </div>
                     </div>
 
-                    <div className="p-5">
+                    <div className="flex flex-col justify-between p-6 bg-zinc-50/50">
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2 text-slate-500">
-                            <Wallet size={16} />
-                            Payment
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 text-zinc-500">
+                            <Wallet size={14} />
+                            Payment Method
                           </span>
-                          <span className="font-bold text-[#1f1d22] capitalize">{booking.paymentMethod || "Cash"}</span>
+                          <span className="font-semibold text-zinc-800 capitalize">{booking.paymentMethod || "Cash"}</span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2 text-slate-500">
-                            <CreditCard size={16} />
-                            Status
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 text-zinc-500">
+                            <CreditCard size={14} />
+                            Booking Status
                           </span>
                           <span
-                            className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${
                               booking.status === "PENDING"
-                                ? "bg-[#fff2d4] text-[#c28d15]"
+                                ? "bg-amber-100 text-amber-800"
                                 : booking.status === "CANCELLED"
-                                  ? "bg-red-50 text-red-500"
-                                  : "bg-emerald-50 text-emerald-700"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-emerald-100 text-emerald-800"
                             }`}
                           >
                             {booking.status}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-500">Price/night</span>
-                          <span className="font-bold text-[#1f1d22]">{formatCurrency(booking.totalPrice / nights)}</span>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-500">Rate per night</span>
+                          <span className="font-medium text-zinc-700">{formatCurrency(booking.totalPrice / nights)}</span>
                         </div>
-                        <div className="flex items-center justify-between text-base">
-                          <span className="text-slate-500">Total Price</span>
-                          <span className="font-black text-[#c39b2f]">{formatCurrency(booking.totalPrice)}</span>
+                        <div className="pt-2 border-t border-zinc-200/60 flex items-center justify-between text-sm">
+                          <span className="font-medium text-zinc-600">Total Charged</span>
+                          <span className="font-bold text-emerald-900">{formatCurrency(booking.totalPrice)}</span>
                         </div>
                       </div>
 
-                      <div className="mt-6 space-y-2.5">
+                      <div className="mt-6 space-y-2">
                         {isPendingOnlinePayment ? (
                           <button
                             type="button"
                             onClick={() => handlePayNow(booking)}
                             disabled={payingBookingId === booking.bookingId}
-                            className="flex w-full items-center justify-center gap-2 rounded-[1.1rem] bg-[#c8a33a] px-4 py-3 text-sm font-black text-white transition-all hover:bg-[#b78f22] disabled:opacity-60"
+                            className="w-full rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-800 disabled:opacity-50"
                           >
-                            {payingBookingId === booking.bookingId ? "Processing..." : "Pay Now"}
+                            {payingBookingId === booking.bookingId ? "Processing..." : "Complete Payment"}
                           </button>
                         ) : null}
 
@@ -396,17 +398,17 @@ export default function CustomerBookings() {
                           <button
                             type="button"
                             onClick={() => handleCancel(booking)}
-                            className="flex w-full items-center justify-center gap-2 rounded-[1.1rem] border border-red-200 px-4 py-3 text-sm font-black text-red-500 transition-all hover:bg-red-50"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 py-2 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50"
                           >
-                            <XCircle size={16} />
-                            Cancel Booking
+                            <XCircle size={14} />
+                            Cancel Reservation
                           </button>
                         ) : null}
 
                         {activeTab === "past" ? (
                           hasReview(booking, reviews) ? (
-                            <div className="w-full rounded-[1.1rem] border border-green-200 bg-green-50 px-4 py-3 text-sm font-black text-green-700 text-center">
-                              ✓ Review Submitted
+                            <div className="w-full rounded-xl bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-800 text-center border border-emerald-100">
+                              ✓ Feedback Submitted
                             </div>
                           ) : (
                             <button
@@ -416,9 +418,9 @@ export default function CustomerBookings() {
                                   booking.roomType || ""
                                 )}&hotelName=${encodeURIComponent(booking.hotelName || "")}&roomId=${booking.roomId}&hotelId=${booking.hotelId || ""}`
                               )}
-                              className="w-full rounded-[1.1rem] border border-[#cdb88a] bg-[#f7f2de] px-4 py-3 text-sm font-black text-[#8a6d27] transition-all hover:bg-[#f2e8cf]"
+                              className="w-full rounded-xl border border-emerald-900/20 bg-white px-4 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-50"
                             >
-                              Leave a Review
+                              Write a Review
                             </button>
                           )
                         ) : null}
@@ -426,14 +428,14 @@ export default function CustomerBookings() {
                         <button
                           type="button"
                           onClick={() => navigate(`/booking?roomId=${booking.roomId}`)}
-                          className="w-full rounded-[1.1rem] border border-[#eadfc7] px-4 py-3 text-sm font-black text-[#8a6d27] transition-all hover:bg-[#fbf5e9]"
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
                         >
-                          Book Similar Stay
+                          Book Again
                         </button>
                       </div>
 
                       {bookingMessage[booking.bookingId] ? (
-                        <p className="mt-4 text-xs font-semibold text-slate-500">{bookingMessage[booking.bookingId]}</p>
+                        <p className="mt-3 text-[11px] font-medium text-zinc-500">{bookingMessage[booking.bookingId]}</p>
                       ) : null}
                     </div>
                   </div>
@@ -441,43 +443,43 @@ export default function CustomerBookings() {
               );
             })
           ) : (
-            <div className="rounded-[2rem] border border-dashed border-[#d9cdb8] bg-white px-6 py-16 text-center">
-              <h3 className="text-2xl font-black text-[#1f1d22]">No bookings found</h3>
-              <p className="mt-3 text-slate-500">This tab does not have any reservations yet.</p>
+            <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-12 text-center">
+              <h3 className="text-base font-semibold text-zinc-800">No reservations found</h3>
+              <p className="mt-1 text-xs text-zinc-500">There are currently no stays in this category.</p>
               <button
                 type="button"
                 onClick={() => navigate("/vision-suites")}
-                className="mt-6 rounded-full bg-[#c8a33a] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#b78f22]"
+                className="mt-5 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-800"
               >
-                Find a Room
+                Browse Available Rooms
               </button>
             </div>
           )}
         </div>
 
         {visibleBookings.length ? (
-          <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-[1.5rem] border border-[#eadfc8] bg-white px-5 py-4 shadow-sm md:flex-row">
-            <p className="text-sm font-medium text-slate-500">
+          <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-xl border border-zinc-200/80 bg-white px-4 py-3 shadow-sm md:flex-row">
+            <p className="text-xs text-zinc-500">
               Page {currentPage} of {totalPages}
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf]"
+                className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-all disabled:opacity-40 hover:bg-zinc-50"
               >
-                Prev
+                Previous
               </button>
               {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
                 <button
                   key={page}
                   type="button"
                   onClick={() => setCurrentPage(page)}
-                  className={`h-10 min-w-10 rounded-full px-3 text-sm font-bold transition-all ${
+                  className={`h-8 w-8 rounded-lg text-xs font-semibold transition-all ${
                     currentPage === page
-                      ? "bg-[#bf9b30] text-white shadow-md"
-                      : "border border-[#e0d3b6] text-[#7b683e] hover:bg-[#faf4e8]"
+                      ? "bg-emerald-800 text-white shadow-sm"
+                      : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
                   }`}
                 >
                   {page}
@@ -487,7 +489,7 @@ export default function CustomerBookings() {
                 type="button"
                 onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf]"
+                className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-all disabled:opacity-40 hover:bg-zinc-50"
               >
                 Next
               </button>

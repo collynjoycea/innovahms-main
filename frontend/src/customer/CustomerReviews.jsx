@@ -29,16 +29,25 @@ export default function CustomerReviews() {
   }, [location.search]);
 
   return (
-    <div className="min-h-screen bg-[#faf6ee] text-[#1a160d] dark:bg-[#0d0c0a] dark:text-[#e8e2d5] transition-colors duration-300">
-      <div className="mx-auto max-w-6xl px-6 py-14">
+    <div className="min-h-screen bg-emerald-950/5 text-zinc-800 transition-colors duration-300 font-sans">
+      <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="text-center mb-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Review your stay</p>
-          <h1 className="text-4xl font-black tracking-tight md:text-5xl">Share your experience</h1>
-          <p className="mt-4 text-lg text-slate-500 dark:text-[#cfc2aa] max-w-2xl mx-auto">
-            Leave feedback about your completed booking and help future guests choose the perfect room.
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
+            Guest Feedback
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
+            Share Your Experience
+          </h1>
+          <p className="mt-2 text-xs text-zinc-500 max-w-xl mx-auto">
+            Leave feedback regarding your completed stay to help future guests make informed room choices.
           </p>
         </div>
-        <GuestReviewsSection sessionUser={sessionUser} bookingContext={bookingContext} roomId={roomId} hotelId={hotelId} />
+        <GuestReviewsSection 
+          sessionUser={sessionUser} 
+          bookingContext={bookingContext} 
+          roomId={roomId} 
+          hotelId={hotelId} 
+        />
       </div>
     </div>
   );

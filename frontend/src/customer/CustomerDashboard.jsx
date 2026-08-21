@@ -108,10 +108,10 @@ export default function CustomerDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#faf6ee] flex items-center justify-center">
-        <div className="rounded-[2rem] border border-[#eadfc8] bg-white px-10 py-12 text-center shadow-sm">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#bf9b30] border-t-transparent" />
-          <p className="mt-4 text-sm font-semibold text-slate-500">Loading dashboard...</p>
+      <div className="min-h-screen bg-emerald-950/5 flex items-center justify-center font-sans">
+        <div className="rounded-2xl border border-emerald-900/10 bg-white px-10 py-12 text-center shadow-sm">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+          <p className="mt-4 text-xs font-medium text-zinc-500">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -119,13 +119,13 @@ export default function CustomerDashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#faf6ee] flex flex-col items-center justify-center p-6 text-center">
-        <ShieldCheck size={56} className="text-[#bf9b30] opacity-50" />
-        <h2 className="mt-6 text-2xl font-black text-[#1a160d]">Access Denied</h2>
-        <p className="mt-3 text-sm text-slate-500">{loadError || "Invalid customer session."}</p>
+      <div className="min-h-screen bg-emerald-950/5 flex flex-col items-center justify-center p-6 text-center font-sans">
+        <ShieldCheck size={48} className="text-emerald-700/60" />
+        <h2 className="mt-5 text-2xl font-bold text-zinc-900">Access Denied</h2>
+        <p className="mt-2 text-xs text-zinc-500">{loadError || "Invalid customer session."}</p>
         <button
           onClick={handleSessionReset}
-          className="mt-6 rounded-full bg-[#bf9b30] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#aa882a]"
+          className="mt-6 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-800"
         >
           Return to Login
         </button>
@@ -134,76 +134,76 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf6ee] text-[#1a160d]">
-      <div className="mx-auto max-w-6xl px-6 py-14">
-        <div className="flex flex-col gap-5 border-b border-[#ece2d1] pb-8 md:flex-row md:items-end md:justify-between">
+    <div className="min-h-screen bg-emerald-950/5 text-zinc-800 font-sans">
+      <div className="mx-auto max-w-6xl px-6 py-12">
+        <div className="flex flex-col gap-4 border-b border-zinc-200/80 pb-8 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[#bf9b30]">
-              <Sparkles size={15} />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Customer Dashboard</span>
+            <div className="flex items-center gap-1.5 text-emerald-700">
+              <Sparkles size={14} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Customer Portal</span>
             </div>
-            <h1 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
-              Welcome back, <span className="text-[#bf9b30]">{user.firstName || "Guest"}</span>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
+              Welcome back, <span className="text-emerald-800">{user.firstName || "Guest"}</span>
             </h1>
-            <p className="mt-3 text-slate-500">A cleaner overview of your bookings, rewards, and next stay.</p>
+            <p className="mt-2 text-xs text-zinc-500">Overview of your stay status, points, and account actions</p>
           </div>
 
           <button
             type="button"
             onClick={() => fetchDashboard(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-[#e3d7bf] bg-white px-4 py-2 text-sm font-semibold text-[#8a6d27] transition-all hover:bg-[#fbf6ec]"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 transition-colors hover:text-emerald-950"
           >
-            <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+            Refresh data
           </button>
         </div>
 
         {loadError ? (
-          <div className="mt-8 rounded-[1.5rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 text-xs text-rose-700">
             {loadError}
           </div>
         ) : null}
 
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-6 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Upcoming stays</p>
-            <p className="mt-3 text-4xl font-black text-[#1f1d22]">{bookingSummary.upcomingCount}</p>
-            <p className="mt-2 text-sm text-slate-500">Reservations scheduled for future check-in.</p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-emerald-900/10 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Upcoming Stays</p>
+            <p className="mt-2 text-3xl font-bold text-zinc-900">{bookingSummary.upcomingCount}</p>
+            <p className="mt-1 text-xs text-zinc-500">Scheduled for future dates</p>
           </div>
-          <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-6 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Active stays</p>
-            <p className="mt-3 text-4xl font-black text-[#1f1d22]">{bookingSummary.activeCount}</p>
-            <p className="mt-2 text-sm text-slate-500">Current in-house reservations that are still active.</p>
+          <div className="rounded-2xl border border-emerald-900/10 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Active Stays</p>
+            <p className="mt-2 text-3xl font-bold text-zinc-900">{bookingSummary.activeCount}</p>
+            <p className="mt-1 text-xs text-zinc-500">Currently in-house</p>
           </div>
-          <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-6 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Total spend</p>
-            <p className="mt-3 text-4xl font-black text-[#bf9b30]">{formatCurrency(bookingSummary.totalSpend)}</p>
-            <p className="mt-2 text-sm text-slate-500">Lifetime reservation value based on your bookings.</p>
+          <div className="rounded-2xl border border-emerald-900/10 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Total Spend</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-800">{formatCurrency(bookingSummary.totalSpend)}</p>
+            <p className="mt-1 text-xs text-zinc-500">Lifetime reservation value</p>
           </div>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-7 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#bf9b30]">Next Stay</p>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-2xl border border-emerald-900/10 bg-white p-6 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Next Stay</p>
             {bookingSummary.nextStay ? (
               <>
-                <h2 className="mt-4 text-3xl font-black tracking-tight text-[#1f1d22]">
+                <h2 className="mt-3 text-2xl font-bold tracking-tight text-zinc-900">
                   {bookingSummary.nextStay.roomType}
                 </h2>
-                <p className="mt-2 text-slate-500">{bookingSummary.nextStay.hotelName || "Innova HMS"}</p>
+                <p className="mt-1 text-xs text-zinc-500">{bookingSummary.nextStay.hotelName || "Innova HMS"}</p>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[1.5rem] bg-[#faf6ee] px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Check In</p>
-                    <p className="mt-2 flex items-center gap-2 text-lg font-bold text-[#1f1d22]">
-                      <CalendarDays size={16} className="text-[#bf9b30]" />
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl bg-emerald-950/5 p-4">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Check In</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+                      <CalendarDays size={14} className="text-emerald-700" />
                       {formatBookingDate(bookingSummary.nextStay.checkInDate)}
                     </p>
                   </div>
-                  <div className="rounded-[1.5rem] bg-[#faf6ee] px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Total Price</p>
-                    <p className="mt-2 flex items-center gap-2 text-lg font-bold text-[#1f1d22]">
-                      <Wallet size={16} className="text-[#bf9b30]" />
+                  <div className="rounded-xl bg-emerald-950/5 p-4">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Total Charged</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+                      <Wallet size={14} className="text-emerald-700" />
                       {formatCurrency(bookingSummary.nextStay.totalPrice)}
                     </p>
                   </div>
@@ -212,78 +212,78 @@ export default function CustomerDashboard() {
                 <button
                   type="button"
                   onClick={() => navigate("/customer/bookings")}
-                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#c8a33a] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#b78f22]"
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-800"
                 >
-                  Open My Bookings
-                  <ArrowRight size={15} />
+                  Manage Stays
+                  <ArrowRight size={14} />
                 </button>
               </>
             ) : (
-              <div className="mt-4 rounded-[1.6rem] border border-dashed border-[#d8ccb7] bg-[#faf6ee] px-6 py-10 text-center">
-                <h3 className="text-2xl font-black text-[#1f1d22]">No upcoming stay yet</h3>
-                <p className="mt-3 text-slate-500">Browse available rooms and create your next reservation.</p>
+              <div className="mt-4 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-8 text-center">
+                <h3 className="text-sm font-semibold text-zinc-800">No upcoming stay scheduled</h3>
+                <p className="mt-1 text-xs text-zinc-500">Explore available suites and reserve your next visit.</p>
                 <button
                   type="button"
                   onClick={() => navigate("/vision-suites")}
-                  className="mt-6 rounded-full bg-[#c8a33a] px-6 py-3 text-sm font-black text-white transition-all hover:bg-[#b78f22]"
+                  className="mt-5 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-800"
                 >
-                  Find a Room
+                  Explore Suites
                 </button>
               </div>
             )}
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-7 shadow-sm">
+            <div className="rounded-2xl border border-emerald-900/10 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f7edd1] text-[#bf9b30]">
-                  <Crown size={20} />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-100">
+                  <Crown size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Membership</p>
-                  <h3 className="mt-1 text-2xl font-black text-[#1f1d22]">{user.membershipLevel || "STANDARD"}</h3>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Membership Tier</p>
+                  <h3 className="mt-0.5 text-xl font-bold text-zinc-900">{user.membershipLevel || "STANDARD"}</h3>
                 </div>
               </div>
-              <p className="mt-5 text-sm text-slate-500">
-                Loyalty points available: <span className="font-black text-[#bf9b30]">{Number(user.loyaltyPoints || 0).toLocaleString()}</span>
+              <p className="mt-4 text-xs text-zinc-500">
+                Reward points balance: <span className="font-bold text-emerald-800">{Number(user.loyaltyPoints || 0).toLocaleString()}</span>
               </p>
             </div>
 
-            <div className="rounded-[2rem] border border-[#eadfc8] bg-white p-7 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Quick Actions</p>
-              <div className="mt-5 grid gap-3">
+            <div className="rounded-2xl border border-emerald-900/10 bg-white p-6 shadow-sm">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Quick Actions</p>
+              <div className="mt-4 grid gap-2">
                 <button
                   type="button"
                   onClick={() => navigate("/customer/bookings")}
-                  className="flex items-center justify-between rounded-[1.4rem] bg-[#faf6ee] px-5 py-4 text-left transition-all hover:bg-[#f6efdf]"
+                  className="flex items-center justify-between rounded-xl border border-zinc-100 bg-zinc-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 hover:border-emerald-100"
                 >
-                  <span className="flex items-center gap-3 text-sm font-bold text-[#1f1d22]">
-                    <BedDouble size={17} className="text-[#bf9b30]" />
-                    Manage bookings
+                  <span className="flex items-center gap-2.5 text-xs font-medium text-zinc-800">
+                    <BedDouble size={15} className="text-emerald-700" />
+                    Manage Stays
                   </span>
-                  <ArrowRight size={15} className="text-[#8a6d27]" />
+                  <ArrowRight size={13} className="text-zinc-400" />
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/vision-suites")}
-                  className="flex items-center justify-between rounded-[1.4rem] bg-[#faf6ee] px-5 py-4 text-left transition-all hover:bg-[#f6efdf]"
+                  className="flex items-center justify-between rounded-xl border border-zinc-100 bg-zinc-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 hover:border-emerald-100"
                 >
-                  <span className="flex items-center gap-3 text-sm font-bold text-[#1f1d22]">
-                    <BedDouble size={17} className="text-[#bf9b30]" />
-                    Browse rooms
+                  <span className="flex items-center gap-2.5 text-xs font-medium text-zinc-800">
+                    <BedDouble size={15} className="text-emerald-700" />
+                    Browse Available Rooms
                   </span>
-                  <ArrowRight size={15} className="text-[#8a6d27]" />
+                  <ArrowRight size={13} className="text-zinc-400" />
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/rewards")}
-                  className="flex items-center justify-between rounded-[1.4rem] bg-[#faf6ee] px-5 py-4 text-left transition-all hover:bg-[#f6efdf]"
+                  className="flex items-center justify-between rounded-xl border border-zinc-100 bg-zinc-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 hover:border-emerald-100"
                 >
-                  <span className="flex items-center gap-3 text-sm font-bold text-[#1f1d22]">
-                    <Crown size={17} className="text-[#bf9b30]" />
-                    View rewards
+                  <span className="flex items-center gap-2.5 text-xs font-medium text-zinc-800">
+                    <Crown size={15} className="text-emerald-700" />
+                    Rewards Program
                   </span>
-                  <ArrowRight size={15} className="text-[#8a6d27]" />
+                  <ArrowRight size={13} className="text-zinc-400" />
                 </button>
               </div>
             </div>

@@ -62,7 +62,6 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
   const [tourActive, setTourActive] = useState(false);
   const [viewerError, setViewerError] = useState("");
 
-  // Resolve panorama URL once — handles relative paths, full URLs, and null
   const panoramaUrl = tour?.panoramaUrl ? resolveImg(tour.panoramaUrl, null) : null;
   const previewUrl = getRoomPreviewImage(tour, null);
   const hasTour = Boolean(panoramaUrl);
@@ -120,13 +119,13 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
       <div className="w-full max-w-6xl">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30]">360° Virtual Tour</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#10b981]">360° Virtual Tour</p>
             <h3 className="text-2xl font-black text-white">{roomName || "Vision Suite"}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all hover:bg-[#bf9b30] hover:text-[#0d0c0a]"
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all hover:bg-[#10b981] hover:text-[#0d0c0a]"
             aria-label="Close tour"
           >
             <X size={24} />
@@ -138,7 +137,7 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
 
           {loading ? (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900">
-              <div className="h-8 w-8 rounded-full border-2 border-[#bf9b30] border-t-transparent animate-spin" />
+              <div className="h-8 w-8 rounded-full border-2 border-[#10b981] border-t-transparent animate-spin" />
             </div>
           ) : null}
 
@@ -154,20 +153,20 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
             <div className="absolute inset-0 z-10">
               <img src={previewUrl} alt={roomName || "Room preview"} className="h-full w-full object-cover" />
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/50 px-6 text-center">
-                <ScanEye size={36} className="text-[#bf9b30]" />
-              <p className="text-xs font-bold uppercase tracking-widest text-white/70">360° panorama ready</p>
-              <p className="max-w-md text-sm text-white/45">
-                Drag to look around once the viewer starts.
-              </p>
-              {hasTour ? (
-                <button
-                type="button"
-                onClick={() => setTourActive(true)}
-                className="rounded-full bg-[#bf9b30] px-8 py-4 text-sm font-black uppercase tracking-widest text-[#0d0c0a] shadow-2xl transition-colors hover:bg-[#d8b454]"
-              >
-                Start 360°
-                </button>
-              ) : null}
+                <ScanEye size={36} className="text-[#10b981]" />
+                <p className="text-xs font-bold uppercase tracking-widest text-white/70">360° panorama ready</p>
+                <p className="max-w-md text-sm text-white/45">
+                  Drag to look around once the viewer starts.
+                </p>
+                {hasTour ? (
+                  <button
+                    type="button"
+                    onClick={() => setTourActive(true)}
+                    className="rounded-full bg-[#10b981] px-8 py-4 text-sm font-black uppercase tracking-widest text-[#0d0c0a] shadow-2xl transition-colors hover:bg-[#059669]"
+                  >
+                    Start 360°
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -192,7 +191,7 @@ function TourModal({ open, onClose, onReserve, roomName, tour, loading, notice }
           <button
             type="button"
             onClick={onReserve}
-            className="rounded-xl bg-[#bf9b30] px-5 py-3 text-xs font-black uppercase tracking-widest text-[#0d0c0a] transition-colors hover:bg-[#d8b454]"
+            className="rounded-xl bg-[#10b981] px-5 py-3 text-xs font-black uppercase tracking-widest text-[#0d0c0a] transition-colors hover:bg-[#059669]"
           >
             Reserve This Room
           </button>
@@ -607,7 +606,7 @@ export default function VisionSuites() {
       <button
         type="button"
         onClick={() => setChatOpen((v) => !v)}
-        className="fixed right-6 bottom-6 z-[50] h-14 w-14 rounded-full bg-[#bf9b30] text-white shadow-2xl shadow-[#bf9b30]/30 flex items-center justify-center hover:brightness-95"
+        className="fixed right-6 bottom-6 z-[50] h-14 w-14 rounded-full bg-[#10b981] text-white shadow-2xl shadow-[#10b981]/30 flex items-center justify-center hover:brightness-95"
         title="AI Guest Assistant"
       >
         <MessageCircle size={22} />
@@ -616,21 +615,21 @@ export default function VisionSuites() {
       {chatOpen ? (
         <div className="fixed right-6 bottom-24 z-[50] w-[320px] rounded-2xl bg-white dark:bg-[#12110d] border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-[#d8c8a6]">AI Guest Assistant</p>
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">AI Guest Assistant</p>
             <button type="button" onClick={() => setChatOpen(false)} className="text-slate-500 hover:text-slate-900">
               <X size={18} />
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto p-4 space-y-3 bg-[#fcfaf4] dark:bg-[#14120d]">
+          <div className="max-h-72 overflow-y-auto p-4 space-y-3 bg-[#f4fbf7] dark:bg-[#0d1410]">
             {chatMessages.slice(-6).map((message) => (
               <div key={message.id} className={`flex ${message.from === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${message.from === "user" ? "bg-[#1a160d] text-white" : "bg-white dark:bg-[#1a1812] border border-slate-200 dark:border-white/10 text-slate-600 dark:text-[#d2c7b2]"}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${message.from === "user" ? "bg-[#1a160d] text-white" : "bg-white dark:bg-[#131d17] border border-slate-200 dark:border-white/10 text-slate-600 dark:text-[#c2dfd1]"}`}>
                   {message.text}
                 </div>
               </div>
             ))}
             {chatLoading ? (
-              <div className="text-xs font-semibold text-slate-400 dark:text-[#9b8f79]">Assistant is typing...</div>
+              <div className="text-xs font-semibold text-emerald-600/70 dark:text-emerald-400/70">Assistant is typing...</div>
             ) : null}
           </div>
           <div className="p-3 border-t border-slate-100 dark:border-white/10 flex items-center gap-2 bg-white dark:bg-[#12110d]">
@@ -645,13 +644,13 @@ export default function VisionSuites() {
                 }
               }}
               placeholder="Ask about tours, rates, and landmarks..."
-              className="flex-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#14120d] px-3 py-2 text-sm text-slate-700 dark:text-[#e6dece] focus:outline-none"
+              className="flex-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#14120d] px-3 py-2 text-sm text-slate-700 dark:text-[#e6dece] focus:outline-none focus:border-[#10b981]"
             />
             <button
               type="button"
               onClick={handleChatSubmit}
               disabled={!chatInput.trim() || chatLoading}
-              className="h-10 w-10 rounded-xl bg-[#1a160d] text-white disabled:opacity-50 flex items-center justify-center hover:bg-[#bf9b30] transition-all"
+              className="h-10 w-10 rounded-xl bg-[#1a160d] text-white disabled:opacity-50 flex items-center justify-center hover:bg-[#10b981] transition-all"
             >
               <Send size={14} />
             </button>
@@ -660,77 +659,76 @@ export default function VisionSuites() {
       ) : null}
 
       {/* SECTION 1 */}
-<section className="relative min-h-[54vh] flex items-center justify-center overflow-hidden">
-  <div className="absolute inset-0 z-0">
-    <img 
-      src="/images/vision-lobby.jpg" 
-      alt="Refined Living" 
-      className="w-full h-full object-cover" 
-    />
-    <div className="absolute inset-0 bg-black/45" /> 
-    <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/80" />
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.6)_100%)]" />
-  </div>
-
-  <div className="relative z-10 text-center px-4 max-w-5xl w-full py-12">
-    <motion.h1
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-     
-      className="text-4xl md:text-6xl font-serif tracking-tight leading-tight mb-8 text-white drop-shadow-lg"
-    >
-      Experience the Future of <br />
-      <span className="italic text-[#bf9b30] font-light">Refined Living</span>
-    </motion.h1>
-
-    <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
-      className="bg-[#0f0d09]/78 backdrop-blur-xl p-4 rounded-3xl shadow-[0_28px_70px_rgba(0,0,0,0.62)] border border-[#bf9b30]/25 max-w-4xl mx-auto"
-    >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-        <div className="text-left">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#bf9b30] mb-1">Vision Suites Location</p>
-          <div className="flex items-center gap-2">
-            <MapPin size={16} className="text-[#c6b38a] shrink-0" />
-            <p className="text-sm font-bold text-[#efe7d5] truncate">{locationLabel}</p>
-          </div>
-          <p className="mt-2 text-xs text-[#bcae92]">
-            {searchContext.hotelId
-              ? `Viewing rooms for: ${rooms[0]?.hotelName || 'Selected Hotel'}`
-              : searchContext.hasFilters
-                ? `Search applied: ${searchContext.view} room(s)${searchContext.guests ? `, ${searchContext.guests} guest(s)` : ""}${searchContext.from ? `, from ${searchContext.from}` : ""}${searchContext.to ? ` to ${searchContext.to}` : ""}.`
-                : "Availability search is now in the Home hero for a faster booking flow."}
-          </p>
+      <section className="relative min-h-[54vh] flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/images/vision-lobby.jpg" 
+            alt="Refined Living" 
+            className="w-full h-full object-cover" 
+          />
+          <div className="absolute inset-0 bg-black/45" /> 
+          <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/80" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.6)_100%)]" />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onClick={() => navigate("/#hero")}
-            className="px-6 py-3 rounded-full bg-[#1a160d] text-white font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#bf9b30] transition-all"
+        <div className="relative z-10 text-center px-4 max-w-5xl w-full py-12">
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl md:text-6xl font-serif tracking-tight leading-tight mb-8 text-white drop-shadow-lg"
           >
-            Check Availability
-          </button>
-          <button
-            type="button"
-            onClick={() => setChatOpen(true)}
-            className="px-6 py-3 rounded-full border border-[#bf9b30]/45 text-[#e8d9bb] bg-[#1a160f] font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#bf9b30] hover:text-[#0d0c0a] transition-all"
-          >
-            AI Guest Assistant
-          </button>
-        </div>
-      </div>
-    </motion.div>
+            Experience the Future of <br />
+            <span className="italic text-[#10b981] font-light">Refined Living</span>
+          </motion.h1>
 
-    {error ? (
-      <div className="mt-6 max-w-3xl mx-auto rounded-2xl border border-red-200 bg-red-50/90 backdrop-blur-sm px-5 py-4 text-sm text-red-700 font-semibold shadow-lg">
-        {error}
-      </div>
-    ) : null}
-  </div>
-</section>
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-[#090f0c]/80 backdrop-blur-xl p-4 rounded-3xl shadow-[0_28px_70px_rgba(0,0,0,0.62)] border border-[#10b981]/25 max-w-4xl mx-auto"
+          >
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+              <div className="text-left">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#10b981] mb-1">Vision Suites Location</p>
+                <div className="flex items-center gap-2">
+                  <MapPin size={16} className="text-emerald-400 shrink-0" />
+                  <p className="text-sm font-bold text-emerald-50 truncate">{locationLabel}</p>
+                </div>
+                <p className="mt-2 text-xs text-[#a7f3d0]/70">
+                  {searchContext.hotelId
+                    ? `Viewing rooms for: ${rooms[0]?.hotelName || 'Selected Hotel'}`
+                    : searchContext.hasFilters
+                      ? `Search applied: ${searchContext.view} room(s)${searchContext.guests ? `, ${searchContext.guests} guest(s)` : ""}${searchContext.from ? `, from ${searchContext.from}` : ""}${searchContext.to ? ` to ${searchContext.to}` : ""}.`
+                      : "Availability search is now in the Home hero for a faster booking flow."}
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate("/#hero")}
+                  className="px-6 py-3 rounded-full bg-[#1a160d] text-white font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#10b981] transition-all"
+                >
+                  Check Availability
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatOpen(true)}
+                  className="px-6 py-3 rounded-full border border-[#10b981]/45 text-emerald-200 bg-[#0c1410] font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#10b981] hover:text-[#0d0c0a] transition-all"
+                >
+                  AI Guest Assistant
+                </button>
+              </div>
+            </div>
+          </motion.div>
+
+          {error ? (
+            <div className="mt-6 max-w-3xl mx-auto rounded-2xl border border-red-200 bg-red-50/90 backdrop-blur-sm px-5 py-4 text-sm text-red-700 font-semibold shadow-lg">
+              {error}
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       {/* SECTION 2 */}
       <section className="py-12 px-6 max-w-7xl mx-auto">
@@ -742,15 +740,14 @@ export default function VisionSuites() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[288px_minmax(0,1fr)] lg:items-start relative">
-         <aside className="self-start">
-          <div className="lg:sticky lg:top-20 max-h-[calc(100vh-6rem)] overflow-y-auto"></div> 
-            <div className="rounded-[2rem] border border-[#e9decb] bg-white/95 p-4 shadow-[0_20px_55px_rgba(15,23,42,0.08)] lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-[#15130f]">
+          <aside className="self-start">
+            <div className="rounded-[2rem] border border-emerald-100 bg-white/95 p-4 shadow-[0_20px_55px_rgba(15,23,42,0.08)] lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto dark:border-white/10 dark:bg-[#15130f]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bf9b30]">Filters</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#10b981]">Filters</p>
                   <h3 className="mt-1.5 text-xl font-black text-slate-900 dark:text-white">Find your fit</h3>
                 </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f6efe1] text-[#bf9b30] dark:bg-white/5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-[#10b981] dark:bg-emerald-950/30">
                   <SlidersHorizontal size={17} />
                 </div>
               </div>
@@ -766,7 +763,7 @@ export default function VisionSuites() {
                     value={hotelSearch}
                     onChange={(e) => setHotelSearch(e.target.value)}
                     placeholder="Hotel or room name"
-                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#10b981]/40 focus:ring-2 focus:ring-[#10b981]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
                   />
                 </label>
 
@@ -778,7 +775,7 @@ export default function VisionSuites() {
                   <select
                     value={activeHotelFilter}
                     onChange={(e) => setActiveHotelFilter(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#10b981]/40 focus:ring-2 focus:ring-[#10b981]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
                   >
                     <option value="all">All Hotels</option>
                     {hotelFilterOptions.map((item) => (
@@ -797,7 +794,7 @@ export default function VisionSuites() {
                   <select
                     value={selectedRoomType}
                     onChange={(e) => setSelectedRoomType(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#10b981]/40 focus:ring-2 focus:ring-[#10b981]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
                   >
                     <option value="all">All Room Types</option>
                     {roomTypeOptions.map((type) => (
@@ -816,7 +813,7 @@ export default function VisionSuites() {
                   <select
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#bf9b30]/40 focus:ring-2 focus:ring-[#bf9b30]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
+                    className="w-full rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:border-[#10b981]/40 focus:ring-2 focus:ring-[#10b981]/10 dark:border-white/10 dark:bg-white/5 dark:text-[#e6dece]"
                   >
                     <option value="recommended">Recommended</option>
                     <option value="price-asc">Price: Low to High</option>
@@ -826,11 +823,11 @@ export default function VisionSuites() {
                 </label>
               </div>
 
-              <div className="mt-4 rounded-[1.5rem] border border-[#eee4d1] bg-[#fcfaf5] p-3.5 dark:border-white/10 dark:bg-white/5">
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#bf9b30]">Search summary</p>
+              <div className="mt-4 rounded-[1.5rem] border border-emerald-100 bg-emerald-50/50 p-3.5 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#10b981]">Search summary</p>
                 <div className="mt-3 space-y-2.5 text-sm text-slate-600 dark:text-[#cfc2aa]">
                   <div className="flex items-start gap-3">
-                    <CalendarDays size={16} className="mt-0.5 text-[#bf9b30]" />
+                    <CalendarDays size={16} className="mt-0.5 text-[#10b981]" />
                     <div>
                       <p className="font-semibold text-slate-900 dark:text-white">
                         {searchContext.from ? friendlyDate(searchContext.from) : "Flexible dates"}
@@ -840,7 +837,7 @@ export default function VisionSuites() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Users size={16} className="mt-0.5 text-[#bf9b30]" />
+                    <Users size={16} className="mt-0.5 text-[#10b981]" />
                     <div>
                       <p className="font-semibold text-slate-900 dark:text-white">
                         {searchContext.guests ? `${searchContext.guests} guest(s)` : "Guest count not specified"}
@@ -856,7 +853,7 @@ export default function VisionSuites() {
               <button
                 type="button"
                 onClick={clearCollectionFilters}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-sm font-black uppercase tracking-[0.22em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 px-4 py-2.5 text-sm font-black uppercase tracking-[0.22em] text-emerald-700 transition-all hover:bg-emerald-100/50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
               >
                 <RotateCcw size={15} />
                 Clear filters
@@ -865,10 +862,10 @@ export default function VisionSuites() {
           </aside>
 
           <div className="min-w-0">
-            <div className="rounded-[2rem] border border-[#e9decb] bg-white/95 p-5 shadow-[0_20px_55px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#15130f]">
+            <div className="rounded-[2rem] border border-emerald-100 bg-white/95 p-5 shadow-[0_20px_55px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#15130f]">
               <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bf9b30]">Available rooms</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#10b981]">Available rooms</p>
                   <h3 className="mt-2 text-3xl font-black text-slate-900 dark:text-white">
                     {filteredRooms.length} stay option{filteredRooms.length === 1 ? "" : "s"} ready to browse
                   </h3>
@@ -880,12 +877,12 @@ export default function VisionSuites() {
                   {activeFilterTags.length ? activeFilterTags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]"
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
                     >
                       {tag}
                     </span>
                   )) : (
-                    <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                       Flexible browsing
                     </span>
                   )}
@@ -901,22 +898,22 @@ export default function VisionSuites() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.06 }}
-                  className="group overflow-hidden rounded-[1.7rem] border border-[#e7dcc8] bg-white shadow-[0_20px_42px_rgba(15,23,42,0.08)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#14120e]"
+                  className="group overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-[0_20px_42px_rgba(15,23,42,0.08)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#14120e]"
                 >
                   <div className="relative h-52 overflow-hidden">
                     <img
                       src={getRoomPreviewImage(room, undefined)}
                       alt={room.name}
-                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                      onError={(e) => { e.currentTarget.src = "/images/deluxe-room.jpg"; }}
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                    <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#9b7619] shadow-lg">
+                    <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700 shadow-lg">
                       {php(room.basePricePhp)} per night
                     </div>
                     <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#f3d37d]">
+                        <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#34d399]">
                           {room.tagline || "Vision Suite"}
                         </p>
                         <h4 className="mt-1.5 text-xl font-black leading-tight text-white">{room.name}</h4>
@@ -929,7 +926,7 @@ export default function VisionSuites() {
 
                   <div className="p-5">
                     <div className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-[#b9ac93]">
-                      <MapPin size={14} className="text-[#bf9b30]" />
+                      <MapPin size={14} className="text-[#10b981]" />
                       <span className="truncate">{room.hotelName || locationLabel}</span>
                     </div>
 
@@ -938,11 +935,11 @@ export default function VisionSuites() {
                     </p>
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                         {room.capacity} guests
                       </span>
                       {room.type ? (
-                        <span className="rounded-full border border-[#ead9b4] bg-[#fcf6e8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#9b7619] dark:border-white/10 dark:bg-white/5 dark:text-[#e6d7b8]">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                           {room.type}
                         </span>
                       ) : null}
@@ -958,13 +955,13 @@ export default function VisionSuites() {
                         <button
                           type="button"
                           onClick={() => openTour(room)}
-                          className="flex-1 rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                          className="flex-1 rounded-2xl border border-emerald-300 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 transition-all hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                         >
                           {room.hasVirtualTour ? "Explore in 360" : "Open Tour"}
                         </button>
                         <Link
                           to={`/hoteldetail/${room.id}`}
-                          className="flex-1 text-center rounded-2xl border border-[#d8c9a4] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#8f732d] transition-all hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                          className="flex-1 text-center rounded-2xl border border-emerald-300 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 transition-all hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                         >
                           View Details
                         </Link>
@@ -972,7 +969,7 @@ export default function VisionSuites() {
                       <button
                         type="button"
                         onClick={() => navigate(`/booking?roomId=${room.id}`)}
-                        className="flex-1 rounded-2xl bg-[#bf9b30] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:bg-[#aa882a]"
+                        className="flex-1 rounded-2xl bg-[#10b981] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:bg-[#059669]"
                       >
                         Reserve now
                       </button>
@@ -983,7 +980,7 @@ export default function VisionSuites() {
             </div>
 
             {!loading && filteredRooms.length > 0 ? (
-              <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[1.5rem] border border-[#e9decb] bg-white/90 px-5 py-4 shadow-sm dark:border-white/10 dark:bg-[#15130f] md:flex-row">
+              <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[1.5rem] border border-emerald-100 bg-white/90 px-5 py-4 shadow-sm dark:border-white/10 dark:bg-[#15130f] md:flex-row">
                 <p className="text-sm font-medium text-slate-500 dark:text-[#b8ab93]">
                   Page {currentPage} of {totalPages}
                 </p>
@@ -992,7 +989,7 @@ export default function VisionSuites() {
                     type="button"
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                    className="rounded-full border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                   >
                     Prev
                   </button>
@@ -1003,8 +1000,8 @@ export default function VisionSuites() {
                       onClick={() => setCurrentPage(page)}
                       className={`h-10 min-w-10 rounded-full px-3 text-sm font-bold transition-all ${
                         currentPage === page
-                          ? "bg-[#bf9b30] text-white shadow-md"
-                          : "border border-[#e0d3b6] text-[#7b683e] hover:bg-[#faf4e8] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                          ? "bg-[#10b981] text-white shadow-md"
+                          : "border border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                       }`}
                     >
                       {page}
@@ -1014,7 +1011,7 @@ export default function VisionSuites() {
                     type="button"
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="rounded-full border border-[#dccba3] px-4 py-2 text-sm font-semibold text-[#8f732d] transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-[#f6efdf] dark:border-white/10 dark:text-[#e8dcc1] dark:hover:bg-white/5"
+                    className="rounded-full border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all disabled:cursor-not-allowed disabled:opacity-45 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                   >
                     Next
                   </button>
@@ -1041,7 +1038,7 @@ export default function VisionSuites() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#bf9b30] mb-2">Explore the Area</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#10b981] mb-2">Explore the Area</p>
               <h2 className="text-4xl font-serif text-slate-900 dark:text-white">Neighborhood Discovery</h2>
               <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-md leading-relaxed">
                 Search any place, or turn on your location to instantly find the nearest hotel to you.
@@ -1063,8 +1060,8 @@ export default function VisionSuites() {
                   onClick={() => handleNearbyHotelFocus(loc)}
                   className={`w-full text-left bg-white dark:bg-[#14130f] border p-4 rounded-2xl shadow-sm transition-all ${
                     String(focusedNearbyHotelId) === String(loc.id)
-                      ? "border-[#bf9b30] ring-2 ring-[#bf9b30]/20 shadow-md"
-                      : "border-slate-100 dark:border-white/5 hover:border-[#bf9b30]/40"
+                      ? "border-[#10b981] ring-2 ring-[#10b981]/20 shadow-md"
+                      : "border-slate-100 dark:border-white/5 hover:border-[#10b981]/40"
                   } ${loc.km == null ? "opacity-70 cursor-not-allowed" : "cursor-pointer hover:-translate-y-0.5"}`}
                 >
                   <div className="flex justify-between items-start gap-2">
@@ -1073,10 +1070,10 @@ export default function VisionSuites() {
                       {loc.address && (
                         <p className="text-[10px] text-slate-400 font-medium mt-0.5 leading-snug line-clamp-2">{loc.address}</p>
                       )}
-                      <p className="text-[9px] text-[#bf9b30] font-black uppercase tracking-widest mt-1">Hotel Owner Address</p>
+                      <p className="text-[9px] text-[#10b981] font-black uppercase tracking-widest mt-1">Hotel Owner Address</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-black text-[#bf9b30]">{loc.km != null ? `${loc.km.toFixed(1)} km` : "No map pin"}</p>
+                      <p className="text-sm font-black text-[#10b981]">{loc.km != null ? `${loc.km.toFixed(1)} km` : "No map pin"}</p>
                       <p className="text-[9px] font-bold text-slate-300 dark:text-slate-600">
                         {loc.walkMin != null ? `${loc.walkMin} min walk` : "Address only"}
                       </p>
@@ -1113,7 +1110,7 @@ export default function VisionSuites() {
           <div className="rounded-[36px] border border-slate-200 bg-white p-10 md:p-14 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#bf9b30] mb-3">Unlock More</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#10b981] mb-3">Unlock More</p>
                 <h3 className="text-4xl font-serif text-slate-900">Join Innova-HMS to Unlock Full Features</h3>
                 <p className="mt-4 text-slate-600 leading-relaxed">
                   Personalized AI recommendations, loyalty points, and exclusive route guides are available for registered users.
@@ -1121,7 +1118,7 @@ export default function VisionSuites() {
                 <div className="mt-8 flex gap-3">
                   <a
                     href="/signup"
-                    className="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-[#bf9b30] text-white font-black uppercase text-[11px] tracking-[0.25em] hover:brightness-95"
+                    className="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-[#10b981] text-white font-black uppercase text-[11px] tracking-[0.25em] hover:brightness-95"
                   >
                     Create Account
                   </a>

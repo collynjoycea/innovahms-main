@@ -52,35 +52,35 @@ function TourModal({ open, onClose, roomName, tour, loading }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] bg-black">
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-6 bg-gradient-to-b from-black/70 to-transparent">
+    <div className="fixed inset-0 z-[999] bg-zinc-950">
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-6 bg-gradient-to-b from-zinc-950/80 to-transparent">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#f5d17a]">Virtual Tour</p>
-          <h3 className="text-2xl font-black text-white">{roomName}</h3>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Virtual Tour</p>
+          <h3 className="text-xl font-bold text-white">{roomName}</h3>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-[#bf9b30] hover:text-[#0d0c0a] flex items-center justify-center transition-all"
+          className="h-10 w-10 rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-all"
           aria-label="Close tour"
         >
-          <X size={24} />
+          <X size={20} />
         </button>
       </div>
 
       <div className="h-full w-full">
         {loading ? (
-          <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
+          <div className="h-full w-full flex items-center justify-center text-zinc-400 text-xs font-medium">
             Loading 360° tour...
           </div>
         ) : isInteractive && panoramaUrl ? (
           <div ref={containerRef} className="h-full w-full" />
         ) : previewUrl ? (
-          <div className="h-full w-full flex items-center justify-center bg-black px-6">
+          <div className="h-full w-full flex items-center justify-center bg-zinc-950 px-6">
             <img src={previewUrl} alt={roomName} className="max-h-[70vh] max-w-full object-contain" />
           </div>
         ) : (
-          <div className="h-full w-full flex items-center justify-center text-white/80 text-sm font-semibold">
+          <div className="h-full w-full flex items-center justify-center text-zinc-400 text-xs font-medium">
             No 360° tour configured for this room yet.
           </div>
         )}
@@ -119,7 +119,7 @@ export default function InnovaSuites() {
 
   // States for Intelligent Room Assignment Engine
   const [engineOpen, setEngineOpen] = useState(false);
-  const [engineStep, setEngineStep] = useState(1); // 1: Input, 2: Result
+  const [engineStep, setEngineStep] = useState(1);
   const [guestCount, setGuestCount] = useState(1);
   const [budget, setBudget] = useState(5000);
   const [recommendedRoom, setRecommendedRoom] = useState(null);
@@ -245,11 +245,8 @@ export default function InnovaSuites() {
     }
   };
 
-  // Logic for the Assignment Engine
   const handleAnalyze = () => {
-    // Simple logic to find a room that matches pax and budget
     const matches = rooms.filter(r => r.capacity >= guestCount && r.basePricePhp <= budget);
-    // Sort by best match (highest capacity within budget)
     const best = matches.sort((a, b) => b.capacity - a.capacity)[0] || rooms[0];
     setRecommendedRoom(best);
     setEngineStep(2);
@@ -258,98 +255,95 @@ export default function InnovaSuites() {
   const selectedImages = rooms.flatMap((room) => room.imageUrl ? [room.imageUrl] : []).slice(0, 12);
 
   return (
-    <div className="min-h-screen bg-[#0b1229] text-white">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
       <TourModal open={tourOpen} onClose={() => setTourOpen(false)} roomName={tourRoom?.name} tour={tourData} loading={tourLoading} />
 
-      {/* Floating Buttons Container */}
-      <div className="fixed right-6 bottom-6 z-[50] flex flex-col gap-4">
-        {/* Intelligent Engine Search Icon */}
+      {/* Floating Buttons */}
+      <div className="fixed right-6 bottom-6 z-[50] flex flex-col gap-3">
         <button
           type="button"
           onClick={() => {
             setEngineOpen(true);
             setEngineStep(1);
           }}
-          className="h-14 w-14 rounded-full bg-[#1e293b] text-[#f5d17a] border border-[#f5d17a]/30 shadow-2xl flex items-center justify-center hover:bg-[#2d3a4f] transition-all"
+          className="h-12 w-12 rounded-2xl bg-zinc-900 border border-emerald-500/30 text-emerald-400 shadow-xl flex items-center justify-center hover:bg-emerald-950/50 transition-all"
           title="Find My Perfect Room"
         >
-          <Search size={22} />
+          <Search size={20} />
         </button>
 
         <button
           type="button"
           onClick={() => setChatOpen((v) => !v)}
-          className="h-14 w-14 rounded-full bg-[#bf9b30] text-white shadow-2xl shadow-[#bf9b30]/30 flex items-center justify-center hover:brightness-95"
+          className="h-12 w-12 rounded-2xl bg-emerald-700 text-white shadow-xl shadow-emerald-900/30 flex items-center justify-center hover:bg-emerald-800 transition-all"
           title="AI Chatbot"
         >
-          <MessageCircle size={22} />
+          <MessageCircle size={20} />
         </button>
       </div>
 
-      {/* Intelligent Assignment Engine Modal */}
+      {/* Assignment Engine Modal */}
       <AnimatePresence>
         {engineOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[1000] bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
+              initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-[#0f172a] w-full max-w-md rounded-[2.5rem] border border-white/10 shadow-3xl overflow-hidden relative"
+              className="bg-zinc-900 w-full max-w-md rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden relative"
             >
               <button 
                 onClick={() => setEngineOpen(false)}
-                className="absolute top-6 right-6 text-white/40 hover:text-white"
+                className="absolute top-5 right-5 text-zinc-400 hover:text-white"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
 
-              <div className="p-10">
+              <div className="p-8">
                 {engineStep === 1 ? (
                   <>
-                    <div className="flex items-center gap-4 mb-8">
-                      <div className="h-12 w-12 rounded-2xl bg-[#f5d17a]/10 flex items-center justify-center text-[#f5d17a]">
-                        <Sparkles size={24} />
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                        <Sparkles size={20} />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black text-white">Find My Perfect Room</h2>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-white/40">AI Assignment Engine</p>
+                        <h2 className="text-xl font-bold text-white">Find My Perfect Room</h2>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">AI Assignment Engine</p>
                       </div>
                     </div>
 
-                    <div className="space-y-10">
-                      {/* Guest Slider */}
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-end">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Total Customers</label>
-                          <span className="text-xl font-black text-[#f5d17a]">{guestCount} Pax</span>
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Total Guests</label>
+                          <span className="text-sm font-bold text-emerald-400">{guestCount} Pax</span>
                         </div>
                         <input 
                           type="range" min="1" max="10" value={guestCount}
                           onChange={(e) => setGuestCount(parseInt(e.target.value))}
-                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#bf9b30]"
+                          className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                         />
                       </div>
 
-                      {/* Budget Slider */}
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-end">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Budget</label>
-                          <span className="text-xl font-black text-[#f5d17a]">{php(budget)}</span>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Max Budget</label>
+                          <span className="text-sm font-bold text-emerald-400">{php(budget)}</span>
                         </div>
                         <input 
                           type="range" min="1000" max="30000" step="500" value={budget}
                           onChange={(e) => setBudget(parseInt(e.target.value))}
-                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#bf9b30]"
+                          className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                         />
                       </div>
 
                       <button 
                         onClick={handleAnalyze}
-                        className="w-full py-5 bg-[#bf9b30] text-[#0b1229] font-black uppercase tracking-[0.2em] rounded-2xl hover:brightness-110 transition-all shadow-xl shadow-[#bf9b30]/20"
+                        className="w-full py-3 bg-emerald-700 text-white font-semibold text-xs rounded-xl hover:bg-emerald-800 transition-all shadow-md shadow-emerald-950/50"
                       >
                         Analyze Matches
                       </button>
@@ -357,37 +351,38 @@ export default function InnovaSuites() {
                   </>
                 ) : (
                   <div className="text-center">
-                    <h2 className="text-3xl font-black text-white italic mb-6">Best Match Found</h2>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 mb-1">Recommendation</p>
+                    <h2 className="text-2xl font-bold text-white mb-6">Best Match Found</h2>
                     
                     {recommendedRoom ? (
-                      <div className="mb-8 rounded-3xl overflow-hidden border border-white/10 bg-white/5">
+                      <div className="mb-6 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950/50">
                         <img
                           src={resolveImg(recommendedRoom.imageUrl || recommendedRoom.images?.[0])}
-                          className="w-full h-48 object-cover"
+                          className="w-full h-44 object-cover"
                           alt="Match"
                           onError={(e) => { e.target.src = '/images/room1.jpg'; }}
                         />
-                        <div className="p-6 text-left">
-                          <h3 className="text-xl font-black text-white">{recommendedRoom.name}</h3>
-                          <p className="text-sm text-[#f5d17a] font-bold">{php(recommendedRoom.basePricePhp)} / night</p>
+                        <div className="p-4 text-left">
+                          <h3 className="text-lg font-bold text-white">{recommendedRoom.name}</h3>
+                          <p className="text-xs font-semibold text-emerald-400">{php(recommendedRoom.basePricePhp)} / night</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="py-10 text-white/40">No perfect match found for your budget.</div>
+                      <div className="py-8 text-xs text-zinc-500">No perfect match found for your parameters.</div>
                     )}
 
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
                       <button 
                         onClick={() => reserveNow(recommendedRoom)}
-                        className="w-full py-5 bg-white text-[#0b1229] font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-white/90 transition-all"
+                        className="w-full py-3 bg-emerald-700 text-white font-semibold text-xs rounded-xl hover:bg-emerald-800 transition-all"
                       >
                         Book Now
                       </button>
                       <button 
                         onClick={() => setEngineStep(1)}
-                        className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+                        className="w-full py-2 text-[11px] font-medium text-zinc-400 hover:text-white"
                       >
-                        Start Over
+                        Adjust Search Criteria
                       </button>
                     </div>
                   </div>
@@ -398,27 +393,28 @@ export default function InnovaSuites() {
         )}
       </AnimatePresence>
 
+      {/* Chatbot Window */}
       {chatOpen ? (
-        <div className="fixed right-6 bottom-24 z-[50] w-[340px] rounded-2xl bg-white text-[#1a160d] border border-slate-200 shadow-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-600">AI Guest Assistant</p>
-            <button type="button" onClick={() => setChatOpen(false)} className="text-slate-500 hover:text-slate-900">
-              <X size={18} />
+        <div className="fixed right-6 bottom-20 z-[50] w-[340px] rounded-2xl bg-zinc-900 text-zinc-100 border border-zinc-800 shadow-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/90">
+            <p className="text-xs font-semibold text-emerald-400">AI Guest Assistant</p>
+            <button type="button" onClick={() => setChatOpen(false)} className="text-zinc-400 hover:text-white">
+              <X size={16} />
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto p-4 space-y-3 bg-[#fcfaf4]">
+          <div className="max-h-72 overflow-y-auto p-4 space-y-3 bg-zinc-950/60">
             {chatMessages.slice(-6).map((message) => (
               <div key={message.id} className={`flex ${message.from === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${message.from === "user" ? "bg-[#1a160d] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+                <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-xs ${message.from === "user" ? "bg-emerald-700 text-white" : "bg-zinc-800 border border-zinc-700/50 text-zinc-200"}`}>
                   {message.text}
                 </div>
               </div>
             ))}
             {chatLoading ? (
-              <div className="text-xs font-semibold text-slate-400">Assistant is typing...</div>
+              <div className="text-[11px] font-medium text-zinc-500">Assistant is typing...</div>
             ) : null}
           </div>
-          <div className="p-3 border-t border-slate-100 flex items-center gap-2">
+          <div className="p-3 border-t border-zinc-800 flex items-center gap-2 bg-zinc-900">
             <input
               type="text"
               value={chatInput}
@@ -429,61 +425,65 @@ export default function InnovaSuites() {
                   handleChatSubmit();
                 }
               }}
-              placeholder={`Hello ${summary?.user?.firstName || "Guest"}, ask me anything...`}
-              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none"
+              placeholder={`Hello ${summary?.user?.firstName || "Guest"}, ask a question...`}
+              className="flex-1 rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-600"
             />
             <button
               type="button"
               onClick={handleChatSubmit}
               disabled={!chatInput.trim() || chatLoading}
-              className="h-10 w-10 rounded-xl bg-[#1a160d] text-white disabled:opacity-50 flex items-center justify-center hover:bg-[#bf9b30] transition-all"
+              className="h-8 w-8 rounded-xl bg-emerald-700 text-white disabled:opacity-40 flex items-center justify-center hover:bg-emerald-800 transition-all"
             >
-              <Send size={14} />
+              <Send size={13} />
             </button>
           </div>
         </div>
       ) : null}
 
-      <header className="relative h-screen min-h-[600px] overflow-hidden">
+      {/* Hero Header */}
+      <header className="relative h-[85vh] min-h-[500px] overflow-hidden">
         <div className="absolute inset-0">
           <img
             src="/images/innova-lobby.jpg"
             alt="Luxury lounge"
-            className="w-full h-full object-cover brightness-[0.85]"
+            className="w-full h-full object-cover opacity-60"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-[#0b1229]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/30 via-zinc-950/60 to-zinc-950" />
         </div>
 
         <div className="relative z-10 h-full flex flex-col justify-center max-w-6xl mx-auto px-6">
-          <p className="text-xs font-black uppercase tracking-widest text-[#f5d17a]">Refined Excellence</p>
-          <h1 className="mt-4 text-5xl md:text-8xl font-serif font-black tracking-tight leading-none">
-            Experience <br />Unrivaled <span className="text-[#f5d17a]">Luxury</span>
+          <div className="flex items-center gap-2 text-emerald-400 mb-2">
+            <Sparkles size={14} />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Refined Excellence</span>
+          </div>
+          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-white max-w-3xl leading-tight">
+            Experience Unrivaled <span className="text-emerald-400">Comfort & Care</span>
           </h1>
-          <p className="mt-8 max-w-2xl text-lg text-white/80 leading-relaxed">
-            Immerse yourself in a world of elegance and comfort designed for the most discerning guests. Our suites are more than just rooms; they are sanctuaries.
+          <p className="mt-4 max-w-xl text-xs sm:text-sm text-zinc-400 leading-relaxed">
+            Immerse yourself in a warm, welcoming atmosphere engineered for the most discerning guests. Our suites are tailored sanctuaries built for true rest.
           </p>
 
-          <div className="mt-12 flex flex-wrap gap-4">
+          <div className="mt-8 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => {
                 document.getElementById("suite-list")?.scrollIntoView({ behavior: "smooth" });
               }}
-              className="px-10 py-4 rounded-full bg-[#bf9b30] text-[#0b1229] font-black uppercase tracking-[0.2em] hover:brightness-110 transition shadow-xl"
+              className="px-6 py-3 rounded-xl bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 transition shadow-lg"
             >
               Check Availability
             </button>
             <button
               type="button"
               onClick={() => setGalleryOpen(true)}
-              className="px-10 py-4 rounded-full border border-white/30 bg-white/10 text-white font-black uppercase tracking-[0.2em] hover:bg-white/20 transition backdrop-blur-md"
+              className="px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-200 text-xs font-semibold hover:bg-zinc-800 transition backdrop-blur-md"
             >
               View Gallery
             </button>
             <button
               type="button"
               onClick={() => navigate("/rewards")}
-              className="px-10 py-4 rounded-full border border-white/30 bg-white/10 text-white font-black uppercase tracking-[0.2em] hover:bg-white/20 transition backdrop-blur-md"
+              className="px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-200 text-xs font-semibold hover:bg-zinc-800 transition backdrop-blur-md"
             >
               View Rewards
             </button>
@@ -491,28 +491,28 @@ export default function InnovaSuites() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-20">
+      <main className="max-w-6xl mx-auto px-6 py-12">
         {error ? (
-          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-700 font-semibold">
+          <div className="mb-8 rounded-xl border border-rose-900/50 bg-rose-950/20 px-4 py-3 text-xs text-rose-400 font-medium">
             {error}
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between border-b border-white/10 pb-10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-zinc-800 pb-6">
           <div>
-            <h2 className="text-4xl font-serif font-black tracking-tight">Explore Categories</h2>
-            <p className="mt-2 text-white/60">Browse suites by type and unlock curated perks.</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Suite Categories</p>
+            <h2 className="mt-1 text-2xl font-bold text-white tracking-tight">Explore Accommodations</h2>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {categories.map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setCategory(cat)}
-                className={`rounded-full px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${
+                className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${
                   category === cat
-                    ? "bg-[#bf9b30] text-[#0b1229] scale-105 shadow-lg"
-                    : "bg-white/5 text-white/70 hover:bg-white/10 border border-white/10"
+                    ? "bg-emerald-700 text-white shadow-sm"
+                    : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 border border-zinc-800"
                 }`}
               >
                 {cat}
@@ -521,66 +521,66 @@ export default function InnovaSuites() {
           </div>
         </div>
 
-        <div id="suite-list" className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+        <div id="suite-list" className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
-            <div className="col-span-full rounded-2xl bg-white/5 p-20 text-center text-white/40 border border-white/5">Loading suites…</div>
+            <div className="col-span-full rounded-2xl bg-zinc-900/40 p-16 text-center text-xs text-zinc-500 border border-zinc-800">Loading suites…</div>
           ) : rooms.length === 0 ? (
-            <div className="col-span-full rounded-2xl bg-white/5 p-20 text-center text-white/40 border border-white/5">No suites found.</div>
+            <div className="col-span-full rounded-2xl bg-zinc-900/40 p-16 text-center text-xs text-zinc-500 border border-zinc-800">No suites found.</div>
           ) : (
             rooms.map((room) => (
               <motion.div
                 key={room.id}
-                whileHover={{ y: -10 }}
-                className="group rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col h-full"
+                whileHover={{ y: -4 }}
+                className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 shadow-md overflow-hidden flex flex-col h-full transition-all"
               >
-                <div className="relative h-72 overflow-hidden">
+                <div className="relative h-56 overflow-hidden">
                   <img
                     src={resolveImg(room.imageUrl || room.images?.[0])}
                     alt={room.name}
-                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     onError={(e) => { e.target.src = '/images/room1.jpg'; }}
                   />
-                  <div className="absolute top-5 left-5 rounded-full bg-black/70 px-4 py-2 text-[10px] font-black tracking-widest text-white uppercase backdrop-blur-md">
+                  <div className="absolute top-3 left-3 rounded-md bg-zinc-950/80 px-3 py-1 text-[10px] font-semibold text-zinc-300 uppercase tracking-wider backdrop-blur-md">
                     {room.viewPreference || room.type || "Suite"}
                   </div>
                   <button
                     type="button"
                     onClick={() => openTour(room)}
-                    className="absolute bottom-5 right-5 flex items-center gap-2 rounded-full bg-[#bf9b30] px-5 py-2.5 text-[10px] font-black text-[#0b1229] uppercase hover:scale-105 transition-transform"
+                    className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-1.5 text-[10px] font-semibold text-white uppercase hover:bg-emerald-800 transition-colors"
                   >
                     Explore 360
-                    <ArrowRight size={14} />
+                    <ArrowRight size={12} />
                   </button>
                 </div>
 
-                <div className="p-8 flex flex-col flex-grow">
-                  <div className="flex items-start justify-between gap-4">
+                <div className="p-5 flex flex-col flex-grow">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <h3 className="text-2xl font-black text-white leading-tight">{room.name}</h3>
-                      <p className="mt-2 text-sm text-white/50 line-clamp-2">{room.tagline || room.description || "Luxurious comfort."}</p>
+                      <h3 className="text-lg font-bold text-white">{room.name}</h3>
+                      <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{room.tagline || room.description || "Luxurious comfort."}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-black text-[#f5d17a]">{php(room.basePricePhp)}</p>
-                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-tighter">/ per night</p>
+                      <p className="text-lg font-bold text-emerald-400">{php(room.basePricePhp)}</p>
+                      <p className="text-[10px] font-medium text-zinc-500 uppercase">/ night</p>
                     </div>
                   </div>
 
-                  <div className="mt-auto pt-8 flex items-center justify-between">
-                    <div className="flex gap-2">
-                       <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60">{room.capacity || 0} Guests</span>
-                       {room.viewPreference && <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60">{room.viewPreference}</span>}
+                  <div className="mt-auto pt-6 flex items-center justify-between border-t border-zinc-800/80">
+                    <div className="flex gap-1.5">
+                       <span className="rounded-md bg-zinc-800/60 border border-zinc-700/50 px-2.5 py-1 text-[10px] font-medium text-zinc-400">{room.capacity || 0} Guests</span>
+                       {room.viewPreference && <span className="rounded-md bg-zinc-800/60 border border-zinc-700/50 px-2.5 py-1 text-[10px] font-medium text-zinc-400">{room.viewPreference}</span>}
                     </div>
                     <div className="flex items-center gap-3">
                       <Link
                         to={`/hoteldetail/${room.id}`}
-                        className="text-xs font-black uppercase tracking-widest text-white/50 hover:text-white transition-colors"
+                        className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
                       >
                         Details
                       </Link>
                       <button
                         type="button"
                         onClick={() => reserveNow(room)}
-                        className="text-xs font-black uppercase tracking-widest text-[#bf9b30] hover:text-white transition-colors"
+                        className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
                       >
                         Book Now
                       </button>
@@ -598,38 +598,38 @@ export default function InnovaSuites() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[1000] bg-[#0b1229] overflow-y-auto"
+              className="fixed inset-0 z-[1000] bg-zinc-950 overflow-y-auto"
             >
-              <div className="sticky top-0 z-20 flex items-center justify-between px-10 py-8 bg-[#0b1229]/95 backdrop-blur-md border-b border-white/10">
+              <div className="sticky top-0 z-20 flex items-center justify-between px-8 py-6 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#f5d17a]">Gallery</p>
-                  <h3 className="text-3xl font-black text-white italic">Innova Collection</h3>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Photo Gallery</p>
+                  <h3 className="text-2xl font-bold text-white">Innova Suite Collection</h3>
                 </div>
                 <button 
                   onClick={() => setGalleryOpen(false)} 
-                  className="h-14 w-14 rounded-full bg-white/5 text-white border border-white/10 hover:bg-white/10 flex items-center justify-center transition-all"
+                  className="h-10 w-10 rounded-xl bg-zinc-900 text-zinc-300 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center transition-all"
                 >
-                  <X size={28} />
+                  <X size={20} />
                 </button>
               </div>
 
-              <div className="max-w-[1600px] mx-auto p-10">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              <div className="max-w-[1400px] mx-auto p-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {selectedImages.length === 0 ? (
-                    <div className="col-span-full text-center text-white/30 py-40">No images available for preview.</div>
+                    <div className="col-span-full text-center text-zinc-500 py-32 text-xs">No images available for preview.</div>
                   ) : (
                       selectedImages.map((src, idx) => (
                         <motion.div
                           key={idx}
-                          initial={{ opacity: 0, y: 20 }}
+                          initial={{ opacity: 0, y: 15 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.05 }}
-                          className="group relative aspect-[4/5] overflow-hidden rounded-2xl border border-white/5 shadow-2xl"
+                          transition={{ delay: idx * 0.04 }}
+                          className="group relative aspect-[4/5] overflow-hidden rounded-xl border border-zinc-800 shadow-md"
                         >
                           <img
                             src={resolveImg(src)}
                             alt={`Gallery ${idx + 1}`}
-                            className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                             onError={(e) => { e.target.src = '/images/room1.jpg'; }}
                           />
                         </motion.div>

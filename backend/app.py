@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -13,7 +14,7 @@ import uuid
 import random
 import sys
 from html import escape
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from collections import Counter, defaultdict
 
 try:
@@ -50,8 +51,9 @@ def get_db_connection():
         port=os.getenv("DB_PORT", "5432"),
     )
 
-UPLOAD_FOLDER = 'static/uploads/rooms'
-OWNER_DOCUMENT_UPLOAD_FOLDER = os.path.join('static', 'uploads', 'owner-documents')
+_BACKEND_BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+UPLOAD_FOLDER = os.path.join(_BACKEND_BASE_DIR, 'static', 'uploads', 'rooms')
+OWNER_DOCUMENT_UPLOAD_FOLDER = os.path.join(_BACKEND_BASE_DIR, 'static', 'uploads', 'owner-documents')
 OWNER_DOCUMENT_FIELDS = {
     'businessPermit': 'business_permit_path',
     'birCertificate': 'bir_certificate_path',
@@ -71,6 +73,26 @@ def _safe_close(conn=None, cur=None):
     finally:
         if conn is not None:
             conn.close()
+
+
+def _utc_now():
+    """Return an aware UTC timestamp for consistent database/API dates."""
+    return datetime.now(timezone.utc)
+
+
+def _parse_iso_date(value):
+    """Parse an ISO date/datetime without using locale-dependent parsing."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
 
 
 def _savepoint_name(prefix="sp"):
@@ -160,7 +182,7 @@ def _parse_text_array(value):
                 parsed = json.loads(raw)
                 if isinstance(parsed, list):
                     return [str(item) for item in parsed if item is not None]
-            except Exception:
+            except (TypeError, ValueError, json.JSONDecodeError):
                 pass
         return [part.strip() for part in raw.split(",") if part.strip()]
     return []
@@ -995,7 +1017,7 @@ def _extract_reservation_date(row):
         if hasattr(candidate, "date"):
             try:
                 return candidate.date() if hasattr(candidate, "hour") else candidate
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 pass
         if isinstance(candidate, str):
             for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
@@ -1003,7 +1025,7 @@ def _extract_reservation_date(row):
                     return datetime.strptime(candidate[:19], fmt).date()
                 except Exception:
                     continue
-    return datetime.utcnow().date()
+    return _utc_now().date()
 
 
 def _extract_reservation_amount(row):
@@ -1042,16 +1064,18 @@ def _period_bucket_key(day_value, period):
 def _next_period_label(last_label, period, step):
     if period == "daily":
         try:
-            base = datetime.strptime(last_label, "%Y-%m-%d").date()
-        except Exception:
-            base = datetime.utcnow().date()
+            base = _parse_iso_date(last_label)
+            if base is None:
+                raise ValueError("invalid date")
+        except (TypeError, ValueError):
+            base = _utc_now().date()
         return (base + timedelta(days=step)).isoformat()
 
     # monthly
     try:
         year, month = [int(part) for part in str(last_label).split("-")[:2]]
     except Exception:
-        now = datetime.utcnow()
+        now = _utc_now()
         year, month = now.year, now.month
 
     month_index = month - 1 + step
@@ -1087,22 +1111,17 @@ def _parse_date_input(value):
     text = str(value).strip()
     if not text:
         return None
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(text[:19], fmt).date()
-        except Exception:
-            continue
-    return None
+    return _parse_iso_date(text)
 
 
 def _default_renewal_date(cycle, anchor=None):
-    base = _parse_date_input(anchor) or datetime.utcnow().date()
+    base = _parse_date_input(anchor) or _utc_now().date()
     cycle_name = str(cycle or "MONTHLY").upper()
     return base + timedelta(days=365 if cycle_name == "ANNUAL" else 30)
 
 
 def _subscription_cycle_dates(row=None, cycle=None, carry_requires_payment_proof=False):
-    today = datetime.utcnow().date()
+    today = _utc_now().date()
     current_row = row or {}
     current_status = str(current_row.get("status") or "PENDING").upper()
     current_renewal = _parse_date_input(current_row.get("renewal_date"))
@@ -1121,7 +1140,7 @@ def _days_until_date(value):
     target = _parse_date_input(value)
     if not target:
         return None
-    return (target - datetime.utcnow().date()).days
+    return (target - _utc_now().date()).days
 
 
 def _package_amount_for_cycle(package_row, cycle):

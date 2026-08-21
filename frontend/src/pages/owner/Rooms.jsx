@@ -248,8 +248,8 @@ const handleSubmit = async (e) => {
                         <img
                           src={resolveImg(room.images[0])}
                           className="w-full h-full object-cover"
-                          alt=""
-                          onError={(e) => { e.target.src = '/images/room1.jpg'; }}
+alt=""
+                          onError={(e) => { e.target.src = '/images/deluxe-room.jpg'; }}
                         />
                       ) : (
                         <ImageIcon className="m-auto h-full text-slate-300" />
