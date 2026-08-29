@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
@@ -50,8 +50,9 @@ def get_db_connection():
         port=os.getenv("DB_PORT", "5432"),
     )
 
-UPLOAD_FOLDER = 'static/uploads/rooms'
-OWNER_DOCUMENT_UPLOAD_FOLDER = os.path.join('static', 'uploads', 'owner-documents')
+_BACKEND_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(_BACKEND_BASE_DIR, 'static', 'uploads', 'rooms')
+OWNER_DOCUMENT_UPLOAD_FOLDER = os.path.join(_BACKEND_BASE_DIR, 'static', 'uploads', 'owner-documents')
 OWNER_DOCUMENT_FIELDS = {
     'businessPermit': 'business_permit_path',
     'birCertificate': 'bir_certificate_path',
@@ -1334,7 +1335,7 @@ def _seed_membership_packages(cur):
                 package["monthly_price"],
                 package["annual_price"],
                 package["max_rooms"],
-                package["features"],
+                Json(package["features"]),
                 package["is_popular"],
                 package["display_order"],
             ),
@@ -3028,14 +3029,22 @@ def admin_login():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, name, email, password_hash FROM admins WHERE LOWER(email) = %s", (email,))
+        cur.execute("SELECT id, name, first_name, last_name, email, password_hash, profile_image FROM admins WHERE LOWER(email) = %s", (email,))
         admin = cur.fetchone()
         cur.close()
         conn.close()
         if admin and check_password_hash(admin['password_hash'], password):
             return jsonify({
                 "message": "Admin login successful!",
-                "admin": {"id": admin['id'], "name": admin['name'], "email": admin['email'], "role": "Admin"}
+                "admin": {
+                    "id": admin['id'],
+                    "name": admin['name'],
+                    "firstName": admin.get('first_name') or '',
+                    "lastName": admin.get('last_name') or '',
+                    "email": admin['email'],
+                    "profileImage": admin.get('profile_image') or '',
+                    "role": "Admin"
+                }
             }), 200
         return jsonify({"error": "Access Denied: Invalid Credentials"}), 401
     except Exception as e:
@@ -3685,6 +3694,200 @@ def admin_delete_staff(staff_id):
         cur.execute("DELETE FROM staff WHERE id = %s", (staff_id,))
         conn.commit()
         return jsonify({'message': 'Staff deleted.'}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/profile/<int:admin_id>', methods=['GET'])
+def admin_get_profile(admin_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            "SELECT id, name, first_name, last_name, email, profile_image, created_at FROM admins WHERE id = %s",
+            (admin_id,)
+        )
+        admin = cur.fetchone()
+        if not admin:
+            return jsonify({'error': 'Admin not found.'}), 404
+        return jsonify({
+            'id': admin['id'],
+            'name': admin['name'],
+            'firstName': admin.get('first_name') or '',
+            'lastName': admin.get('last_name') or '',
+            'email': admin['email'],
+            'profileImage': admin.get('profile_image') or '',
+            'createdAt': admin['created_at'].isoformat() if admin.get('created_at') else None,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/profile/<int:admin_id>', methods=['PATCH'])
+def admin_update_profile(admin_id):
+    conn = None
+    cur = None
+    try:
+        data = request.get_json(force=True) or {}
+
+        first_name = (data.get('firstName') or '').strip()
+        last_name = (data.get('lastName') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        profile_image = data.get('profileImage')  # optional base64 data URL or URL string
+
+        if not first_name:
+            return jsonify({'error': 'First name cannot be empty.'}), 400
+        if len(first_name) > 50 or len(last_name) > 50:
+            return jsonify({'error': 'Name is too long.'}), 400
+        if not email or '@' not in email:
+            return jsonify({'error': 'Enter a valid email address.'}), 400
+
+        full_name = f"{first_name} {last_name}".strip()
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Make sure no OTHER admin already uses this email
+        cur.execute(
+            "SELECT id FROM admins WHERE LOWER(email) = %s AND id != %s",
+            (email, admin_id)
+        )
+        if cur.fetchone():
+            return jsonify({'error': 'That email is already in use by another admin.'}), 409
+
+        cur.execute(
+            """
+            UPDATE admins
+            SET first_name = %s,
+                last_name = %s,
+                name = %s,
+                email = %s,
+                profile_image = COALESCE(%s, profile_image)
+            WHERE id = %s
+            RETURNING id, name, first_name, last_name, email, profile_image, created_at
+            """,
+            (first_name, last_name, full_name, email, profile_image, admin_id)
+        )
+        admin = cur.fetchone()
+        if not admin:
+            conn.rollback()
+            return jsonify({'error': 'Admin not found.'}), 404
+        conn.commit()
+
+        return jsonify({
+            'message': 'Profile updated.',
+            'id': admin['id'],
+            'name': admin['name'],
+            'firstName': admin.get('first_name') or '',
+            'lastName': admin.get('last_name') or '',
+            'email': admin['email'],
+            'profileImage': admin.get('profile_image') or '',
+            'createdAt': admin['created_at'].isoformat() if admin.get('created_at') else None,
+        }), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+STAFF_ROLES = [
+    'Hotel Manager',
+    'Front Desk Operations',
+    'Housekeeping & Maintenance',
+    'Inventory & Supplies',
+    'HR/Payroll Staff Management',
+]
+
+PERMISSION_MODULES = [
+    'dashboard', 'reservations', 'checkin_checkout', 'room_management',
+    'housekeeping', 'maintenance', 'inventory', 'staff_attendance',
+    'payroll', 'reports',
+]
+
+
+@app.route('/api/admin/roles', methods=['GET'])
+def admin_list_roles():
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("SELECT role, permissions, updated_at, updated_by FROM role_permissions")
+        rows = {r['role']: r for r in (cur.fetchall() or [])}
+
+        cur.execute("SELECT role, COUNT(*) AS cnt FROM staff GROUP BY role")
+        counts = {r['role']: r['cnt'] for r in (cur.fetchall() or [])}
+
+        roles = []
+        for role_name in STAFF_ROLES:
+            row = rows.get(role_name)
+            permissions = row['permissions'] if row and row.get('permissions') else {}
+            full_permissions = {mod: bool(permissions.get(mod, False)) for mod in PERMISSION_MODULES}
+            roles.append({
+                'role': role_name,
+                'permissions': full_permissions,
+                'staffCount': counts.get(role_name, 0),
+                'updatedAt': row['updated_at'].isoformat() if row and row.get('updated_at') else None,
+                'updatedBy': row.get('updated_by') if row else None,
+            })
+
+        return jsonify({'roles': roles, 'modules': PERMISSION_MODULES}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        _safe_close(conn, cur)
+
+
+@app.route('/api/admin/roles/<path:role_name>', methods=['PATCH'])
+def admin_update_role_permissions(role_name):
+    conn = None
+    cur = None
+    try:
+        if role_name not in STAFF_ROLES:
+            return jsonify({'error': 'Unknown role.'}), 400
+
+        data = request.get_json(force=True) or {}
+        incoming = data.get('permissions') or {}
+        updated_by = data.get('updatedBy') or 'Admin'
+
+        clean_permissions = {mod: bool(incoming.get(mod, False)) for mod in PERMISSION_MODULES}
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            INSERT INTO role_permissions (role, permissions, updated_at, updated_by)
+            VALUES (%s, %s, NOW(), %s)
+            ON CONFLICT (role) DO UPDATE
+            SET permissions = EXCLUDED.permissions,
+                updated_at = NOW(),
+                updated_by = EXCLUDED.updated_by
+            RETURNING role, permissions, updated_at, updated_by
+        """, (role_name, json.dumps(clean_permissions), updated_by))
+        row = cur.fetchone()
+        conn.commit()
+
+        cur.execute("SELECT COUNT(*) AS cnt FROM staff WHERE role = %s", (role_name,))
+        staff_count = (cur.fetchone() or {}).get('cnt', 0)
+
+        return jsonify({
+            'message': f'Permissions updated for {role_name}.',
+            'role': {
+                'role': row['role'],
+                'permissions': row['permissions'],
+                'staffCount': staff_count,
+                'updatedAt': row['updated_at'].isoformat() if row.get('updated_at') else None,
+                'updatedBy': row.get('updated_by'),
+            }
+        }), 200
     except Exception as e:
         if conn: conn.rollback()
         return jsonify({'error': str(e)}), 500

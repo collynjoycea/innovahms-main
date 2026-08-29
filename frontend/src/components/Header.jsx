@@ -213,22 +213,22 @@ export default function Header() {
   const points = Number(membershipSummary?.points || 0);
 
   const surfaceClass = isDarkMode
-    ? "border-white/10 bg-[#0d0c0a]/92 text-[#ece4d2] shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
-    : "border-[#e7dcc8] bg-[#fffdfa]/96 text-[#241c12] shadow-[0_12px_35px_rgba(120,92,27,0.10)]";
+    ? "border-white/10 bg-[#163C34]/92 text-[#EEEEEE] shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+    : "border-[#D9E9E3] bg-[#EEEEEE]/96 text-[#173F35] shadow-[0_12px_35px_rgba(31,111,95,0.10)]";
 
   const navShellClass = isDarkMode
     ? "border-white/10 bg-white/5"
-    : "border-[#ddd5c8] bg-[#fbf9f4]";
+    : "border-[#D9E9E3] bg-[#EEEEEE]";
 
   const ghostButtonClass = isDarkMode
-    ? "border-white/10 bg-white/5 text-[#e8ddc2] hover:bg-white/10"
-    : "border-[#e5dccb] bg-white text-[#5b4b2c] hover:bg-[#f9f4e9]";
+    ? "border-white/10 bg-white/5 text-[#EEEEEE] hover:bg-white/10"
+    : "border-[#D9E9E3] bg-white text-[#4B6F65] hover:bg-[#EEEEEE]";
 
   const iconButtonClass = isDarkMode
-    ? "border-white/10 bg-white/5 text-[#e8ddc2] hover:bg-white/10"
-    : "border-[#e5dccb] bg-white text-[#5d4d30] hover:bg-[#fbf6ec]";
+    ? "border-white/10 bg-white/5 text-[#EEEEEE] hover:bg-white/10"
+    : "border-[#D9E9E3] bg-white text-[#4B6F65] hover:bg-[#EEEEEE]";
 
-  const menuPanelClass = isDarkMode ? "border-white/10 bg-[#12100d]" : "border-[#e5dccb] bg-white";
+  const menuPanelClass = isDarkMode ? "border-white/10 bg-[#163C34]" : "border-[#D9E9E3] bg-white";
 
   return (
     <header className={`fixed inset-x-0 top-0 z-[1000] border-b backdrop-blur-2xl transition-colors duration-300 ${surfaceClass}`}>
@@ -248,10 +248,10 @@ export default function Header() {
                   onClick={() => go(item.path)}
                   className={`whitespace-nowrap rounded-full px-5 py-2 text-sm font-medium transition-all ${
                     active
-                      ? "bg-[#c8a33a] text-white shadow-[0_8px_20px_rgba(199,159,60,0.20)]"
+                      ? "bg-[#2FA084] text-white shadow-[0_8px_20px_rgba(47,160,132,0.20)]"
                       : isDarkMode
-                        ? "text-[#d5cab1] hover:bg-white/8 hover:text-white"
-                        : "text-[#544835] hover:bg-white hover:text-[#b58a27]"
+                        ? "text-[#9FC2B6] hover:bg-white/8 hover:text-white"
+                        : "text-[#4B6F65] hover:bg-white hover:text-[#1F6F5F]"
                   }`}
                 >
                   {item.label}
@@ -266,14 +266,14 @@ export default function Header() {
               onClick={handleFindRoom}
               className={`hidden lg:inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all ${ghostButtonClass}`}
             >
-              <Search size={16} className="text-[#c79f3c]" />
+              <Search size={16} className="text-[#2FA084]" />
               Find a Room
             </button>
 
             <button
               type="button"
               onClick={handleBookings}
-              className="hidden sm:inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#f3e3b4] px-4 py-2 text-sm font-semibold text-[#a17817] shadow-[0_8px_20px_rgba(199,159,60,0.14)] transition-all hover:bg-[#edd89f]"
+              className="hidden sm:inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#6FCF97] px-4 py-2 text-sm font-semibold text-[#1F6F5F] shadow-[0_8px_20px_rgba(47,160,132,0.14)] transition-all hover:bg-[#6FCF97]"
             >
               <BookOpen size={16} />
               {user?.isStaff ? "Dashboard" : "My Bookings"}
@@ -295,8 +295,8 @@ export default function Header() {
                   onClick={() => toggle("user")}
                   className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold shadow-md transition-all ${
                     user.isStaff
-                      ? "bg-[#b79036] text-white hover:bg-[#9f7b2a]"
-                      : "bg-[#171717] text-white hover:bg-[#272727] dark:bg-[#f3e3b4] dark:text-[#3c2a06] dark:hover:bg-[#ebd393]"
+                      ? "bg-[#1F6F5F] text-white hover:bg-[#1F6F5F]"
+                      : "bg-[#163C34] text-white hover:bg-[#163C34] dark:bg-[#6FCF97] dark:text-[#173F35] dark:hover:bg-[#6FCF97]"
                   }`}
                 >
                   <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/15 shrink-0">
@@ -318,25 +318,25 @@ export default function Header() {
                       <button
                         type="button"
                         onClick={() => go("/privileges")}
-                        className="flex w-full items-center gap-3 border-b border-[#c79f3c]/20 bg-gradient-to-r from-[#f7edd1] via-[#fbf7ea] to-white px-4 py-4 text-left transition-all hover:from-[#f1e2b6] hover:to-[#fff8e5] dark:from-[#3a2d11] dark:via-[#1a1611] dark:to-[#12100d]"
+                        className="flex w-full items-center gap-3 border-b border-[#2FA084]/20 bg-gradient-to-r from-[#EEEEEE] via-[#EEEEEE] to-white px-4 py-4 text-left transition-all hover:from-[#6FCF97] hover:to-[#EEEEEE] dark:from-[#0F2B25] dark:via-[#163C34] dark:to-[#163C34]"
                       >
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#c79f3c]/15 text-[#c79f3c]">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2FA084]/15 text-[#2FA084]">
                           <Crown size={18} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.24em] text-[#c79f3c]">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.24em] text-[#2FA084]">
                             {membershipLoading ? "Syncing..." : `${tier} Member`}
                           </span>
-                          <span className={`block truncate pt-1 text-xs ${isDarkMode ? "text-[#b8ab8d]" : "text-[#7a6b50]"}`}>
+                          <span className={`block truncate pt-1 text-xs ${isDarkMode ? "text-[#9FC2B6]" : "text-[#4B6F65]"}`}>
                             {membershipLoading ? "Checking your perks..." : `${points.toLocaleString()} pts available`}
                           </span>
                         </span>
-                        <ChevronDown size={14} className="-rotate-90 text-[#b79a5b]" />
+                        <ChevronDown size={14} className="-rotate-90 text-[#2FA084]" />
                       </button>
                     ) : null}
 
                     <div className="p-2">
-                      <p className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.24em] ${isDarkMode ? "text-[#8f846e]" : "text-[#aa9875]"}`}>
+                      <p className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.24em] ${isDarkMode ? "text-[#9FC2B6]" : "text-[#6F9186]"}`}>
                         {user.isStaff ? "Staff Portal" : "My Account"}
                       </p>
 
@@ -344,9 +344,9 @@ export default function Header() {
                         <button
                           type="button"
                           onClick={() => go("/staff/dashboard")}
-                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                         >
-                          <LayoutDashboard size={16} className="text-[#c79f3c]" />
+                          <LayoutDashboard size={16} className="text-[#2FA084]" />
                           Dashboard
                         </button>
                       ) : (
@@ -354,39 +354,39 @@ export default function Header() {
                           <button
                             type="button"
                             onClick={() => go("/customer/dashboard")}
-                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                           >
-                            <LayoutDashboard size={16} className="text-[#c79f3c]" />
+                            <LayoutDashboard size={16} className="text-[#2FA084]" />
                             Dashboard
                           </button>
                           <button
                             type="button"
                             onClick={() => go("/customer/bookings")}
-                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                           >
-                            <BookOpen size={16} className="text-[#c79f3c]" />
+                            <BookOpen size={16} className="text-[#2FA084]" />
                             My Bookings
                           </button>
                           <button
                             type="button"
                             onClick={() => go("/profile")}
-                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                           >
-                            <Settings size={16} className="text-[#c79f3c]" />
+                            <Settings size={16} className="text-[#2FA084]" />
                             Profile Settings
                           </button>
                           <button
                             type="button"
                             onClick={() => go("/rewards")}
-                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                           >
-                            <Crown size={16} className="text-[#c79f3c]" />
+                            <Crown size={16} className="text-[#2FA084]" />
                             Membership & Rewards
                           </button>
                         </>
                       )}
 
-                      <div className={`my-2 h-px ${isDarkMode ? "bg-white/10" : "bg-[#efe6d5]"}`} />
+                      <div className={`my-2 h-px ${isDarkMode ? "bg-white/10" : "bg-[#D9E9E3]"}`} />
 
                       <button
                         type="button"
@@ -406,7 +406,7 @@ export default function Header() {
                   <button
                     type="button"
                     onClick={() => toggle("login")}
-                    className={`inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${isDarkMode ? "text-[#efe4cb] hover:bg-white/5" : "text-[#7b673f] hover:bg-[#f8f2e5]"}`}
+                    className={`inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#4B6F65] hover:bg-[#EEEEEE]"}`}
                   >
                     Login
                     <ChevronDown size={14} className={`transition-transform ${openDrop === "login" ? "rotate-180" : ""}`} />
@@ -415,16 +415,16 @@ export default function Header() {
                   {openDrop === "login" ? (
                     <div className={`absolute right-0 mt-3 w-64 rounded-[1.4rem] border p-2 shadow-2xl ${menuPanelClass}`}>
                       {[
-                        { to: "/login", label: "Login as Customer", icon: <Users size={16} className="text-[#c79f3c]" /> },
-                        { to: "/owner/login", label: "Login as Hotel Owner", icon: <Building2 size={16} className="text-[#c79f3c]" /> },
-                        { to: "/staff/login", label: "Login as Hotel Staff", icon: <Briefcase size={16} className="text-[#c79f3c]" /> },
-                        { to: "/admin/login", label: "Admin", icon: <ShieldCheck size={16} className="text-[#c79f3c]" /> },
+                        { to: "/login", label: "Login as Customer", icon: <Users size={16} className="text-[#2FA084]" /> },
+                        { to: "/owner/login", label: "Login as Hotel Owner", icon: <Building2 size={16} className="text-[#2FA084]" /> },
+                        { to: "/staff/login", label: "Login as Hotel Staff", icon: <Briefcase size={16} className="text-[#2FA084]" /> },
+                        { to: "/admin/login", label: "Admin", icon: <ShieldCheck size={16} className="text-[#2FA084]" /> },
                       ].map((item) => (
                         <Link
                           key={item.to}
                           to={item.to}
                           onClick={closeAll}
-                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                         >
                           {item.icon}
                           {item.label}
@@ -438,7 +438,7 @@ export default function Header() {
                   <button
                     type="button"
                     onClick={() => toggle("signup")}
-                    className="inline-flex items-center gap-1 rounded-full bg-[#c79f3c] px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(199,159,60,0.28)] transition-all hover:bg-[#ae8525]"
+                    className="inline-flex items-center gap-1 rounded-full bg-[#2FA084] px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(47,160,132,0.28)] transition-all hover:bg-[#1F6F5F]"
                   >
                     Register
                     <ChevronDown size={14} className={`transition-transform ${openDrop === "signup" ? "rotate-180" : ""}`} />
@@ -447,15 +447,15 @@ export default function Header() {
                   {openDrop === "signup" ? (
                     <div className={`absolute right-0 mt-3 w-64 rounded-[1.4rem] border p-2 shadow-2xl ${menuPanelClass}`}>
                       {[
-                        { to: "/signup", label: "Signup as Customer", icon: <Users size={16} className="text-[#c79f3c]" /> },
-                        { to: "/owner/signup", label: "Signup as Owner", icon: <Building2 size={16} className="text-[#c79f3c]" /> },
-                        { to: "/staff/signup", label: "Signup as Staff", icon: <Briefcase size={16} className="text-[#c79f3c]" /> },
+                        { to: "/signup", label: "Signup as Customer", icon: <Users size={16} className="text-[#2FA084]" /> },
+                        { to: "/owner/signup", label: "Signup as Owner", icon: <Building2 size={16} className="text-[#2FA084]" /> },
+                        { to: "/staff/signup", label: "Signup as Staff", icon: <Briefcase size={16} className="text-[#2FA084]" /> },
                       ].map((item) => (
                         <Link
                           key={item.to}
                           to={item.to}
                           onClick={closeAll}
-                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#e7dbc1] hover:bg-white/5" : "text-[#4d402a] hover:bg-[#f8f3e7]"}`}
+                          className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${isDarkMode ? "text-[#EEEEEE] hover:bg-white/5" : "text-[#173F35] hover:bg-[#EEEEEE]"}`}
                         >
                           {item.icon}
                           {item.label}
@@ -487,10 +487,10 @@ export default function Header() {
                   onClick={() => go(item.path)}
                   className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
                     isActiveRoute(item.path)
-                      ? "bg-[#c79f3c] text-white"
+                      ? "bg-[#2FA084] text-white"
                       : isDarkMode
-                        ? "bg-white/5 text-[#e6dac1]"
-                        : "bg-[#faf6ee] text-[#604f33]"
+                        ? "bg-white/5 text-[#EEEEEE]"
+                        : "bg-[#EEEEEE] text-[#4B6F65]"
                   }`}
                 >
                   {item.label}
@@ -509,7 +509,7 @@ export default function Header() {
               <button
                 type="button"
                 onClick={handleBookings}
-                className="rounded-2xl bg-[#f3e3b4] px-4 py-3 text-sm font-semibold text-[#9d7618]"
+                className="rounded-2xl bg-[#6FCF97] px-4 py-3 text-sm font-semibold text-[#1F6F5F]"
               >
                 {user?.isStaff ? "Open Dashboard" : "My Bookings"}
               </button>
@@ -527,7 +527,7 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={() => go("/signup")}
-                  className="rounded-2xl bg-[#c79f3c] px-4 py-3 text-sm font-bold text-white"
+                  className="rounded-2xl bg-[#2FA084] px-4 py-3 text-sm font-bold text-white"
                 >
                   Register
                 </button>

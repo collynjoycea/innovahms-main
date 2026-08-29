@@ -61,7 +61,7 @@ const MapServices = () => {
   }, []);
 
   const theme = {
-    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#f0f0f3]',
+    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#EEEEEE]',
     card: isDarkMode ? 'bg-[#111111]/80' : 'bg-white',
     textMain: isDarkMode ? 'text-white' : 'text-gray-900',
     textSub: isDarkMode ? 'text-gray-500' : 'text-gray-400',
@@ -75,7 +75,7 @@ const MapServices = () => {
       <div className={`flex justify-between items-end border-b pb-5 ${theme.border}`}>
         <div>
           <h1 className={`text-2xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-            Map <span className="text-[#c9a84c]">Services</span>
+            Map <span className="text-[#2FA084]">Services</span>
           </h1>
           <p className={`text-[9px] font-bold ${theme.textSub} uppercase tracking-widest mt-1`}>
             Geospatial tracking · Hotel distribution · Place search
@@ -91,7 +91,7 @@ const MapServices = () => {
       <div className={`rounded-2xl border p-4 ${theme.card} ${theme.border}`}>
         {loading ? (
           <div className="h-[520px] flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-[#c9a84c] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-[#2FA084] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <NeighborhoodMap
@@ -113,7 +113,7 @@ const MapServices = () => {
         ].map((stat, i) => (
           <div key={i} className={`rounded-xl border p-4 ${theme.card} ${theme.border}`}>
             <p className={`text-[9px] font-black uppercase tracking-widest ${theme.textSub}`}>{stat.label}</p>
-            <p className={`text-2xl font-black mt-1 text-[#c9a84c]`}>{stat.value}</p>
+            <p className={`text-2xl font-black mt-1 text-[#2FA084]`}>{stat.value}</p>
           </div>
         ))}
       </div>

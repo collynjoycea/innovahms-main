@@ -907,7 +907,7 @@ export default function VisionSuites() {
                     <img
                       src={getRoomPreviewImage(room, undefined)}
                       alt={room.name}
-                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                      onError={(e) => { /* keep showing the card; fall back to a bundled image so the room stays visible */ e.currentTarget.src = "/images/deluxe-room.jpg"; }}
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />

@@ -72,6 +72,8 @@ import AdminReports from "./pages/admin/Reports";
 import AdminReviews from "./pages/admin/Reviews";
 import AdminHotelOwner from "./pages/admin/HotelOwner";
 import AdminMemPackage from "./pages/admin/MemPackage"; 
+import AdminRolesPermissions from "./pages/admin/RolesPermissions";
+import AdminProfile from "./pages/admin/Profile";
 import AdminSystemLogs from "./pages/admin/SystemLogs";
 import AdminSettings from "./pages/admin/Settings";
 import AdminAiConfig from "./pages/admin/AiConfig";
@@ -311,6 +313,8 @@ function App() {
           <Route path="staff" element={<AdminStaff />} />
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="packages" element={<AdminMemPackage />} /> 
+          <Route path="roles" element={<AdminRolesPermissions />} />
+          <Route path="profile" element={<AdminProfile />} />
           <Route path="logs" element={<AdminSystemLogs />} />
           <Route path="api" element={<AdminAiConfig />} />
           <Route path="maps" element={<AdminMapServices />} />

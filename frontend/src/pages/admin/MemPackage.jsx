@@ -45,7 +45,7 @@ const emptySubscriptionForm = {
 
 const packageTheme = (slug) => {
   if (slug === 'enterprise') return { icon: Crown, accent: 'text-purple-400', pill: 'bg-purple-500/15 text-purple-400' };
-  if (slug === 'pro') return { icon: Zap, accent: 'text-[#c9a84c]', pill: 'bg-[#c9a84c]/15 text-[#c9a84c]' };
+  if (slug === 'pro') return { icon: Zap, accent: 'text-[#2FA084]', pill: 'bg-[#2FA084]/15 text-[#2FA084]' };
   return { icon: Sprout, accent: 'text-green-400', pill: 'bg-emerald-500/15 text-emerald-400' };
 };
 
@@ -101,7 +101,7 @@ const MemPackage = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
   const theme = {
-    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#f0f0f3]',
+    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#EEEEEE]',
     card: isDarkMode ? 'bg-[#111111]/80 backdrop-blur-md' : 'bg-white',
     textMain: isDarkMode ? 'text-white' : 'text-gray-900',
     textSub: isDarkMode ? 'text-gray-500' : 'text-gray-400',
@@ -294,7 +294,7 @@ const MemPackage = () => {
       <div className={`flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between ${theme.border}`}>
         <div>
           <h1 className={`text-2xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-            Membership <span className="text-[#c9a84c]">Packages</span>
+            Membership <span className="text-[#2FA084]">Packages</span>
           </h1>
           <p className={`mt-1 text-[9px] font-bold uppercase tracking-[0.2em] ${theme.textSub}`}>
             View fixed package tiers and live hotel-owner subscriptions
@@ -304,7 +304,7 @@ const MemPackage = () => {
           <button
             type="button"
             onClick={loadData}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-[10px] font-black uppercase transition-all ${saving ? 'cursor-not-allowed opacity-60' : `${theme.border} ${theme.card} ${theme.textMain} hover:border-[#c9a84c]`}`}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-[10px] font-black uppercase transition-all ${saving ? 'cursor-not-allowed opacity-60' : `${theme.border} ${theme.card} ${theme.textMain} hover:border-[#2FA084]`}`}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -326,7 +326,7 @@ const MemPackage = () => {
           { label: 'Projected MRR', value: formatPhp(stats.monthlyRecurringRevenue ?? 0) },
         ].map((card) => (
           <div key={card.label} className={`rounded-2xl border p-6 ${theme.border} ${theme.card} ${theme.shadow}`}>
-            <div className={`mb-4 inline-flex rounded-xl border p-2.5 text-[#c9a84c] ${isDarkMode ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'}`}>
+            <div className={`mb-4 inline-flex rounded-xl border p-2.5 text-[#2FA084] ${isDarkMode ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'}`}>
               <ShieldCheck size={18} />
             </div>
             <p className={`mb-1 text-[9px] font-black uppercase tracking-[0.18em] ${theme.textSub}`}>{card.label}</p>
@@ -338,16 +338,16 @@ const MemPackage = () => {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {loading ? (
           <div className="col-span-full flex items-center justify-center py-16">
-            <Loader2 className="animate-spin text-[#c9a84c]" size={28} />
+            <Loader2 className="animate-spin text-[#2FA084]" size={28} />
           </div>
         ) : (
           packages.map((pkg) => {
             const meta = packageTheme(pkg.slug);
             const Icon = meta.icon;
             return (
-              <div key={pkg.id} className={`relative rounded-2xl border p-8 transition-all duration-300 ${theme.border} ${theme.card} ${theme.shadow} ${pkg.isPopular ? 'ring-1 ring-[#c9a84c]/50' : ''}`}>
+              <div key={pkg.id} className={`relative rounded-2xl border p-8 transition-all duration-300 ${theme.border} ${theme.card} ${theme.shadow} ${pkg.isPopular ? 'ring-1 ring-[#2FA084]/50' : ''}`}>
                 {pkg.isPopular && (
-                  <span className="absolute right-6 top-[-12px] rounded-full bg-[#c9a84c] px-3 py-1 text-[8px] font-black uppercase tracking-widest text-black">
+                  <span className="absolute right-6 top-[-12px] rounded-full bg-[#2FA084] px-3 py-1 text-[8px] font-black uppercase tracking-widest text-black">
                     Most Popular
                   </span>
                 )}
@@ -373,7 +373,7 @@ const MemPackage = () => {
                 <ul className={`mb-8 mt-6 space-y-3 border-t pt-6 ${theme.border}`}>
                   {(pkg.features || []).map((feature) => (
                     <li key={feature} className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-tight text-gray-500">
-                      <CheckCircle2 size={14} className="text-[#c9a84c]" />
+                      <CheckCircle2 size={14} className="text-[#2FA084]" />
                       {feature}
                     </li>
                   ))}
@@ -394,7 +394,7 @@ const MemPackage = () => {
         <div className={`flex flex-col gap-4 border-b p-5 ${theme.border} ${isDarkMode ? 'bg-white/[0.01]' : 'bg-gray-50/60'}`}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <ShieldCheck className="text-[#c9a84c]" size={18} />
+              <ShieldCheck className="text-[#2FA084]" size={18} />
               <div>
                 <h2 className={`text-[11px] font-black uppercase tracking-[0.2em] ${theme.textMain}`}>Hotel Subscriptions</h2>
                 <p className={`text-[10px] ${theme.textSub}`}>{filteredSubscriptions.length} matching hotels</p>
@@ -424,7 +424,7 @@ const MemPackage = () => {
         </div>
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="animate-spin text-[#c9a84c]" size={28} />
+            <Loader2 className="animate-spin text-[#2FA084]" size={28} />
           </div>
         ) : (
           <>
@@ -441,7 +441,7 @@ const MemPackage = () => {
                   {paged.map((subscription) => {
                     const meta = packageTheme(subscription.planSlug);
                     return (
-                      <tr key={subscription.id} className="transition-colors hover:bg-[#c9a84c]/5">
+                      <tr key={subscription.id} className="transition-colors hover:bg-[#2FA084]/5">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className={`text-[11px] font-black ${theme.textMain}`}>{subscription.hotelName}</span>
@@ -472,7 +472,7 @@ const MemPackage = () => {
                           <button
                             type="button"
                             onClick={() => renewSubscription(subscription.id)}
-                            className={`rounded-lg border p-2 transition-all ${theme.border} ${theme.textMain} hover:bg-[#c9a84c] hover:text-black`}
+                            className={`rounded-lg border p-2 transition-all ${theme.border} ${theme.textMain} hover:bg-[#2FA084] hover:text-black`}
                             title="Renew subscription"
                           >
                             <RefreshCw size={14} />

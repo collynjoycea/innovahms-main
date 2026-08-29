@@ -46,7 +46,7 @@ const AiConfig = () => {
   const [notice, setNotice] = useState('');
 
   const theme = {
-    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#f0f0f3]',
+    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#EEEEEE]',
     card: isDarkMode ? 'bg-[#111111]/80 backdrop-blur-md' : 'bg-white',
     textMain: isDarkMode ? 'text-white' : 'text-gray-900',
     textSub: isDarkMode ? 'text-gray-500' : 'text-gray-400',
@@ -143,7 +143,7 @@ const AiConfig = () => {
     {
       label: 'Needs Setup',
       value: summary.needsSetup,
-      accent: 'text-[#c9a84c]',
+      accent: 'text-[#2FA084]',
       helper: 'Enabled but not configured',
     },
   ];
@@ -151,7 +151,7 @@ const AiConfig = () => {
   if (loading) {
     return (
       <div className={`p-6 min-h-screen flex items-center justify-center ${theme.bg}`}>
-        <div className="w-10 h-10 border-2 border-[#c9a84c] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-2 border-[#2FA084] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -159,7 +159,7 @@ const AiConfig = () => {
   return (
     <div className={`p-6 space-y-6 min-h-screen transition-all duration-500 ${theme.bg}`}>
       {notice ? (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#c9a84c] px-5 py-3 text-black shadow-2xl shadow-[#c9a84c]/20">
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#2FA084] px-5 py-3 text-black shadow-2xl shadow-[#2FA084]/20">
           <CheckCircle2 size={18} strokeWidth={3} />
           <span className="text-[11px] font-black uppercase tracking-wider">{notice}</span>
         </div>
@@ -169,7 +169,7 @@ const AiConfig = () => {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className={`text-2xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-              AI & API <span className="text-[#c9a84c]">Configuration</span>
+              AI & API <span className="text-[#2FA084]">Configuration</span>
             </h1>
             <p className={`mt-1 text-[9px] font-bold uppercase tracking-[0.22em] ${theme.textSub}`}>
               Admin kill switch for unstable or degraded external services
@@ -180,7 +180,7 @@ const AiConfig = () => {
             type="button"
             onClick={() => loadIntegrations({ silent: true })}
             disabled={refreshing}
-            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition-all ${theme.border} ${theme.textMain} ${refreshing ? 'opacity-60 cursor-wait' : 'hover:border-[#c9a84c] hover:text-[#c9a84c]'}`}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition-all ${theme.border} ${theme.textMain} ${refreshing ? 'opacity-60 cursor-wait' : 'hover:border-[#2FA084] hover:text-[#2FA084]'}`}
           >
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             Refresh Status
@@ -188,7 +188,7 @@ const AiConfig = () => {
         </div>
 
         <div className={`flex items-start gap-3 rounded-2xl border px-4 py-4 ${theme.card} ${theme.border} ${theme.shadow}`}>
-          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-[#c9a84c]" />
+          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-[#2FA084]" />
           <div>
             <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${theme.textMain}`}>
               User protection mode
@@ -230,7 +230,7 @@ const AiConfig = () => {
             >
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className={`rounded-2xl border p-3 ${theme.border} ${isDarkMode ? 'bg-white/5' : 'bg-gray-50'} text-[#c9a84c]`}>
+                  <div className={`rounded-2xl border p-3 ${theme.border} ${isDarkMode ? 'bg-white/5' : 'bg-gray-50'} text-[#2FA084]`}>
                     <Icon size={20} />
                   </div>
                   <div>
@@ -240,7 +240,7 @@ const AiConfig = () => {
                         {integration.status}
                       </span>
                     </div>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a84c]">
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#2FA084]">
                       {integration.category} | {integration.tier}
                     </p>
                     <p className={`mt-2 max-w-xl text-sm leading-relaxed ${theme.textSub}`}>
@@ -256,7 +256,7 @@ const AiConfig = () => {
                   className={`inline-flex min-w-[150px] items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] transition-all ${
                     integration.isEnabled
                       ? 'border border-red-500/20 text-red-500 hover:bg-red-500/10'
-                      : 'bg-[#c9a84c] text-black hover:brightness-110'
+                      : 'bg-[#2FA084] text-black hover:brightness-110'
                   } ${isBusy ? 'cursor-wait opacity-70' : ''}`}
                 >
                   {isBusy ? <Loader2 size={14} className="animate-spin" /> : null}

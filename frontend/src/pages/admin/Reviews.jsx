@@ -11,7 +11,7 @@ export default function Reviews() {
   const [activeTab, setActiveTab] = useState('all');
 
   const theme = {
-    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#f0f0f3]',
+    bg: isDarkMode ? 'bg-[#0c0c0e]' : 'bg-[#EEEEEE]',
     card: isDarkMode ? 'bg-[#111111]/80 backdrop-blur-md' : 'bg-white',
     textMain: isDarkMode ? 'text-white' : 'text-gray-900',
     textSub: isDarkMode ? 'text-gray-500' : 'text-gray-400',
@@ -57,7 +57,7 @@ export default function Reviews() {
       <div className={`flex flex-col md:flex-row justify-between items-end border-b pb-5 ${theme.border}`}>
         <div>
           <h1 className={`text-2xl font-black uppercase tracking-tighter ${theme.textMain}`}>
-            System <span className="text-[#c9a84c]">Reviews</span>
+            System <span className="text-[#2FA084]">Reviews</span>
           </h1>
           <p className={`text-[9px] font-bold ${theme.textSub} uppercase tracking-widest mt-1`}>
             {stats.total ?? 0} total · avg {stats.avgRating ?? 0} ★
@@ -66,7 +66,7 @@ export default function Reviews() {
         <div className={`flex p-1 rounded-xl border ${theme.border} ${isDarkMode ? 'bg-white/5' : 'bg-gray-200/50'} mt-4 md:mt-0`}>
           {['all', 'flagged', 'hidden'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === tab ? 'bg-[#c9a84c] text-black shadow-lg' : 'text-gray-500'}`}>
+              className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === tab ? 'bg-[#2FA084] text-black shadow-lg' : 'text-gray-500'}`}>
               {tab}
             </button>
           ))}
@@ -98,7 +98,7 @@ export default function Reviews() {
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-[#c9a84c] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-[#2FA084] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <>
@@ -113,16 +113,16 @@ export default function Reviews() {
                 </thead>
                 <tbody className={`divide-y ${theme.border}`}>
                   {paged.map((r) => (
-                    <tr key={r.id} className="hover:bg-[#c9a84c]/5 transition-colors group">
+                    <tr key={r.id} className="hover:bg-[#2FA084]/5 transition-colors group">
                       <td className={`px-5 py-4 text-[11px] font-black ${theme.textMain}`}>{r.guestName}</td>
                       <td className="px-5 py-4">
-                        <p className="text-[10px] font-bold text-[#c9a84c]">{r.roomName || '—'}</p>
+                        <p className="text-[10px] font-bold text-[#2FA084]">{r.roomName || '—'}</p>
                         <p className={`text-[9px] ${theme.textSub}`}>{r.hotelName || '—'}</p>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex gap-0.5">
                           {[1,2,3,4,5].map(s => (
-                            <Star key={s} size={10} fill={s <= r.rating ? '#c9a84c' : 'transparent'} className={s <= r.rating ? 'text-[#c9a84c]' : 'text-gray-400'} />
+                            <Star key={s} size={10} fill={s <= r.rating ? '#2FA084' : 'transparent'} className={s <= r.rating ? 'text-[#2FA084]' : 'text-gray-400'} />
                           ))}
                         </div>
                       </td>

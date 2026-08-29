@@ -4,52 +4,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { MapPin, CalendarDays, Users, Sparkles } from "lucide-react";
 import resolveImg from "../utils/resolveImg";
 
-const fallbackHotelCards = [
-  {
-    id: "quantum-suite",
-    name: "Quantum Executive Suite",
-    location: "Metro Manila, PH",
-    image: "/images/room1.jpg",
-    forecast: "95% Occupancy",
-    status: "OPEN",
-    description: "Premium suite experience with smart room controls and elevated comfort.",
-    schedule: "24/7 Guest Service",
-  },
-];
-
-const fallbackFeaturedHotels = [
-  {
-    id: 1,
-    name: "Innova Velora Hotel",
-    location: "Metro Manila, PH",
-    image: "/images/signup-img.png",
-    tag: "Flagship",
-    rooms: 24,
-    description: "Signature city property with a polished building presence and guest-focused stay experience.",
-    contactPhone: "",
-  },
-  {
-    id: 12,
-    name: "Sunshine Hotel",
-    location: "Cebu City, PH",
-    image: "/images/hero-bg-img.png",
-    tag: "Premium",
-    rooms: 18,
-    description: "Premium hotel destination designed for fast reservations and modern comfort.",
-    contactPhone: "",
-  },
-  {
-    id: 2,
-    name: "Innova Grand Suites",
-    location: "Davao, PH",
-    image: "/images/herobg.jpg",
-    tag: "Luxury",
-    rooms: 32,
-    description: "Luxury-forward hospitality with elevated rooms, service, and booking convenience.",
-    contactPhone: "",
-  },
-];
-
 const fallbackPromotions = [
   {
     id: "promo-early-bird",
@@ -115,8 +69,8 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentImg, setCurrentImg] = useState(() => _heroImgIndex);
-  const [hotelCards, setHotelCards] = useState(fallbackHotelCards);
-  const [featuredHotels, setFeaturedHotels] = useState(fallbackFeaturedHotels);
+  const [hotelCards, setHotelCards] = useState([]);
+  const [featuredHotels, setFeaturedHotels] = useState([]);
   const [promotionCards, setPromotionCards] = useState(fallbackPromotions);
   const [sessionUser, setSessionUser] = useState(null);
   const [heroCheckIn, setHeroCheckIn] = useState(() => toInputDate(new Date()));
@@ -241,8 +195,12 @@ export default function LandingPage() {
         if (hotelsRes.ok) {
           const hotelsPayload = await hotelsRes.json().catch(() => ({}));
           const hotels = Array.isArray(hotelsPayload?.hotels) ? hotelsPayload.hotels.slice(0, 3) : [];
-          if (isMounted && hotels.length > 0) {
-            setFeaturedHotels(hotels);
+          const mappedFeatured = hotels.map((hotel) => ({
+            ...hotel,
+            image: resolveImg(hotel.image || hotel.hotelLogo || hotel.buildingImage),
+          }));
+          if (isMounted && mappedFeatured.length > 0) {
+            setFeaturedHotels(mappedFeatured);
           }
         }
       } catch (error) {
@@ -498,6 +456,7 @@ export default function LandingPage() {
       </section>
 
 {/* --- HOTELS SECTION --- */}
+{featuredHotels.length > 0 && (
 <section id="hotels" className="relative pt-20 pb-10 px-6 max-w-7xl mx-auto scroll-mt-20">
   <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
     <motion.div
@@ -573,10 +532,11 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
-      </motion.article>
+</motion.article>
     ))}
   </div>
 </section>
+)}
 
 {/* --- ROOMS SECTION --- */}
 <section id="rooms" className="relative pt-20 pb-10 px-6 max-w-7xl mx-auto scroll-mt-20">
